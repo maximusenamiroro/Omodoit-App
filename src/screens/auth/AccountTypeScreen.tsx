@@ -67,11 +67,7 @@ export default function AccountTypeScreen({ navigation }: any) {
 
   const handleContinue = () => {
     if (!selected) return;
-    if (selected === 'client') {
-      navigation.navigate('ClientRegStep1');
-    } else {
-      navigation.navigate('WorkerRegStep1');
-    }
+    navigation.navigate('PhoneVerify', { accountType: selected });
   };
 
   return (
