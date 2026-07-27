@@ -13,9 +13,13 @@ import ChatScreen from '../screens/inbox/ChatScreen';
 
 const Stack = createNativeStackNavigator();
 
-function LoadingScreen() {
+// Rendered as an opaque overlay INSIDE the NavigationContainer instead
+// of replacing it. Replacing the container unmounts the whole navigation
+// tree, so every loading toggle wiped navigation state and reset users
+// back to each stack's initial screen.
+function LoadingOverlay() {
   return (
-    <View style={styles.loadingContainer}>
+    <View style={styles.loadingOverlay}>
       <ActivityIndicator size="large" color={colors.primary} />
     </View>
   );
@@ -23,8 +27,7 @@ function LoadingScreen() {
 
 export default function AppNavigator() {
   const { user, role, loading, profileLoading } = useAuth();
-  if (loading) return <LoadingScreen />;
-  if (user && profileLoading && !role) return <LoadingScreen />;
+  const showLoading = loading || (!!user && profileLoading && !role);
 
   return (
     <NavigationContainer>
@@ -42,10 +45,18 @@ export default function AppNavigator() {
         <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Tracking" component={TrackingScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
       </Stack.Navigator>
+      {showLoading && <LoadingOverlay />}
     </NavigationContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  loadingContainer: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: colors.bg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+    elevation: 999,
+  },
 });
