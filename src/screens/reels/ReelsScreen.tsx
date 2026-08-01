@@ -9,6 +9,7 @@ import Video from 'react-native-video';
 import { colors, typography, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
+import { useIsFocused } from '@react-navigation/native';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -82,29 +83,22 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
   const fetchComments = async () => {
     setLoading(true);
     try {
-      // Fetch all comments for this reel
       const { data, error } = await supabase
         .from('reel_comments')
         .select('id, user_id, comment, created_at, parent_id, profiles(full_name, avatar_url)')
         .eq('reel_id', reelId)
         .order('created_at', { ascending: true });
       if (error) throw error;
-
       const formatted = (data || []).map((item: any) => ({
         ...item,
         profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles,
       }));
-
-      // Separate top-level comments and replies
       const topLevel = formatted.filter((c: any) => !c.parent_id);
       const replies = formatted.filter((c: any) => c.parent_id);
-
-      // Attach replies to their parent
       const withReplies = topLevel.map((c: any) => ({
         ...c,
         replies: replies.filter((r: any) => r.parent_id === c.id),
       }));
-
       setComments(withReplies);
     } catch (err) { console.error('Fetch comments error:', err); }
     finally { setLoading(false); }
@@ -114,14 +108,8 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
     if (!newComment.trim() || !userId) return;
     setPosting(true);
     try {
-      const insertData: any = {
-        user_id: userId,
-        reel_id: reelId,
-        comment: newComment.trim(),
-      };
-      if (replyTo) {
-        insertData.parent_id = replyTo.id;
-      }
+      const insertData: any = { user_id: userId, reel_id: reelId, comment: newComment.trim() };
+      if (replyTo) insertData.parent_id = replyTo.id;
       const { error } = await supabase.from('reel_comments').insert(insertData);
       if (error) throw error;
       setNewComment('');
@@ -145,159 +133,162 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
     });
   };
 
-  const totalComments = comments.reduce((sum, c) => sum + 1 + (c.replies?.length || 0), 0);
+  const totalComments = comments.reduce((sum: number, c: any) => sum + 1 + (c.replies?.length || 0), 0);
 
   return (
-    <Modal visible={visible} animationType="slide" transparent>
-      <View style={cs.overlay}>
-        <TouchableOpacity style={cs.dismissArea} onPress={onClose} />
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
+      <TouchableOpacity style={cs.overlay} activeOpacity={1} onPress={onClose}>
+        <View style={cs.dismissArea} />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={cs.sheet}>
-          <View style={cs.header}>
-            <Text style={cs.headerTitle}>Comments ({totalComments})</Text>
-            <TouchableOpacity onPress={onClose}><Text style={cs.closeBtn}>✕</Text></TouchableOpacity>
-          </View>
-
-          {loading ? (
-            <View style={cs.center}><ActivityIndicator color={colors.primary} /></View>
-          ) : comments.length === 0 ? (
-            <View style={cs.center}>
-              <Text style={cs.emptyEmoji}>💬</Text>
-              <Text style={cs.emptyText}>No comments yet</Text>
-              <Text style={cs.emptyDesc}>Be the first to comment!</Text>
+          <TouchableOpacity activeOpacity={1} onPress={(e: any) => e.stopPropagation()} style={cs.sheetInner}>
+            <View style={cs.handle}><View style={cs.handleBar} /></View>
+            <View style={cs.header}>
+              <Text style={cs.headerTitle}>Comments ({totalComments})</Text>
+              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={cs.closeBtn}>\u2715</Text>
+              </TouchableOpacity>
             </View>
-          ) : (
-            <FlatList
-              data={comments}
-              keyExtractor={item => item.id}
-              style={cs.list}
-              renderItem={({ item }) => (
-                <View>
-                  {/* Parent comment */}
-                  <View style={cs.row}>
-                    {item.profiles?.avatar_url ? (
-                      <Image source={{ uri: item.profiles.avatar_url }} style={cs.avatar} />
-                    ) : (
-                      <View style={cs.avatarFb}><Text style={cs.avatarFbText}>{getInitials(item.profiles?.full_name)}</Text></View>
-                    )}
-                    <View style={cs.content}>
-                      <View style={cs.nameRow}>
-                        <Text style={cs.name}>{item.profiles?.full_name || 'User'}</Text>
-                        <Text style={cs.time}>{timeAgo(item.created_at)}</Text>
-                      </View>
-                      <Text style={cs.text}>{item.comment}</Text>
-                      <View style={cs.actionRow}>
-                        <TouchableOpacity onPress={() => handleReply(item.id, item.profiles?.full_name || 'User')}>
-                          <Text style={cs.replyBtn}>Reply</Text>
-                        </TouchableOpacity>
-                        {item.replies && item.replies.length > 0 && (
-                          <TouchableOpacity onPress={() => toggleReplies(item.id)}>
-                            <Text style={cs.viewRepliesBtn}>
-                              {expandedReplies.has(item.id)
-                                ? 'Hide replies'
-                                : 'View ' + item.replies.length + (item.replies.length === 1 ? ' reply' : ' replies')}
-                            </Text>
-                          </TouchableOpacity>
-                        )}
-                      </View>
-                    </View>
-                  </View>
 
-                  {/* Replies — nested */}
-                  {expandedReplies.has(item.id) && item.replies && item.replies.map((reply: any) => (
-                    <View key={reply.id} style={cs.replyRow}>
-                      {reply.profiles?.avatar_url ? (
-                        <Image source={{ uri: reply.profiles.avatar_url }} style={cs.replyAvatar} />
+            {loading ? (
+              <View style={cs.center}><ActivityIndicator color={colors.primary} /></View>
+            ) : comments.length === 0 ? (
+              <View style={cs.center}>
+                <Text style={cs.emptyEmoji}>\ud83d\udcac</Text>
+                <Text style={cs.emptyText}>No comments yet</Text>
+                <Text style={cs.emptyDesc}>Be the first to comment!</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={comments}
+                keyExtractor={(item: any) => item.id}
+                style={cs.list}
+                showsVerticalScrollIndicator={false}
+                renderItem={({ item }: any) => (
+                  <View>
+                    <View style={cs.row}>
+                      {item.profiles?.avatar_url ? (
+                        <Image source={{ uri: item.profiles.avatar_url }} style={cs.avatar} />
                       ) : (
-                        <View style={cs.replyAvatarFb}><Text style={cs.replyAvatarFbText}>{getInitials(reply.profiles?.full_name)}</Text></View>
+                        <View style={cs.avatarFb}><Text style={cs.avatarFbText}>{getInitials(item.profiles?.full_name)}</Text></View>
                       )}
                       <View style={cs.content}>
                         <View style={cs.nameRow}>
-                          <Text style={cs.name}>{reply.profiles?.full_name || 'User'}</Text>
-                          <Text style={cs.time}>{timeAgo(reply.created_at)}</Text>
+                          <Text style={cs.name}>{item.profiles?.full_name || 'User'}</Text>
+                          <Text style={cs.time}>{timeAgo(item.created_at)}</Text>
                         </View>
-                        <Text style={cs.text}>{reply.comment}</Text>
+                        <Text style={cs.commentText}>{item.comment}</Text>
+                        <View style={cs.actionRow}>
+                          <TouchableOpacity onPress={() => handleReply(item.id, item.profiles?.full_name || 'User')}>
+                            <Text style={cs.replyBtn}>Reply</Text>
+                          </TouchableOpacity>
+                          {item.replies && item.replies.length > 0 && (
+                            <TouchableOpacity onPress={() => toggleReplies(item.id)}>
+                              <Text style={cs.viewRepliesBtn}>
+                                {expandedReplies.has(item.id) ? 'Hide replies' : 'View ' + item.replies.length + (item.replies.length === 1 ? ' reply' : ' replies')}
+                              </Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
                       </View>
                     </View>
-                  ))}
-                </View>
-              )}
-            />
-          )}
+                    {expandedReplies.has(item.id) && item.replies && item.replies.map((reply: any) => (
+                      <View key={reply.id} style={cs.replyRow}>
+                        {reply.profiles?.avatar_url ? (
+                          <Image source={{ uri: reply.profiles.avatar_url }} style={cs.replyAvatar} />
+                        ) : (
+                          <View style={cs.replyAvatarFb}><Text style={cs.replyAvatarFbText}>{getInitials(reply.profiles?.full_name)}</Text></View>
+                        )}
+                        <View style={cs.content}>
+                          <View style={cs.nameRow}>
+                            <Text style={cs.name}>{reply.profiles?.full_name || 'User'}</Text>
+                            <Text style={cs.time}>{timeAgo(reply.created_at)}</Text>
+                          </View>
+                          <Text style={cs.commentText}>{reply.comment}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              />
+            )}
 
-          {/* Reply indicator */}
-          {replyTo && (
-            <View style={cs.replyIndicator}>
-              <Text style={cs.replyIndicatorText}>Replying to {replyTo.name}</Text>
-              <TouchableOpacity onPress={() => setReplyTo(null)}>
-                <Text style={cs.replyCancel}>✕</Text>
+            {replyTo && (
+              <View style={cs.replyIndicator}>
+                <Text style={cs.replyIndicatorText}>Replying to {replyTo.name}</Text>
+                <TouchableOpacity onPress={() => setReplyTo(null)}>
+                  <Text style={cs.replyCancel}>\u2715</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <View style={[cs.inputRow, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 4 : 12 }]}>
+              <TextInput
+                ref={inputRef}
+                style={cs.input}
+                value={newComment}
+                onChangeText={setNewComment}
+                placeholder={replyTo ? 'Reply to ' + replyTo.name + '...' : 'Add a comment...'}
+                placeholderTextColor={colors.textMuted}
+                multiline
+                maxLength={500}
+              />
+              <TouchableOpacity
+                style={[cs.sendBtn, !newComment.trim() && cs.sendBtnOff]}
+                onPress={handlePost}
+                disabled={!newComment.trim() || posting}
+                activeOpacity={0.85}
+              >
+                <Text style={cs.sendText}>{posting ? '...' : '\u2191'}</Text>
               </TouchableOpacity>
             </View>
-          )}
-
-          <View style={[cs.inputRow, { paddingBottom: insets.bottom + 8 }]}>
-            <TextInput
-              ref={inputRef}
-              style={cs.input}
-              value={newComment}
-              onChangeText={setNewComment}
-              placeholder={replyTo ? 'Reply to ' + replyTo.name + '...' : 'Add a comment...'}
-              placeholderTextColor={colors.textMuted}
-              multiline
-              maxLength={500}
-            />
-            <TouchableOpacity
-              style={[cs.sendBtn, !newComment.trim() && cs.sendBtnOff]}
-              onPress={handlePost}
-              disabled={!newComment.trim() || posting}
-              activeOpacity={0.85}
-            >
-              <Text style={cs.sendText}>{posting ? '...' : '↑'}</Text>
-            </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
         </KeyboardAvoidingView>
-      </View>
+      </TouchableOpacity>
     </Modal>
   );
 }
 
-
 const cs = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  overlay: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
   dismissArea: { flex: 1 },
-  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: SCREEN_H * 0.7, minHeight: 300 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+  sheet: { maxHeight: Platform.OS === 'ios' ? SCREEN_H * 0.75 : SCREEN_H * 0.8, minHeight: SCREEN_H * 0.5 },
+  sheetInner: { flex: 1, backgroundColor: colors.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden' },
+  handle: { alignItems: 'center', paddingTop: 10, paddingBottom: 4 },
+  handleBar: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.white + '20' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTitle: { fontSize: 16, fontWeight: '700', color: colors.textPrimary },
-  closeBtn: { fontSize: 20, color: colors.textMuted },
+  closeBtn: { fontSize: 18, color: colors.textMuted, padding: 4 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
   emptyEmoji: { fontSize: 36, marginBottom: 8, opacity: 0.5 },
   emptyText: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
   emptyDesc: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   list: { flex: 1, paddingHorizontal: 20 },
-  row: { flexDirection: 'row', paddingVertical: 12 },
-  avatar: { width: 32, height: 32, borderRadius: 16, marginRight: 12 },
-  avatarFb: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  avatarFbText: { fontSize: 12, fontWeight: '700', color: colors.white },
+  row: { flexDirection: 'row', paddingVertical: 10 },
+  avatar: { width: 34, height: 34, borderRadius: 17, marginRight: 12 },
+  avatarFb: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  avatarFbText: { fontSize: 13, fontWeight: '700', color: colors.white },
   content: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 3 },
-  name: { fontSize: 12, fontWeight: '600', color: colors.textPrimary },
+  name: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
   time: { fontSize: 10, color: colors.textMuted },
-  text: { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
+  commentText: { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
   actionRow: { flexDirection: 'row', gap: 16, marginTop: 6 },
   replyBtn: { fontSize: 11, fontWeight: '600', color: colors.textMuted },
   viewRepliesBtn: { fontSize: 11, fontWeight: '600', color: colors.primary },
-  replyRow: { flexDirection: 'row', paddingVertical: 8, paddingLeft: 44 },
+  replyRow: { flexDirection: 'row', paddingVertical: 8, paddingLeft: 46 },
   replyAvatar: { width: 24, height: 24, borderRadius: 12, marginRight: 10 },
   replyAvatarFb: { width: 24, height: 24, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
   replyAvatarFbText: { fontSize: 10, fontWeight: '700', color: colors.white },
   replyIndicator: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 8, backgroundColor: colors.bgCard, borderTopWidth: 1, borderTopColor: colors.border },
   replyIndicatorText: { fontSize: 12, color: colors.primary, fontWeight: '500' },
   replyCancel: { fontSize: 16, color: colors.textMuted, paddingLeft: 12 },
-  inputRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.border },
-  input: { flex: 1, backgroundColor: colors.bgInput, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: colors.textPrimary, maxHeight: 80, marginRight: 10 },
-  sendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
+  inputRow: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 16, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.bg },
+  input: { flex: 1, backgroundColor: colors.bgInput, borderRadius: 20, paddingHorizontal: 16, paddingVertical: Platform.OS === 'ios' ? 10 : 8, fontSize: 14, color: colors.textPrimary, maxHeight: 80, marginRight: 10, borderWidth: 1, borderColor: colors.border },
+  sendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginBottom: Platform.OS === 'ios' ? 0 : 2 },
   sendBtnOff: { backgroundColor: colors.bgCard },
   sendText: { fontSize: 16, fontWeight: '700', color: colors.white },
 });
+
 
 interface ReelCardProps { reel: Reel; isClient: boolean; isActive: boolean; userId: string | undefined; }
 
@@ -328,6 +319,9 @@ function ReelCard({ reel, isClient, isActive, userId }: ReelCardProps) {
     }
     supabase.from('reel_comments').select('id', { count: 'exact', head: true }).eq('reel_id', reel.id)
       .then(({ count }) => { if (count !== null) setCommentCount(count); });
+      // Count likes from reel_likes table — same as website
+    supabase.from('reel_likes').select('id', { count: 'exact', head: true }).eq('reel_id', reel.id)
+      .then(({ count }) => { if (count !== null) setLikeCount(count); });
   }, [userId, reel.id]);
 
   useEffect(() => {
@@ -350,10 +344,18 @@ function ReelCard({ reel, isClient, isActive, userId }: ReelCardProps) {
       Animated.spring(likeScale, { toValue: 1, damping: 8, stiffness: 200, useNativeDriver: true }),
     ]).start();
     try {
-      if (wasLiked) { await supabase.from('reel_likes').delete().eq('user_id', userId).eq('reel_id', reel.id); }
-      else { await supabase.from('reel_likes').insert({ user_id: userId, reel_id: reel.id }); }
-      Promise.resolve(supabase.from('reels').update({ likes: likeCount + (wasLiked ? -1 : 1) }).eq('id', reel.id)).catch(() => {});
-    } catch (err) { setLiked(wasLiked); setLikeCount(prev => wasLiked ? prev + 1 : prev - 1); }
+      if (wasLiked) {
+        await supabase.from('reel_likes').delete().eq('user_id', userId).eq('reel_id', reel.id);
+      } else {
+        const { error } = await supabase.from('reel_likes').insert({ user_id: userId, reel_id: reel.id });
+        // 23505 = already liked (unique constraint) — treat as success
+        if (error && error.code !== '23505') throw error;
+      }
+    } catch (err) {
+      // Revert on error
+      setLiked(wasLiked);
+      setLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
+    }
   };
 
   const handleSave = async () => {
@@ -394,18 +396,44 @@ function ReelCard({ reel, isClient, isActive, userId }: ReelCardProps) {
     <View style={[styles.reelContainer, { height: SCREEN_H }]}>
       <TouchableOpacity activeOpacity={1} onPress={() => setPaused(!paused)} style={styles.videoContainer}>
         {!videoError ? (
-          <Video source={{ uri: reel.video_url }} style={styles.video} resizeMode="cover" repeat
-            paused={paused || !isActive} muted={false}
-            onLoad={() => setVideoLoaded(true)} onError={() => setVideoError(true)}
-            bufferConfig={{ minBufferMs: 2500, maxBufferMs: 5000, bufferForPlaybackMs: 2500, bufferForPlaybackAfterRebufferMs: 5000 }} />
+         <Video
+            source={{ uri: reel.video_url, type: 'mp4' }}
+            style={styles.video}
+            resizeMode="cover"
+            repeat
+            paused={paused || !isActive}
+            muted={false}
+            onLoad={() => setVideoLoaded(true)}
+            onError={(e) => { console.log('Video error:', JSON.stringify(e)); setVideoError(true); }}
+            onBuffer={({ isBuffering }: { isBuffering: boolean }) => {
+              if (!isBuffering && !videoLoaded) setVideoLoaded(true);
+            }}
+            useTextureView={Platform.OS === 'android'}
+            bufferConfig={{
+              minBufferMs: 5000,
+              maxBufferMs: 30000,
+              bufferForPlaybackMs: 2500,
+              bufferForPlaybackAfterRebufferMs: 5000,
+            }}
+          />
         ) : (
-          <View style={styles.errorContainer}><Text style={styles.errorEmoji}>📹</Text><Text style={styles.errorText}>Video unavailable</Text></View>
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorEmoji}>📹</Text>
+            <Text style={styles.errorText}>Video unavailable</Text>
+            <TouchableOpacity
+              style={styles.retryVideoBtn}
+              onPress={() => { setVideoError(false); setVideoLoaded(false); }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.retryVideoText}>Tap to retry</Text>
+            </TouchableOpacity>
+          </View>
         )}
         {!videoLoaded && !videoError && (<View style={styles.loadingOverlay}><ActivityIndicator size="large" color={colors.white} /></View>)}
-        {paused && videoLoaded && (<View style={styles.pauseOverlay}><View style={styles.pauseIcon}><Text style={styles.pauseText}>▶</Text></View></View>)}
+        {paused && (<View style={styles.pauseOverlay}><View style={styles.pauseIcon}><Text style={styles.pauseText}>▶</Text></View></View>)}
       </TouchableOpacity>
 
-      <Animated.View style={[styles.actionsColumn, { bottom: isClient ? 190 : 170, opacity: contentOpacity, transform: [{ translateX: actionsSlide }] }]}>
+      <Animated.View style={[styles.actionsColumn, { bottom: Platform.OS === 'ios' ? (isClient ? 190 : 170) : (isClient ? 150 : 130), opacity: contentOpacity, transform: [{ translateX: actionsSlide }] }]}>
         <TouchableOpacity style={styles.actionAvatarContainer} onPress={isClient ? handleFollow : undefined} activeOpacity={0.8}>
           {reel.profiles?.avatar_url ? (
             <Image source={{ uri: reel.profiles.avatar_url }} style={styles.actionAvatar} />
@@ -443,7 +471,7 @@ function ReelCard({ reel, isClient, isActive, userId }: ReelCardProps) {
         )}
       </Animated.View>
 
-      <Animated.View style={[styles.bottomContent, { bottom: isClient ? 106 : 106, opacity: contentOpacity }]}>
+      <Animated.View style={[styles.bottomContent, { bottom: Platform.OS === 'ios' ? 106 : 78, opacity: contentOpacity }]}>
         <View style={styles.workerInfoRow}>
           {reel.profiles?.avatar_url ? (
             <Image source={{ uri: reel.profiles.avatar_url }} style={styles.workerAvatarImg} />
@@ -482,6 +510,7 @@ export default function ReelsScreen() {
   const insets = useSafeAreaInsets();
   const { role, user } = useAuth();
   const isClient = role === 'client';
+  const isFocused = useIsFocused();
   const [activeTab, setActiveTab] = useState<'foryou' | 'following'>('foryou');
   const [activeIndex, setActiveIndex] = useState(0);
   const [reels, setReels] = useState<Reel[]>([]);
@@ -489,6 +518,7 @@ export default function ReelsScreen() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => { fetchReels(); }, [activeTab]);
+
 
   const fetchReels = async () => {
     setLoading(true); setError(null);
@@ -513,20 +543,120 @@ export default function ReelsScreen() {
   const onViewRef = useRef(({ viewableItems }: any) => { if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0); });
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
   const renderReel = useCallback(({ item, index }: { item: Reel; index: number }) => (
-    <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex} userId={user?.id} />
-  ), [isClient, activeIndex, user]);
+    <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} />
+  ), [isClient, activeIndex, user, isFocused]);
 
-  if (loading) return (<View style={styles.loadingContainer}><StatusBar barStyle="light-content" backgroundColor="transparent" translucent /><ActivityIndicator size="large" color={colors.primary} /><Text style={styles.loadingText}>Loading reels...</Text></View>);
-  if (error) return (<View style={styles.loadingContainer}><StatusBar barStyle="light-content" backgroundColor="transparent" translucent /><Text style={styles.errorEmoji2}>😕</Text><Text style={styles.errorTitle}>Could not load reels</Text><Text style={styles.errorDesc}>{error}</Text><TouchableOpacity style={styles.retryBtn} onPress={fetchReels} activeOpacity={0.85}><Text style={styles.retryText}>Try Again</Text></TouchableOpacity></View>);
-  if (reels.length === 0) return (<View style={styles.loadingContainer}><StatusBar barStyle="light-content" backgroundColor="transparent" translucent /><Text style={styles.errorEmoji2}>{activeTab === 'following' ? '👥' : '🎬'}</Text><Text style={styles.errorTitle}>{activeTab === 'following' ? 'No reels from people you follow' : 'No reels yet'}</Text><Text style={styles.errorDesc}>{activeTab === 'following' ? 'Follow workers to see their reels here' : isClient ? 'Workers have not posted any reels yet.' : 'Create your first reel!'}</Text>{activeTab === 'following' && (<TouchableOpacity style={styles.retryBtn} onPress={() => setActiveTab('foryou')} activeOpacity={0.85}><Text style={styles.retryText}>Browse For You</Text></TouchableOpacity>)}</View>);
+  if (loading) return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      {/* Skeleton shimmer — looks like a reel is about to load */}
+      <View style={styles.skeletonContainer}>
+        <View style={styles.skeletonPulse}>
+          <Animated.View style={[styles.skeletonShimmer, {
+            transform: [{
+              translateX: new Animated.Value(0),
+            }],
+          }]} />
+        </View>
+        {/* Skeleton action buttons */}
+        <View style={styles.skeletonActions}>
+          <View style={styles.skeletonCircle} />
+          <View style={styles.skeletonCircle} />
+          <View style={styles.skeletonCircle} />
+          <View style={styles.skeletonCircle} />
+        </View>
+        {/* Skeleton bottom content */}
+        <View style={styles.skeletonBottom}>
+          <View style={styles.skeletonRow}>
+            <View style={styles.skeletonAvatarSmall} />
+            <View style={styles.skeletonLineLong} />
+          </View>
+          <View style={styles.skeletonLineMed} />
+          <View style={styles.skeletonLineShort} />
+        </View>
+      </View>
+      {/* Top tabs still visible during loading */}
+      <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.tabRow}>
+          <TouchableOpacity activeOpacity={0.7}>
+            <Text style={[styles.tabText, styles.tabTextActive]}>For You</Text>
+            <View style={styles.tabUnderline} />
+          </TouchableOpacity>
+          <TouchableOpacity activeOpacity={0.7}>
+            <Text style={styles.tabText}>Following</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+
+  if (error) return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <View style={styles.errorFullScreen}>
+        <View style={styles.errorIconCircle}>
+          <Text style={styles.errorIconText}>!</Text>
+        </View>
+        <Text style={styles.errorTitle}>Could not load reels</Text>
+        <Text style={styles.errorDesc}>{error}</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={fetchReels} activeOpacity={0.85}>
+          <Text style={styles.retryText}>Try Again</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  if (reels.length === 0) return (
+    <View style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+      <View style={styles.errorFullScreen}>
+        <Text style={styles.emptyBigIcon}>{activeTab === 'following' ? '👥' : '🎬'}</Text>
+        <Text style={styles.errorTitle}>
+          {activeTab === 'following' ? 'No reels from people you follow' : 'No reels yet'}
+        </Text>
+        <Text style={styles.errorDesc}>
+          {activeTab === 'following'
+            ? 'Follow workers to see their reels here'
+            : isClient
+            ? 'Workers have not posted any reels yet.'
+            : 'Create your first reel!'}
+        </Text>
+        {activeTab === 'following' && (
+          <TouchableOpacity style={styles.retryBtn} onPress={() => setActiveTab('foryou')} activeOpacity={0.85}>
+            <Text style={styles.retryText}>Browse For You</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.tabRow}>
+          <TouchableOpacity onPress={() => setActiveTab('foryou')} activeOpacity={0.7}>
+            <Text style={[styles.tabText, activeTab === 'foryou' && styles.tabTextActive]}>For You</Text>
+            {activeTab === 'foryou' && <View style={styles.tabUnderline} />}
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setActiveTab('following')} activeOpacity={0.7}>
+            <Text style={[styles.tabText, activeTab === 'following' && styles.tabTextActive]}>Following</Text>
+            {activeTab === 'following' && <View style={styles.tabUnderline} />}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
 
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      <FlatList data={reels} renderItem={renderReel} keyExtractor={item => item.id} pagingEnabled
-        showsVerticalScrollIndicator={false} snapToInterval={SCREEN_H} decelerationRate="fast"
-        onViewableItemsChanged={onViewRef.current} viewabilityConfig={viewConfigRef.current}
-        getItemLayout={(_, index) => ({ length: SCREEN_H, offset: SCREEN_H * index, index })} />
+      <FlatList
+        data={reels}
+        renderItem={renderReel}
+        keyExtractor={item => item.id}
+        pagingEnabled
+        showsVerticalScrollIndicator={false}
+        snapToInterval={SCREEN_H}
+        decelerationRate="fast"
+        onViewableItemsChanged={onViewRef.current}
+        viewabilityConfig={viewConfigRef.current}
+        getItemLayout={(_, index) => ({ length: SCREEN_H, offset: SCREEN_H * index, index })}
+      />
       <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.tabRow}>
           <TouchableOpacity onPress={() => setActiveTab('foryou')} activeOpacity={0.7}>
@@ -545,12 +675,9 @@ export default function ReelsScreen() {
   );
 }
 
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.black },
-  loadingContainer: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
   loadingText: { fontSize: 12, color: colors.textMuted, marginTop: 12 },
-  errorEmoji2: { fontSize: 48, marginBottom: 16 },
   errorTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary, marginBottom: 8 },
   errorDesc: { fontSize: 12, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
   retryBtn: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.primary },
@@ -560,8 +687,8 @@ const styles = StyleSheet.create({
   video: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' },
   pauseOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
-  pauseIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
-  pauseText: { fontSize: 24, color: colors.white, marginLeft: 4 },
+  pauseIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)' },
+  pauseText: { fontSize: 26, color: colors.white, marginLeft: 4 },
   errorContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgCard },
   errorEmoji: { fontSize: 48, marginBottom: 12, opacity: 0.5 },
   errorText: { fontSize: 14, color: colors.textMuted },
@@ -576,19 +703,19 @@ const styles = StyleSheet.create({
   searchIcon: { fontSize: 16 },
   actionsColumn: { position: 'absolute', right: 10, alignItems: 'center', gap: 14, zIndex: 5 },
   actionAvatarContainer: { marginBottom: 4 },
-  actionAvatar: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, borderColor: colors.white },
-  actionAvatarFallback: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.white },
+  actionAvatar: { width: 46, height: 46, borderRadius: 23, borderWidth: 2.5, borderColor: colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
+  actionAvatarFallback: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
   actionAvatarText: { fontSize: 16, fontWeight: '700', color: colors.white },
   actionAvatarPlus: { position: 'absolute', bottom: -4, left: 13, width: 18, height: 18, borderRadius: 9, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.black },
   plusText: { fontSize: 11, fontWeight: '700', color: colors.white },
   actionBtn: { alignItems: 'center' },
-  actionCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', marginBottom: 3 },
+  actionCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: 'rgba(0,0,0,0.15)', alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   actionIcon: { fontSize: 22, color: colors.white },
   actionCount: { fontSize: 10, fontWeight: '600', color: colors.white, textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   bottomContent: { position: 'absolute', left: 0, right: 66, paddingHorizontal: 20, zIndex: 5 },
   workerInfoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  workerAvatarImg: { width: 38, height: 38, borderRadius: 19, borderWidth: 1.5, borderColor: colors.white + '40', marginRight: 10 },
-  workerAvatar: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.white + '40', marginRight: 10 },
+  workerAvatarImg: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, borderColor: colors.white + '60', marginRight: 10 },
+  workerAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.white + '60', marginRight: 10 },
   workerAvatarText: { fontSize: 15, fontWeight: '700', color: colors.white },
   workerDetails: { flex: 1 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
@@ -598,11 +725,31 @@ const styles = StyleSheet.create({
   workerMeta: { fontSize: 10, color: colors.white, opacity: 0.8, marginTop: 2, textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   caption: { fontSize: 12, color: colors.white, lineHeight: 20, marginBottom: 8, textShadowColor: 'rgba(0,0,0,0.7)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
   typeBadgeRow: { flexDirection: 'row', marginBottom: 10 },
-  typeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1 },
-  typeBadgeText: { fontSize: 10, fontWeight: '600' },
-  bookNowBtn: { backgroundColor: colors.primary, paddingVertical: 13, paddingHorizontal: 24, borderRadius: 16, alignItems: 'center', width: 170 },
-  bookNowText: { fontSize: 14, fontWeight: '700', color: colors.white },
+  typeBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
+  typeBadgeText: { fontSize: 11, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  bookNowBtn: { backgroundColor: colors.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 28, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+  bookNowText: { fontSize: 14, fontWeight: '700', color: colors.white, textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   reelStatsRow: { flexDirection: 'row', gap: 8 },
   reelStatChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.white + '20' },
   reelStatText: { fontSize: 10, fontWeight: '500', color: colors.white, opacity: 0.8 },
+  errorIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  errorIconText: { fontSize: 24, color: colors.white, opacity: 0.4, marginLeft: 3 },
+  errorTitle2: { fontSize: 15, fontWeight: '600', color: colors.white, opacity: 0.6, marginBottom: 4 },
+  errorSubtext: { fontSize: 12, color: colors.white, opacity: 0.35, marginBottom: 16 },
+  retryVideoBtn: { paddingHorizontal: 24, paddingVertical: 10, backgroundColor: colors.primary, borderRadius: 20 },
+  retryVideoText: { color: colors.white, fontSize: 13, fontWeight: '600' },
+  // Skeleton loading
+  skeletonContainer: { flex: 1, backgroundColor: '#0a0a0a' },
+  skeletonPulse: { flex: 1, backgroundColor: '#111', overflow: 'hidden' },
+  skeletonShimmer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#1a1a1a', opacity: 0.5 },
+  skeletonActions: { position: 'absolute', right: 14, bottom: Platform.OS === 'ios' ? 200 : 170, gap: 20, alignItems: 'center' },
+  skeletonCircle: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#1a1a1a' },
+  skeletonBottom: { position: 'absolute', left: 20, right: 80, bottom: Platform.OS === 'ios' ? 110 : 82 },
+  skeletonRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  skeletonAvatarSmall: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#1a1a1a', marginRight: 10 },
+  skeletonLineLong: { width: 140, height: 14, borderRadius: 7, backgroundColor: '#1a1a1a' },
+  skeletonLineMed: { width: 200, height: 10, borderRadius: 5, backgroundColor: '#151515', marginBottom: 8 },
+  skeletonLineShort: { width: 100, height: 10, borderRadius: 5, backgroundColor: '#151515' },
+  errorFullScreen: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
+  emptyBigIcon: { fontSize: 48, marginBottom: 16, opacity: 0.6 },
 });

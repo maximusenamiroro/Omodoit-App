@@ -10,6 +10,7 @@ import WorkerNavigator from './WorkerNavigator';
 import TrackingScreen from '../screens/tracking/TrackingScreen';
 import NotificationsScreen from '../screens/notifications/NotificationsScreen';
 import ChatScreen from '../screens/inbox/ChatScreen';
+import SettingsScreen from '../screens/settings/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -42,6 +43,7 @@ export default function AppNavigator() {
           <Stack.Screen name="Auth" component={AuthNavigator} options={{ animation: 'fade' }} />
         )}
         <Stack.Screen name="Chat" component={ChatScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Tracking" component={TrackingScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
       </Stack.Navigator>
@@ -52,7 +54,11 @@ export default function AppNavigator() {
 
 const styles = StyleSheet.create({
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: colors.bg,
     alignItems: 'center',
     justifyContent: 'center',

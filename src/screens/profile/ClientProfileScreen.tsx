@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 
-export default function ClientProfileScreen() {
+export default function ClientProfileScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { profile, logout } = useAuth();
 
@@ -86,7 +86,7 @@ export default function ClientProfileScreen() {
 
           {/* Top row — Settings + Logout */}
           <View style={styles.topRow}>
-            <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
               <Text style={styles.iconText}>⚙️</Text>
             </TouchableOpacity>
 
