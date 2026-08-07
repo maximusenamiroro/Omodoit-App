@@ -1,250 +1,319 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { launchImageLibrary } from 'react-native-image-picker';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Alert, Platform,
+  Animated, StatusBar, Alert, Platform, Image, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 
-export default function WorkerProfileScreen({ navigation }: any) {
+const { width: SCREEN_W } = Dimensions.get('window');
+const REEL_W = (SCREEN_W - spacing.screenPadding * 2 - 8) / 3;
+
+const getInitials = (name) => {
+  if (!name) return '?';
+  const parts = name.trim().split(' ');
+  if (parts.length >= 2) return parts[0][0] + parts[1][0];
+  return parts[0][0];
+};
+
+const MOCK_REELS = [
+  { id: '1', likes: 240, views: 1200 },
+  { id: '2', likes: 89, views: 450 },
+  { id: '3', likes: 156, views: 820 },
+  { id: '4', likes: 45, views: 200 },
+  { id: '5', likes: 312, views: 1500 },
+  { id: '6', likes: 67, views: 340 },
+];
+
+const MOCK_PRODUCTS = [
+  { id: '1', title: 'AC Servicing', price: '₦12,000', category: 'Service' },
+  { id: '2', title: 'Full House Wiring', price: '₦85,000', category: 'Service' },
+  { id: '3', title: 'Generator Repair', price: '₦8,000', category: 'Service' },
+];
+
+const MOCK_REVIEWS = [
+  { id: '1', name: 'Sarah A.', rating: 5, text: 'Excellent work! Very professional.', date: '2 weeks ago' },
+  { id: '2', name: 'Michael O.', rating: 4, text: 'Good job. Would hire again.', date: '1 month ago' },
+];
+
+export default function WorkerProfileScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { profile, logout } = useAuth();
+  const [avatarUri, setAvatarUri] = useState(null);
+  const [activeTab, setActiveTab] = useState('reels');
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
-  const headerScale = useRef(new Animated.Value(0.95)).current;
-  const statsOpacity = useRef(new Animated.Value(0)).current;
-  const statsSlide = useRef(new Animated.Value(20)).current;
-  const actionsOpacity = useRef(new Animated.Value(0)).current;
-  const actionsSlide = useRef(new Animated.Value(30)).current;
+  const contentOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(120, [
-      Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.spring(headerScale, { toValue: 1, damping: 15, stiffness: 100, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.timing(statsOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(statsSlide, { toValue: 0, duration: 300, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.timing(actionsOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.spring(actionsSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
-      ]),
+    Animated.stagger(200, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const handleLogout = () => {
-    Alert.alert('Logout', 'Are you sure you want to sign out?', [
+  const handleSwitch = () => {
+    Alert.alert('Switch Role', 'Toggle between Client and Worker view.', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: async () => { await logout(); } },
+      { text: 'Switch', onPress: async () => { await logout(); } },
     ]);
   };
 
-  const getInitials = () => {
-    if (!profile?.full_name) return '?';
-    const parts = profile.full_name.trim().split(' ');
-    if (parts.length >= 2) return parts[0][0] + parts[1][0];
-    return parts[0][0];
-  };
-
-  const getVerificationBadge = () => {
-    const level = profile?.verification_level ?? 0;
-    if (level >= 3) return { label: 'Business Verified', color: colors.primary, icon: '✓' };
-    if (level >= 2) return { label: 'ID Verified', color: colors.info, icon: '✓' };
-    if (level >= 1) return { label: 'Phone Verified', color: colors.textMuted, icon: '✓' };
-    return { label: 'Unverified', color: colors.textMuted, icon: '○' };
-  };
-
-  const badge = getVerificationBadge();
+  const totalLikes = MOCK_REELS.reduce((s, r) => s + r.likes, 0);
+  const memberSince = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    : 'Today';
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[st.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
+      <Animated.View style={[st.headerBar, { opacity: headerOpacity }]}>
+        <View style={{ width: 32 }} />
+        <Text style={st.headerBarTitle}>My Profile</Text>
+        <TouchableOpacity style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
+          <Text style={st.headerBarIcon}>⚙️</Text>
+        </TouchableOpacity>
+      </Animated.View>
+
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}>
-        {/* Header */}
-        <Animated.View style={[styles.headerSection, { opacity: headerOpacity, transform: [{ scale: headerScale }] }]}>
-          <View style={styles.headerBg} />
-
-          {/* Top row */}
-          <View style={styles.topRow}>
-            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
-              <Text style={styles.iconText}>⚙️</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout} activeOpacity={0.7}>
-              <Text style={styles.logoutBtnText}>Sign Out</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Avatar */}
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatarRing}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{getInitials()}</Text>
-              </View>
+        <Animated.View style={[st.profileSection, { opacity: headerOpacity }]}>
+          <View style={st.avatarWrap}>
+            <View style={[st.avatarRing, { borderColor: colors.primary }]}>
+              {avatarUri || profile?.avatar_url ? (
+                <Image source={{ uri: avatarUri || profile?.avatar_url }} style={st.avatarImg} />
+              ) : (
+                <View style={[st.avatarFb, { backgroundColor: colors.primary }]}>
+                  <Text style={st.avatarFbText}>{getInitials(profile?.full_name)}</Text>
+                </View>
+              )}
             </View>
-            <TouchableOpacity style={styles.editAvatarBtn} activeOpacity={0.7}>
-              <Text style={styles.editAvatarIcon}>📷</Text>
+            <TouchableOpacity style={[st.avatarPlus, { backgroundColor: colors.primary }]} onPress={() => {
+              launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 800, maxHeight: 800 }, (res) => {
+                if (res.assets && res.assets[0]?.uri) setAvatarUri(res.assets[0].uri);
+              });
+            }} activeOpacity={0.85}>
+              <Text style={st.avatarPlusIcon}>+</Text>
             </TouchableOpacity>
           </View>
 
-          <Text style={styles.userName}>{profile?.full_name || 'Worker'}</Text>
-          <Text style={styles.userMeta}>
-            {profile?.location || 'Location not set'} · Member since {
-              profile?.created_at
-                ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                : 'Today'
-            }
-          </Text>
+          <Text style={st.profileName}>{profile?.full_name || 'Your Name'}</Text>
+          {profile?.location && <Text style={[st.profileLocation, { color: colors.primary }]}>📍 {profile.location}</Text>}
+          <Text style={st.memberText}>Member since {memberSince}</Text>
 
-          {/* Verification badge */}
-          <View style={[styles.verificationBadge, { borderColor: badge.color + '40' }]}>
-            <Text style={[styles.badgeIcon, { color: badge.color }]}>{badge.icon}</Text>
-            <Text style={[styles.badgeText, { color: badge.color }]}>{badge.label}</Text>
+          <View style={st.ratingRow}>
+            <Text style={st.ratingStar}>⭐</Text>
+            <Text style={st.ratingValue}>4.8</Text>
+            <Text style={st.ratingCount}>(12 reviews)</Text>
           </View>
 
-          {/* Edit profile */}
-          <TouchableOpacity style={styles.editProfileBtn} activeOpacity={0.85}>
-            <Text style={styles.editProfileText}>✏️  Edit Profile</Text>
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* Commission banner */}
-        <Animated.View style={[styles.commissionBanner, { opacity: statsOpacity, transform: [{ translateY: statsSlide }] }]}>
-          <Text style={styles.commissionIcon}>💰</Text>
-          <View style={styles.commissionInfo}>
-            <Text style={styles.commissionTitle}>0% Commission</Text>
-            <Text style={styles.commissionDesc}>You keep 100% of your earnings</Text>
-          </View>
-        </Animated.View>
-
-        {/* Stats */}
-        <Animated.View style={[styles.statsCard, { opacity: statsOpacity, transform: [{ translateY: statsSlide }] }]}>
-          {[
-            { value: '0', label: 'Bookings', color: colors.textPrimary },
-            { value: '0', label: 'Reels', color: colors.primary },
-            { value: '—', label: 'Rating', color: colors.flash },
-            { value: '₦0', label: 'Earned', color: colors.primary },
-          ].map((stat, i) => (
-            <React.Fragment key={i}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </View>
-              {i < 3 && <View style={styles.statDivider} />}
-            </React.Fragment>
-          ))}
-        </Animated.View>
-
-        {/* Quick Actions */}
-        <Animated.View style={{ opacity: actionsOpacity, transform: [{ translateY: actionsSlide }] }}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-
-          <View style={styles.actionsGrid}>
+          <View style={st.statsRow}>
             {[
-              { icon: '📋', label: 'My Bookings', sub: 'Manage client bookings', color: colors.primary },
-              { icon: '📦', label: 'My Products', sub: 'Manage your shop', color: colors.flash },
-            ].map((action, i) => (
-              <TouchableOpacity key={i} style={styles.actionCard} activeOpacity={0.85}>
-                <View style={[styles.actionIconBg, { backgroundColor: action.color + '15' }]}>
-                  <Text style={styles.actionIcon}>{action.icon}</Text>
-                </View>
-                <View style={styles.actionInfo}>
-                  <Text style={styles.actionLabel}>{action.label}</Text>
-                  <Text style={styles.actionSub}>{action.sub}</Text>
-                </View>
-                <Text style={[styles.actionArrow, { color: action.color + '80' }]}>→</Text>
-              </TouchableOpacity>
+              { value: MOCK_REELS.length.toString(), label: 'Reels' },
+              { value: '24', label: 'Followers' },
+              { value: totalLikes.toString(), label: 'Likes' },
+            ].map((s, i) => (
+              <View key={i} style={st.statItem}>
+                <Text style={st.statValue}>{s.value}</Text>
+                <Text style={st.statLabel}>{s.label}</Text>
+              </View>
             ))}
+          </View>
 
-            <View style={styles.actionRow}>
-              {[
-                { icon: '⭐', label: 'Reviews', color: colors.flash },
-                { icon: '🎬', label: 'My Reels', color: colors.primary },
-              ].map((action, i) => (
-                <TouchableOpacity key={i} style={styles.actionCardSmall} activeOpacity={0.85}>
-                  <View style={[styles.actionIconBgSmall, { backgroundColor: action.color + '15' }]}>
-                    <Text style={styles.actionIconSmall}>{action.icon}</Text>
+          <View style={st.profileBtns}>
+            <TouchableOpacity style={[st.editBtn, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('EditProfile')} activeOpacity={0.85}>
+              <Text style={st.editBtnText}>✏️ Edit Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={st.switchBtn} onPress={handleSwitch} activeOpacity={0.85}>
+              <Text style={st.switchBtnText}>🔄</Text>
+            </TouchableOpacity>
+          </View>
+
+          <View style={st.commBanner}>
+            <Text style={st.commIcon}>💰</Text>
+            <Text style={st.commText}>0% commission — you keep everything you earn</Text>
+          </View>
+        </Animated.View>
+
+        <View style={st.tabBar}>
+          {[
+            { key: 'reels', icon: '🎬', label: 'Reels' },
+            { key: 'products', icon: '📦', label: 'Products' },
+            { key: 'reviews', icon: '⭐', label: 'Reviews' },
+          ].map(tab => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[st.tab, activeTab === tab.key && st.tabActive]}
+              onPress={() => setActiveTab(tab.key)}
+              activeOpacity={0.7}
+            >
+              <Text style={st.tabIcon}>{tab.icon}</Text>
+              <Text style={[st.tabText, activeTab === tab.key && st.tabTextActive]}>{tab.label}</Text>
+              {activeTab === tab.key && <View style={[st.tabLine, { backgroundColor: colors.primary }]} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Animated.View style={{ opacity: contentOpacity }}>
+          {activeTab === 'reels' && (
+            <View style={st.reelsGrid}>
+              {MOCK_REELS.map(reel => (
+                <TouchableOpacity key={reel.id} style={st.reelCard} activeOpacity={0.85}>
+                  <View style={st.reelThumb}>
+                    <Text style={st.reelPlayIcon}>▶</Text>
                   </View>
-                  <Text style={styles.actionLabelSmall}>{action.label}</Text>
+                  <View style={st.reelOverlay}>
+                    <View style={st.reelStat}>
+                      <Text style={st.reelStatIcon}>❤</Text>
+                      <Text style={st.reelStatText}>{reel.likes}</Text>
+                    </View>
+                    <View style={st.reelStat}>
+                      <Text style={st.reelStatIcon}>▶</Text>
+                      <Text style={st.reelStatText}>{reel.views}</Text>
+                    </View>
+                  </View>
                 </TouchableOpacity>
               ))}
+              <TouchableOpacity style={st.addReelCard} onPress={() => navigation.navigate('CreateReel')} activeOpacity={0.85}>
+                <Text style={st.addReelIcon}>+</Text>
+                <Text style={st.addReelText}>New Reel</Text>
+              </TouchableOpacity>
             </View>
-          </View>
-        </Animated.View>
+          )}
 
-        {/* Recent Activity */}
-        <Animated.View style={{ opacity: actionsOpacity }}>
-          <Text style={styles.sectionTitle}>Recent Activity</Text>
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyEmoji}>📋</Text>
-            <Text style={styles.emptyTitle}>No activity yet</Text>
-            <Text style={styles.emptyDesc}>Accept bookings and create reels to get started!</Text>
-          </View>
-        </Animated.View>
+          {activeTab === 'products' && (
+            <View style={st.productsSection}>
+              {MOCK_PRODUCTS.map(product => (
+                <TouchableOpacity key={product.id} style={st.productCard} activeOpacity={0.85}>
+                  <View style={st.productThumb}>
+                    <Text style={st.productEmoji}>📦</Text>
+                  </View>
+                  <View style={st.productInfo}>
+                    <Text style={st.productTitle}>{product.title}</Text>
+                    <Text style={st.productCat}>{product.category}</Text>
+                    <Text style={[st.productPrice, { color: colors.primary }]}>{product.price}</Text>
+                  </View>
+                  <Text style={st.productArrow}>→</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={st.addProductBtn} onPress={() => navigation.navigate('AddProduct')} activeOpacity={0.85}>
+                <Text style={[st.addProductText, { color: colors.primary }]}>+ Add Product</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
-        <Text style={styles.versionText}>Omodoit v1.0.0 · Made in Nigeria 🇳🇬</Text>
+          {activeTab === 'reviews' && (
+            <View style={st.reviewsSection}>
+              {MOCK_REVIEWS.map(review => (
+                <View key={review.id} style={st.reviewCard}>
+                  <View style={st.reviewTop}>
+                    <View style={st.reviewAvatar}>
+                      <Text style={st.reviewAvatarText}>{review.name[0]}</Text>
+                    </View>
+                    <View style={st.reviewInfo}>
+                      <Text style={st.reviewName}>{review.name}</Text>
+                      <Text style={st.reviewDate}>{review.date}</Text>
+                    </View>
+                    <View style={st.reviewStars}>
+                      {Array.from({ length: review.rating }, (_, i) => (
+                        <Text key={i} style={st.reviewStar}>⭐</Text>
+                      ))}
+                    </View>
+                  </View>
+                  <Text style={st.reviewText}>{review.text}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </Animated.View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
-  headerSection: { alignItems: 'center', paddingBottom: 16, marginBottom: 12 },
-  headerBg: { position: 'absolute', top: 0, left: 0, right: 0, height: 140, backgroundColor: colors.primary + '08', borderBottomLeftRadius: 32, borderBottomRightRadius: 32 },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '100%', paddingHorizontal: spacing.screenPadding, paddingTop: 8, marginBottom: 8 },
-  iconButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.white + '08', alignItems: 'center', justifyContent: 'center' },
-  iconText: { fontSize: 18 },
-  logoutBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: spacing.radiusMd, backgroundColor: colors.error + '12', borderWidth: 1, borderColor: colors.error + '25' },
-  logoutBtnText: { fontSize: 10, fontWeight: '600', color: colors.error },
-  avatarContainer: { marginBottom: 12 },
-  avatarRing: { width: 86, height: 86, borderRadius: 43, borderWidth: 2.5, borderColor: colors.primary + '40', alignItems: 'center', justifyContent: 'center' },
-  avatar: { width: 74, height: 74, borderRadius: 37, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  avatarText: { fontSize: 26, fontWeight: '700', color: colors.white },
-  editAvatarBtn: { position: 'absolute', bottom: -2, right: -2, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bg, borderWidth: 2, borderColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  editAvatarIcon: { fontSize: 13 },
-  userName: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
-  userMeta: { fontSize: 10, color: colors.textMuted, marginBottom: 10 },
-  verificationBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, borderWidth: 1, backgroundColor: colors.bgCard, marginBottom: 12 },
-  badgeIcon: { fontSize: 11, fontWeight: '700', marginRight: 5 },
-  badgeText: { fontSize: 10, fontWeight: '600' },
-  editProfileBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: spacing.radiusMd, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
-  editProfileText: { fontSize: 12, fontWeight: '500', color: colors.textPrimary },
+  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.screenPadding, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerBarTitle: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
+  headerBarBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.white + '08', alignItems: 'center', justifyContent: 'center' },
+  headerBarIcon: { fontSize: 16 },
 
-  commissionBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.screenPadding, marginBottom: 12, backgroundColor: colors.primary + '10', borderRadius: spacing.radiusLg, borderWidth: 1, borderColor: colors.primary + '25', padding: 14 },
-  commissionIcon: { fontSize: 22, marginRight: 12 },
-  commissionInfo: { flex: 1 },
-  commissionTitle: { fontSize: 14, fontWeight: '700', color: colors.primary, marginBottom: 2 },
-  commissionDesc: { fontSize: 11, color: colors.textSecondary },
+  profileSection: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: spacing.screenPadding },
+  avatarWrap: { marginBottom: 14 },
+  avatarRing: { width: 96, height: 96, borderRadius: 48, borderWidth: 3, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  avatarImg: { width: 88, height: 88, borderRadius: 44 },
+  avatarFb: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' },
+  avatarFbText: { fontSize: 32, fontWeight: '700', color: colors.white },
+  avatarPlus: { position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg },
+  avatarPlusIcon: { fontSize: 16, fontWeight: '700', color: colors.white },
 
-  statsCard: { flexDirection: 'row', backgroundColor: colors.bgCard, borderRadius: spacing.radiusLg, borderWidth: 1, borderColor: colors.border, marginHorizontal: spacing.screenPadding, padding: 14, marginBottom: 20 },
-  statItem: { flex: 1, alignItems: 'center' },
-  statValue: { fontSize: 16, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },
-  statLabel: { fontSize: 10, color: colors.textMuted },
-  statDivider: { width: 1, backgroundColor: colors.border, marginVertical: 4 },
+  profileName: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
+  profileLocation: { fontSize: 12, marginBottom: 2 },
+  memberText: { fontSize: 10, color: colors.textMuted, marginBottom: 10 },
 
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.textPrimary, marginBottom: 10, paddingHorizontal: spacing.screenPadding },
-  actionsGrid: { paddingHorizontal: spacing.screenPadding, marginBottom: 20 },
-  actionCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: spacing.radiusLg, borderWidth: 1, borderColor: colors.border, padding: 14, marginBottom: 8 },
-  actionIconBg: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  actionIcon: { fontSize: 18 },
-  actionInfo: { flex: 1 },
-  actionLabel: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: 2 },
-  actionSub: { fontSize: 10, color: colors.textMuted },
-  actionArrow: { fontSize: 16, fontWeight: '500' },
-  actionRow: { flexDirection: 'row', gap: 8 },
-  actionCardSmall: { flex: 1, alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: spacing.radiusLg, borderWidth: 1, borderColor: colors.border, paddingVertical: 16 },
-  actionIconBgSmall: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  actionIconSmall: { fontSize: 16 },
-  actionLabelSmall: { fontSize: 12, fontWeight: '600', color: colors.textPrimary },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 14 },
+  ratingStar: { fontSize: 14 },
+  ratingValue: { fontSize: 16, fontWeight: '700', color: colors.textPrimary },
+  ratingCount: { fontSize: 12, color: colors.textMuted },
 
-  emptyCard: { alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: spacing.radiusLg, borderWidth: 1, borderColor: colors.border, padding: 28, marginHorizontal: spacing.screenPadding, marginBottom: 20 },
-  emptyEmoji: { fontSize: 32, marginBottom: 10, opacity: 0.5 },
-  emptyTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: 4 },
-  emptyDesc: { fontSize: 12, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  statsRow: { flexDirection: 'row', gap: 32, marginBottom: 18 },
+  statItem: { alignItems: 'center' },
+  statValue: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, letterSpacing: -0.5 },
+  statLabel: { fontSize: 10, color: colors.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: 1 },
 
-  versionText: { fontSize: 10, color: colors.textMuted, textAlign: 'center', marginBottom: 16, opacity: 0.5 },
+  profileBtns: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  editBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14 },
+  editBtnText: { fontSize: 12, fontWeight: '600', color: colors.white },
+  switchBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  switchBtnText: { fontSize: 16 },
+
+  commBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '10', borderRadius: 14, borderWidth: 1, borderColor: colors.primary + '25', paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
+  commIcon: { fontSize: 18 },
+  commText: { fontSize: 11, color: colors.primary, fontWeight: '500', flex: 1 },
+
+  tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
+  tab: { flex: 1, paddingVertical: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 },
+  tabActive: {},
+  tabIcon: { fontSize: 12 },
+  tabText: { fontSize: 12, fontWeight: '500', color: colors.textMuted },
+  tabTextActive: { color: colors.textPrimary, fontWeight: '700' },
+  tabLine: { position: 'absolute', bottom: 0, width: 32, height: 2, borderRadius: 1 },
+
+  reelsGrid: { flexDirection: 'row', flexWrap: 'wrap', padding: spacing.screenPadding, gap: 4 },
+  reelCard: { width: REEL_W, aspectRatio: 9 / 16, backgroundColor: colors.bgCard, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
+  reelThumb: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
+  reelPlayIcon: { fontSize: 20, color: colors.white, opacity: 0.5 },
+  reelOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.6)' },
+  reelStat: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  reelStatIcon: { fontSize: 10, color: colors.white },
+  reelStatText: { fontSize: 10, color: colors.white, fontWeight: '600' },
+  addReelCard: { width: REEL_W, aspectRatio: 9 / 16, backgroundColor: colors.bgCard, borderRadius: 8, borderWidth: 1.5, borderColor: colors.primary + '30', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  addReelIcon: { fontSize: 24, color: colors.primary, marginBottom: 4 },
+  addReelText: { fontSize: 10, color: colors.primary, fontWeight: '600' },
+
+  productsSection: { padding: spacing.screenPadding },
+  productCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14, marginBottom: 10 },
+  productThumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: colors.primary + '10', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  productEmoji: { fontSize: 20 },
+  productInfo: { flex: 1 },
+  productTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: 2 },
+  productCat: { fontSize: 10, color: colors.textMuted },
+  productPrice: { fontSize: 13, fontWeight: '700', marginTop: 3 },
+  productArrow: { fontSize: 14, color: colors.textMuted },
+  addProductBtn: { paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: colors.primary + '30', borderStyle: 'dashed', alignItems: 'center' },
+  addProductText: { fontSize: 13, fontWeight: '600' },
+
+  reviewsSection: { padding: spacing.screenPadding },
+  reviewCard: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14, marginBottom: 10 },
+  reviewTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  reviewAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center', marginRight: 10 },
+  reviewAvatarText: { fontSize: 12, fontWeight: '700', color: colors.white },
+  reviewInfo: { flex: 1 },
+  reviewName: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
+  reviewDate: { fontSize: 10, color: colors.textMuted },
+  reviewStars: { flexDirection: 'row' },
+  reviewStar: { fontSize: 10 },
+  reviewText: { fontSize: 12, color: colors.textSecondary, lineHeight: 18 },
 });

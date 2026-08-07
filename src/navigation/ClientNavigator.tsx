@@ -6,7 +6,6 @@ import TabIcon from '../components/common/TabIcon';
 
 import ReelsScreen from '../screens/reels/ReelsScreen';
 import WorkspaceScreen from '../screens/workspace/WorkspaceScreen';
-import FlashJobScreen from '../screens/workspace/FlashJobScreen';
 import InboxScreen from '../screens/inbox/InboxScreen';
 import ClientProfileScreen from '../screens/profile/ClientProfileScreen';
 
@@ -36,14 +35,7 @@ export default function ClientNavigator() {
           tabBarIcon: ({ focused }) => <TabIcon name="explore" focused={focused} />,
         }}
       />
-      <Tab.Screen
-        name="Flash"
-        component={FlashJobScreen}
-        options={{
-          tabBarLabel: '',
-          tabBarIcon: ({ focused }) => <TabIcon name="flash" focused={focused} isFlash />,
-        }}
-      />
+     
       <Tab.Screen
         name="Inbox"
         component={InboxScreen}

@@ -1,428 +1,280 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { launchImageLibrary } from 'react-native-image-picker';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Alert,
+  Animated, StatusBar, Alert, Platform, Image, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 
-export default function ClientProfileScreen({ navigation }: any) {
+const { width: SCREEN_W } = Dimensions.get('window');
+
+const getInitials = (name) => {
+  if (!name) return '?';
+  const parts = name.trim().split(' ');
+  if (parts.length >= 2) return parts[0][0] + parts[1][0];
+  return parts[0][0];
+};
+
+const MOCK_ORDERS = [
+  { id: '1', name: 'Phone Screen Fix', status: 'delivered', price: '₦5,000', date: 'Jul 28' },
+  { id: '2', name: 'Catering Service', status: 'pending', price: '₦45,000', date: 'Aug 5' },
+];
+
+const MOCK_BOOKINGS = [
+  { id: '1', worker: 'John Adewale', job: 'Electrical Repair', status: 'accepted', date: 'Aug 2', location: 'Ikeja' },
+  { id: '2', worker: 'Blessing Eze', job: 'Bridal Makeup', status: 'pending', date: 'Aug 10', location: 'Lekki' },
+];
+
+export default function ClientProfileScreen({ navigation }) {
   const insets = useSafeAreaInsets();
   const { profile, logout } = useAuth();
+  const [avatarUri, setAvatarUri] = useState(null);
+  const [activeTab, setActiveTab] = useState('orders');
 
-  // Animations
   const headerOpacity = useRef(new Animated.Value(0)).current;
-  const headerScale = useRef(new Animated.Value(0.95)).current;
-  const statsOpacity = useRef(new Animated.Value(0)).current;
-  const statsSlide = useRef(new Animated.Value(20)).current;
-  const actionsOpacity = useRef(new Animated.Value(0)).current;
-  const actionsSlide = useRef(new Animated.Value(30)).current;
+  const contentOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(120, [
-      Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.spring(headerScale, { toValue: 1, damping: 15, stiffness: 100, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.timing(statsOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(statsSlide, { toValue: 0, duration: 300, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.timing(actionsOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.spring(actionsSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
-      ]),
+    Animated.stagger(200, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
   }, []);
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => { await logout(); },
-        },
-      ]
-    );
+  const handleSwitch = () => {
+    Alert.alert('Switch Role', 'Toggle between Client and Worker view.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Switch', onPress: async () => { await logout(); } },
+    ]);
   };
 
-  const getInitials = () => {
-    if (!profile?.full_name) return '?';
-    const parts = profile.full_name.trim().split(' ');
-    if (parts.length >= 2) return parts[0][0] + parts[1][0];
-    return parts[0][0];
+  const getStatusStyle = (status) => {
+    if (status === 'accepted' || status === 'delivered') return { bg: colors.primary + '20', text: colors.primary };
+    if (status === 'rejected' || status === 'cancelled') return { bg: '#EF444420', text: '#EF4444' };
+    return { bg: '#F59E0B20', text: '#F59E0B' };
   };
 
-  const getVerificationBadge = () => {
-    const level = profile?.verification_level ?? 0;
-    if (level >= 3) return { label: 'Business Verified', color: colors.primary, icon: '✓' };
-    if (level >= 2) return { label: 'ID Verified', color: colors.info, icon: '✓' };
-    if (level >= 1) return { label: 'Phone Verified', color: colors.textMuted, icon: '✓' };
-    return { label: 'Unverified', color: colors.textMuted, icon: '○' };
-  };
-
-  const badge = getVerificationBadge();
+  const memberSince = profile?.created_at
+    ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    : 'Today';
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={[st.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scrollContent}
-      >
-        {/* Header */}
-        <Animated.View style={[styles.headerSection, {
-          opacity: headerOpacity,
-          transform: [{ scale: headerScale }],
-        }]}>
-          {/* Background accent */}
-          <View style={styles.headerBackground} />
+      <Animated.View style={[st.headerBar, { opacity: headerOpacity }]}>
+        <View style={{ width: 32 }} />
+        <Text style={st.headerBarTitle}>My Profile</Text>
+        <View style={st.headerBarRight}>
+          <TouchableOpacity style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
+            <Text style={st.headerBarIcon}>⚙️</Text>
+          </TouchableOpacity>
+        </View>
+      </Animated.View>
 
-          {/* Top row — Settings + Logout */}
-          <View style={styles.topRow}>
-            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
-              <Text style={styles.iconText}>⚙️</Text>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}>
+        <Animated.View style={[st.profileSection, { opacity: headerOpacity }]}>
+          <View style={st.avatarWrap}>
+            <View style={[st.avatarRing, { borderColor: colors.client }]}>
+              {avatarUri || profile?.avatar_url ? (
+                <Image source={{ uri: avatarUri || profile?.avatar_url }} style={st.avatarImg} />
+              ) : (
+                <View style={[st.avatarFb, { backgroundColor: colors.client }]}>
+                  <Text style={st.avatarFbText}>{getInitials(profile?.full_name)}</Text>
+                </View>
+              )}
+            </View>
+            <TouchableOpacity style={[st.avatarPlus, { backgroundColor: colors.client }]} onPress={() => {
+              launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 800, maxHeight: 800 }, (res) => {
+                if (res.assets && res.assets[0]?.uri) setAvatarUri(res.assets[0].uri);
+              });
+            }} activeOpacity={0.85}>
+              <Text style={st.avatarPlusIcon}>+</Text>
             </TouchableOpacity>
+          </View>
 
+          <Text style={st.profileName}>{profile?.full_name || 'Your Name'}</Text>
+          {profile?.location && <Text style={st.profileLocation}>📍 {profile.location}</Text>}
+          <Text style={st.memberText}>Member since {memberSince}</Text>
+
+          <View style={st.statsRow}>
+            {[
+              { value: MOCK_ORDERS.length.toString(), label: 'Orders' },
+              { value: MOCK_BOOKINGS.length.toString(), label: 'Bookings' },
+              { value: '0', label: 'Saved' },
+            ].map((s, i) => (
+              <View key={i} style={st.statItem}>
+                <Text style={st.statValue}>{s.value}</Text>
+                <Text style={st.statLabel}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={st.profileBtns}>
+            <TouchableOpacity style={[st.editBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('EditProfile')} activeOpacity={0.85}>
+              <Text style={st.editBtnText}>✏️ Edit Profile</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={st.switchBtn} onPress={handleSwitch} activeOpacity={0.85}>
+              <Text style={st.switchBtnText}>🔄</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
+        <View style={st.tabBar}>
+          {[
+            { key: 'orders', icon: '📦', label: 'Orders' },
+            { key: 'bookings', icon: '📋', label: 'Bookings' },
+            { key: 'saved', icon: '🔖', label: 'Saved' },
+          ].map(tab => (
             <TouchableOpacity
-              style={styles.logoutBtn}
-              onPress={handleLogout}
+              key={tab.key}
+              style={[st.tab, activeTab === tab.key && st.tabActive]}
+              onPress={() => setActiveTab(tab.key)}
               activeOpacity={0.7}
             >
-              <Text style={styles.logoutBtnText}>Sign Out</Text>
+              <Text style={st.tabIcon}>{tab.icon}</Text>
+              <Text style={[st.tabText, activeTab === tab.key && st.tabTextActive]}>{tab.label}</Text>
+              {activeTab === tab.key && <View style={[st.tabLine, { backgroundColor: colors.client }]} />}
             </TouchableOpacity>
-          </View>
-
-          {/* Avatar */}
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatarRing}>
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{getInitials()}</Text>
-              </View>
-            </View>
-            <TouchableOpacity style={styles.editAvatarBtn} activeOpacity={0.7}>
-              <Text style={styles.editAvatarIcon}>📷</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Name and info */}
-          <Text style={styles.userName}>{profile?.full_name || 'User'}</Text>
-
-          <Text style={styles.userMeta}>
-            {profile?.location || 'Location not set'} · Member since {
-              profile?.created_at
-                ? new Date(profile.created_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-                : 'Today'
-            }
-          </Text>
-
-          {/* Verification badge */}
-          <View style={[styles.verificationBadge, { borderColor: badge.color + '40' }]}>
-            <Text style={[styles.badgeIcon, { color: badge.color }]}>{badge.icon}</Text>
-            <Text style={[styles.badgeText, { color: badge.color }]}>{badge.label}</Text>
-          </View>
-
-          {/* Edit profile button */}
-          <TouchableOpacity style={styles.editProfileBtn} activeOpacity={0.85}>
-            <Text style={styles.editProfileText}>✏️  Edit Profile</Text>
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* Stats */}
-        <Animated.View style={[styles.statsCard, {
-          opacity: statsOpacity,
-          transform: [{ translateY: statsSlide }],
-        }]}>
-          {[
-            { value: '0', label: 'Bookings', color: colors.textPrimary },
-            { value: '0', label: 'Orders', color: colors.textPrimary },
-            { value: '—', label: 'Rating', color: colors.flash },
-            { value: '₦0', label: 'Spent', color: colors.client },
-          ].map((stat, i) => (
-            <React.Fragment key={i}>
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
-                <Text style={styles.statLabel}>{stat.label}</Text>
-              </View>
-              {i < 3 && <View style={styles.statDivider} />}
-            </React.Fragment>
           ))}
-        </Animated.View>
+        </View>
 
-        {/* Quick Actions */}
-        <Animated.View style={{
-          opacity: actionsOpacity,
-          transform: [{ translateY: actionsSlide }],
-        }}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-
-          <View style={styles.actionsGrid}>
-            {[
-              { icon: '📋', label: 'My Bookings', sub: 'View all bookings', color: colors.primary },
-              { icon: '📦', label: 'My Orders', sub: 'Track your orders', color: colors.client },
-            ].map((action, i) => (
-              <TouchableOpacity key={i} style={styles.actionCard} activeOpacity={0.85}>
-                <View style={[styles.actionIconBg, { backgroundColor: action.color + '15' }]}>
-                  <Text style={styles.actionIcon}>{action.icon}</Text>
-                </View>
-                <View style={styles.actionInfo}>
-                  <Text style={styles.actionLabel}>{action.label}</Text>
-                  <Text style={styles.actionSub}>{action.sub}</Text>
-                </View>
-                <Text style={[styles.actionArrow, { color: action.color + '80' }]}>→</Text>
-              </TouchableOpacity>
-            ))}
-
-            <View style={styles.actionRow}>
-              {[
-                { icon: '⭐', label: 'Reviews', color: colors.flash },
-                { icon: '⚡', label: 'Flash Jobs', color: colors.flash },
-              ].map((action, i) => (
-                <TouchableOpacity key={i} style={styles.actionCardSmall} activeOpacity={0.85}>
-                  <View style={[styles.actionIconBgSmall, { backgroundColor: action.color + '15' }]}>
-                    <Text style={styles.actionIconSmall}>{action.icon}</Text>
-                  </View>
-                  <Text style={styles.actionLabelSmall}>{action.label}</Text>
+        <Animated.View style={[st.tabContent, { opacity: contentOpacity }]}>
+          {activeTab === 'orders' && (
+            MOCK_ORDERS.length === 0 ? (
+              <View style={st.emptyState}>
+                <Text style={st.emptyEmoji}>📦</Text>
+                <Text style={st.emptyTitle}>No orders yet</Text>
+                <TouchableOpacity style={[st.emptyBtn, { backgroundColor: colors.client }]} activeOpacity={0.85}>
+                  <Text style={st.emptyBtnText}>Browse Products</Text>
                 </TouchableOpacity>
-              ))}
+              </View>
+            ) : (
+              MOCK_ORDERS.map(order => {
+                const status = getStatusStyle(order.status);
+                return (
+                  <TouchableOpacity key={order.id} style={st.listCard} activeOpacity={0.85}>
+                    <View style={st.listCardIcon}>
+                      <Text style={st.listCardEmoji}>📦</Text>
+                    </View>
+                    <View style={st.listCardInfo}>
+                      <Text style={st.listCardTitle}>{order.name}</Text>
+                      <Text style={st.listCardSub}>{order.date}</Text>
+                      <Text style={[st.listCardPrice, { color: colors.client }]}>{order.price}</Text>
+                    </View>
+                    <View style={[st.statusBadge, { backgroundColor: status.bg }]}>
+                      <Text style={[st.statusText, { color: status.text }]}>{order.status}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )
+          )}
+
+          {activeTab === 'bookings' && (
+            MOCK_BOOKINGS.length === 0 ? (
+              <View style={st.emptyState}>
+                <Text style={st.emptyEmoji}>📋</Text>
+                <Text style={st.emptyTitle}>No bookings yet</Text>
+                <TouchableOpacity style={[st.emptyBtn, { backgroundColor: colors.client }]} activeOpacity={0.85}>
+                  <Text style={st.emptyBtnText}>Hire a Worker</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              MOCK_BOOKINGS.map(booking => {
+                const status = getStatusStyle(booking.status);
+                return (
+                  <TouchableOpacity key={booking.id} style={st.listCard} activeOpacity={0.85}>
+                    <View style={[st.listCardIcon, { backgroundColor: colors.primary + '15' }]}>
+                      <Text style={st.listCardEmoji}>📋</Text>
+                    </View>
+                    <View style={st.listCardInfo}>
+                      <Text style={st.listCardTitle}>{booking.job}</Text>
+                      <Text style={st.listCardSub}>{booking.worker} · {booking.date}</Text>
+                      <Text style={st.listCardLocation}>📍 {booking.location}</Text>
+                    </View>
+                    <View style={[st.statusBadge, { backgroundColor: status.bg }]}>
+                      <Text style={[st.statusText, { color: status.text }]}>{booking.status}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })
+            )
+          )}
+
+          {activeTab === 'saved' && (
+            <View style={st.emptyState}>
+              <Text style={st.emptyEmoji}>🔖</Text>
+              <Text style={st.emptyTitle}>No saved reels</Text>
+              <TouchableOpacity style={[st.emptyBtn, { backgroundColor: colors.client }]} activeOpacity={0.85}>
+                <Text style={st.emptyBtnText}>Browse Reels</Text>
+              </TouchableOpacity>
             </View>
-          </View>
+          )}
         </Animated.View>
-
-        {/* Recent Activity */}
-        <Animated.View style={{ opacity: actionsOpacity }}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
-          </View>
-
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyEmoji}>📋</Text>
-            <Text style={styles.emptyTitle}>No activity yet</Text>
-            <Text style={styles.emptyDesc}>
-              Book a worker or send a Flash Job to get started!
-            </Text>
-          </View>
-        </Animated.View>
-
-        {/* App info */}
-        <Text style={styles.versionText}>Omodoit v1.0.0 · Made in Nigeria 🇳🇬</Text>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
+const st = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.bg },
+  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.screenPadding, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerBarTitle: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
+  headerBarRight: { flexDirection: 'row', gap: 8 },
+  headerBarBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.white + '08', alignItems: 'center', justifyContent: 'center' },
+  headerBarIcon: { fontSize: 16 },
 
-  // Header
-  headerSection: {
-    alignItems: 'center',
-    paddingBottom: 16,
-    marginBottom: 12,
-  },
-  headerBackground: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0,
-    height: 140,
-    backgroundColor: colors.client + '08',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
-  },
+  profileSection: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: spacing.screenPadding },
+  avatarWrap: { marginBottom: 14 },
+  avatarRing: { width: 96, height: 96, borderRadius: 48, borderWidth: 3, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  avatarImg: { width: 88, height: 88, borderRadius: 44 },
+  avatarFb: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' },
+  avatarFbText: { fontSize: 32, fontWeight: '700', color: colors.white },
+  avatarPlus: { position: 'absolute', bottom: 0, right: 0, width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg },
+  avatarPlusIcon: { fontSize: 16, fontWeight: '700', color: colors.white },
 
-  // Top row
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    width: '100%',
-    paddingHorizontal: spacing.screenPadding,
-    paddingTop: 8,
-    marginBottom: 8,
-  },
-  iconButton: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: colors.white + '08',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  iconText: { fontSize: 18 },
-  logoutBtn: {
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: spacing.radiusMd,
-    backgroundColor: colors.error + '12',
-    borderWidth: 1,
-    borderColor: colors.error + '25',
-  },
-  logoutBtnText: {
-    fontSize: typography.xs,
-    fontWeight: typography.semibold,
-    color: colors.error,
-  },
+  profileName: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
+  profileLocation: { fontSize: 12, color: colors.primary, marginBottom: 2 },
+  memberText: { fontSize: 10, color: colors.textMuted, marginBottom: 16 },
 
-  // Avatar
-  avatarContainer: {
-    marginBottom: 12,
-  },
-  avatarRing: {
-    width: 86, height: 86, borderRadius: 43,
-    borderWidth: 2.5,
-    borderColor: colors.client + '40',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatar: {
-    width: 74, height: 74, borderRadius: 37,
-    backgroundColor: colors.client,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarText: {
-    fontSize: 26, fontWeight: typography.bold, color: colors.white,
-  },
-  editAvatarBtn: {
-    position: 'absolute', bottom: -2, right: -2,
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: colors.bg, borderWidth: 2, borderColor: colors.client,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  editAvatarIcon: { fontSize: 13 },
+  statsRow: { flexDirection: 'row', gap: 32, marginBottom: 18 },
+  statItem: { alignItems: 'center' },
+  statValue: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, letterSpacing: -0.5 },
+  statLabel: { fontSize: 10, color: colors.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: 1 },
 
-  // Name
-  userName: {
-    fontSize: typography.xl, fontWeight: typography.bold,
-    color: colors.textPrimary, marginBottom: 4,
-  },
-  userMeta: {
-    fontSize: typography.xs, color: colors.textMuted, marginBottom: 10,
-  },
+  profileBtns: { flexDirection: 'row', gap: 10 },
+  editBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14 },
+  editBtnText: { fontSize: 12, fontWeight: '600', color: colors.white },
+  switchBtn: { width: 40, height: 40, borderRadius: 14, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  switchBtnText: { fontSize: 16 },
 
-  // Verification
-  verificationBadge: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 12, paddingVertical: 5,
-    borderRadius: spacing.radiusFull, borderWidth: 1,
-    backgroundColor: colors.bgCard, marginBottom: 12,
-  },
-  badgeIcon: {
-    fontSize: 11, fontWeight: typography.bold, marginRight: 5,
-  },
-  badgeText: {
-    fontSize: typography.xs, fontWeight: typography.semibold,
-  },
+  tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
+  tab: { flex: 1, paddingVertical: 12, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 5 },
+  tabActive: {},
+  tabIcon: { fontSize: 12 },
+  tabText: { fontSize: 12, fontWeight: '500', color: colors.textMuted },
+  tabTextActive: { color: colors.textPrimary, fontWeight: '700' },
+  tabLine: { position: 'absolute', bottom: 0, width: 32, height: 2, borderRadius: 1 },
 
-  // Edit profile
-  editProfileBtn: {
-    paddingHorizontal: 20, paddingVertical: 10,
-    borderRadius: spacing.radiusMd,
-    backgroundColor: colors.bgCard,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  editProfileText: {
-    fontSize: typography.sm, fontWeight: typography.medium, color: colors.textPrimary,
-  },
+  tabContent: { padding: spacing.screenPadding },
 
-  // Stats
-  statsCard: {
-    flexDirection: 'row',
-    backgroundColor: colors.bgCard, borderRadius: spacing.radiusLg,
-    borderWidth: 1, borderColor: colors.border,
-    marginHorizontal: spacing.screenPadding,
-    padding: 14, marginBottom: 20,
-  },
-  statItem: { flex: 1, alignItems: 'center' },
-  statValue: {
-    fontSize: typography.md, fontWeight: typography.bold,
-    color: colors.textPrimary, marginBottom: 3,
-  },
-  statLabel: { fontSize: typography.xs, color: colors.textMuted },
-  statDivider: { width: 1, backgroundColor: colors.border, marginVertical: 4 },
+  listCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: 14, marginBottom: 10 },
+  listCardIcon: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.flash + '15', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  listCardEmoji: { fontSize: 20 },
+  listCardInfo: { flex: 1 },
+  listCardTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: 2 },
+  listCardSub: { fontSize: 10, color: colors.textMuted },
+  listCardPrice: { fontSize: 12, fontWeight: '700', marginTop: 3 },
+  listCardLocation: { fontSize: 10, color: colors.textMuted, marginTop: 2 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  statusText: { fontSize: 10, fontWeight: '600' },
 
-  // Section
-  sectionTitle: {
-    fontSize: typography.md, fontWeight: typography.bold,
-    color: colors.textPrimary, marginBottom: 10,
-    paddingHorizontal: spacing.screenPadding,
-  },
-  sectionHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: spacing.screenPadding,
-    marginBottom: 10,
-  },
-
-  // Actions
-  actionsGrid: {
-    paddingHorizontal: spacing.screenPadding,
-    marginBottom: 20,
-  },
-  actionCard: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.bgCard, borderRadius: spacing.radiusLg,
-    borderWidth: 1, borderColor: colors.border,
-    padding: 14, marginBottom: 8,
-  },
-  actionIconBg: {
-    width: 40, height: 40, borderRadius: 12,
-    alignItems: 'center', justifyContent: 'center', marginRight: 12,
-  },
-  actionIcon: { fontSize: 18 },
-  actionInfo: { flex: 1 },
-  actionLabel: {
-    fontSize: typography.base, fontWeight: typography.semibold,
-    color: colors.textPrimary, marginBottom: 2,
-  },
-  actionSub: { fontSize: typography.xs, color: colors.textMuted },
-  actionArrow: { fontSize: 16, fontWeight: typography.medium },
-
-  // Small action cards (side by side)
-  actionRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  actionCardSmall: {
-    flex: 1, alignItems: 'center',
-    backgroundColor: colors.bgCard, borderRadius: spacing.radiusLg,
-    borderWidth: 1, borderColor: colors.border,
-    paddingVertical: 16,
-  },
-  actionIconBgSmall: {
-    width: 36, height: 36, borderRadius: 10,
-    alignItems: 'center', justifyContent: 'center', marginBottom: 8,
-  },
-  actionIconSmall: { fontSize: 16 },
-  actionLabelSmall: {
-    fontSize: typography.sm, fontWeight: typography.semibold, color: colors.textPrimary,
-  },
-
-  // Empty
-  emptyCard: {
-    alignItems: 'center',
-    backgroundColor: colors.bgCard, borderRadius: spacing.radiusLg,
-    borderWidth: 1, borderColor: colors.border,
-    padding: 28, marginHorizontal: spacing.screenPadding,
-    marginBottom: 20,
-  },
-  emptyEmoji: { fontSize: 32, marginBottom: 10, opacity: 0.5 },
-  emptyTitle: {
-    fontSize: typography.base, fontWeight: typography.semibold,
-    color: colors.textPrimary, marginBottom: 4,
-  },
-  emptyDesc: {
-    fontSize: typography.sm, color: colors.textMuted,
-    textAlign: 'center', lineHeight: 20,
-  },
-
-  // Version
-  versionText: {
-    fontSize: typography.xs, color: colors.textMuted,
-    textAlign: 'center', marginBottom: 16, opacity: 0.5,
-  },
+  emptyState: { alignItems: 'center', paddingVertical: 48 },
+  emptyEmoji: { fontSize: 40, marginBottom: 12, opacity: 0.3 },
+  emptyTitle: { fontSize: 14, color: colors.textMuted, marginBottom: 16 },
+  emptyBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14 },
+  emptyBtnText: { fontSize: 12, fontWeight: '600', color: colors.white },
 });
