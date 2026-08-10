@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
-import { launchImageLibrary } from 'react-native-image-picker';
+import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, Image,
+  TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import { supabase } from '../../api/supabase';
+import { useAuth } from '../../context/AuthContext';
+import { uploadVideoToStorage } from '../../lib/uploadImage';
 
 const REEL_TYPES = [
   { key: 'showcase', icon: '🎬', label: 'Showcase', desc: 'Show your work and skills' },
@@ -14,33 +17,68 @@ const REEL_TYPES = [
   { key: 'behind', icon: '🎭', label: 'Behind the Scenes', desc: 'Show your process' },
 ];
 
-export default function CreateReelScreen({ navigation }) {
+export default function CreateReelScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const [videoUri, setVideoUri] = useState(null);
-  const [videoThumb, setVideoThumb] = useState(null);
+  const { user } = useAuth();
+  const [videoUri, setVideoUri] = useState<string | null>(null);
   const [description, setDescription] = useState('');
   const [reelType, setReelType] = useState('showcase');
   const [focused, setFocused] = useState('');
   const [publishing, setPublishing] = useState(false);
 
   const handleRecord = () => {
-    Alert.alert(
-      '🎥 Camera Access',
-      'Camera access is needed to record your reel. This will be connected when the app is fully set up.',
-      [{ text: 'OK' }]
-    );
+    launchCamera({ mediaType: 'video', videoQuality: 'high', durationLimit: 60 }, (res) => {
+      const uri = res.assets?.[0]?.uri;
+      if (uri) setVideoUri(uri);
+      if (res.errorMessage) {
+        Alert.alert('Camera Error', res.errorMessage);
+      }
+    });
   };
 
-  const handlePublish = () => {
+  const handleUpload = () => {
+    launchImageLibrary({ mediaType: 'video', videoQuality: 'high' }, (res) => {
+      const uri = res.assets?.[0]?.uri;
+      if (uri) setVideoUri(uri);
+    });
+  };
+
+  const handlePublish = async () => {
+    if (!videoUri) {
+      Alert.alert('Add a Video', 'Please record or upload a video first.');
+      return;
+    }
+    if (!user?.id) {
+      Alert.alert('Please Log In', 'You need to be logged in to publish a reel.');
+      return;
+    }
+    if (publishing) return;
+
     setPublishing(true);
-    setTimeout(() => {
-      setPublishing(false);
+    try {
+      const videoUrl = await uploadVideoToStorage(videoUri, user.id);
+
+      const { error } = await supabase.from('reels').insert({
+        user_id: user.id,
+        video_url: videoUrl,
+        description: description.trim() || null,
+        type: reelType,
+        likes: 0,
+      });
+
+      if (error) throw error;
+
       Alert.alert(
         '🎉 Reel Published!',
         'Your reel is now live. Clients can discover you through it.',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
-    }, 1000);
+    } catch (err: any) {
+      console.error('Reel publish error:', err);
+      Alert.alert('Could Not Publish', 'Something went wrong uploading your reel. Please check your connection and try again.');
+    } finally {
+      setPublishing(false);
+    }
   };
 
   return (
@@ -59,27 +97,37 @@ export default function CreateReelScreen({ navigation }) {
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}>
 
-        {/* Video upload area */}
-        <TouchableOpacity style={st.videoUpload} onPress={handleRecord} activeOpacity={0.85}>
-          <View style={st.videoUploadCircle}>
-            <Text style={st.videoUploadIcon}>🎥</Text>
-          </View>
-          <Text style={st.videoUploadTitle}>Record or Upload Video</Text>
-          <Text style={st.videoUploadSub}>Max 60 seconds · Portrait mode recommended</Text>
-          <View style={st.videoUploadBtns}>
-            <View style={st.videoOptionBtn}>
-              <Text style={st.videoOptionIcon}>📷</Text>
-              <Text style={st.videoOptionText}>Record</Text>
-            </View>
-            <View style={st.videoOptionBtn}>
-              <Text style={st.videoOptionIcon}>📁</Text>
-              <Text style={st.videoOptionText}>Upload</Text>
+        {videoUri ? (
+          <View style={st.videoPreview}>
+            <View style={st.videoPreviewOverlay}>
+              <Text style={st.videoPreviewIcon}>✓</Text>
+              <Text style={st.videoPreviewText}>Video Selected</Text>
+              <TouchableOpacity onPress={() => setVideoUri(null)} activeOpacity={0.7}>
+                <Text style={st.videoPreviewChange}>Tap to change</Text>
+              </TouchableOpacity>
             </View>
           </View>
-        </TouchableOpacity>
+        ) : (
+          <View style={st.videoUpload}>
+            <View style={st.videoUploadCircle}>
+              <Text style={st.videoUploadIcon}>🎥</Text>
+            </View>
+            <Text style={st.videoUploadTitle}>Record or Upload Video</Text>
+            <Text style={st.videoUploadSub}>Max 60 seconds · Portrait mode recommended</Text>
+            <View style={st.videoUploadBtns}>
+              <TouchableOpacity style={st.videoOptionBtn} onPress={handleRecord} activeOpacity={0.85}>
+                <Text style={st.videoOptionIcon}>📷</Text>
+                <Text style={st.videoOptionText}>Record</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={st.videoOptionBtn} onPress={handleUpload} activeOpacity={0.85}>
+                <Text style={st.videoOptionIcon}>📁</Text>
+                <Text style={st.videoOptionText}>Upload</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
 
         <View style={st.form}>
-          {/* Reel Type */}
           <Text style={st.sectionTitle}>Reel Type</Text>
           <View style={st.typeGrid}>
             {REEL_TYPES.map(type => (
@@ -93,7 +141,6 @@ export default function CreateReelScreen({ navigation }) {
             ))}
           </View>
 
-          {/* Description */}
           <Text style={st.sectionTitle}>Description</Text>
           <TextInput style={[st.textArea, focused === 'desc' && st.inputFocused]}
             value={description} onChangeText={setDescription}
@@ -103,7 +150,6 @@ export default function CreateReelScreen({ navigation }) {
             onFocus={() => setFocused('desc')} onBlur={() => setFocused('')} />
           <Text style={st.charCount}>{description.length}/300</Text>
 
-          {/* Tips */}
           <View style={st.tipsCard}>
             <Text style={st.tipsTitle}>💡 Tips for great reels</Text>
             <Text style={st.tipItem}>• Show your actual work, not stock footage</Text>
@@ -116,7 +162,7 @@ export default function CreateReelScreen({ navigation }) {
       </ScrollView>
 
       <View style={[st.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={st.publishBtn} onPress={handlePublish} activeOpacity={0.85}>
+        <TouchableOpacity style={[st.publishBtn, publishing && { opacity: 0.6 }]} onPress={handlePublish} disabled={publishing} activeOpacity={0.85}>
           <Text style={st.publishBtnText}>{publishing ? 'Publishing...' : '🚀 Publish Reel'}</Text>
         </TouchableOpacity>
       </View>

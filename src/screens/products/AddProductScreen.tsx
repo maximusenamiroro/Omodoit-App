@@ -6,38 +6,74 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import { supabase } from '../../api/supabase';
+import { useAuth } from '../../context/AuthContext';
+import { uploadImageToStorage } from '../../lib/uploadImage';
 
 const PRODUCT_CATEGORIES = [
   'Service', 'Physical Product', 'Digital Product', 'Consultation',
   'Repair', 'Installation', 'Training', 'Other',
 ];
 
-export default function AddProductScreen({ navigation }) {
+export default function AddProductScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('');
-  const [photos, setPhotos] = useState([]);
+  const [photos, setPhotos] = useState<string[]>([]);
   const [focused, setFocused] = useState('');
   const [publishing, setPublishing] = useState(false);
 
   const isValid = title.trim().length >= 3 && price.trim().length > 0 && category.length > 0;
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!isValid) {
       Alert.alert('Complete the Form', 'Please fill in title, price, and category');
       return;
     }
+    if (!user?.id) {
+      Alert.alert('Please Log In', 'You need to be logged in to publish a product.');
+      return;
+    }
+    if (publishing) return;
+
     setPublishing(true);
-    setTimeout(() => {
-      setPublishing(false);
+    try {
+      // Upload the first photo only for now — products table has a
+      // single image_url column, not a gallery. Additional photos the
+      // user picked stay local and aren't saved; a multi-image gallery
+      // would need a schema change (a separate product_images table).
+      let imageUrl: string | null = null;
+      if (photos.length > 0) {
+        imageUrl = await uploadImageToStorage('products', photos[0], user.id);
+      }
+
+      const numericPrice = Number(price.replace(/,/g, ''));
+
+      const { error } = await supabase.from('products').insert({
+        worker_id: user.id,
+        title: title.trim(),
+        description: description.trim() || null,
+        price: isNaN(numericPrice) ? null : numericPrice,
+        category,
+        image_url: imageUrl,
+      });
+
+      if (error) throw error;
+
       Alert.alert(
         '🎉 Product Published!',
         title + ' is now live. Clients can see it on your profile.',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
-    }, 1000);
+    } catch (err: any) {
+      console.error('Product publish error:', err);
+      Alert.alert('Could Not Publish', 'Something went wrong. Please check your connection and try again.');
+    } finally {
+      setPublishing(false);
+    }
   };
 
   return (
@@ -70,7 +106,10 @@ export default function AddProductScreen({ navigation }) {
             {photos.length < 5 && (
               <TouchableOpacity style={st.photoAdd} onPress={() => {
                 launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 1200, maxHeight: 1200 }, (res) => {
-                  if (res.assets && res.assets[0]?.uri) setPhotos(prev => [...prev, res.assets[0].uri].slice(0, 5));
+                  if (res.assets && res.assets[0]?.uri) {
+                    const uri = res.assets[0].uri;
+                    setPhotos(prev => [...prev, uri].slice(0, 5));
+                  }
                 });
               }} activeOpacity={0.85}>
                 <Text style={st.photoAddIcon}>📷</Text>

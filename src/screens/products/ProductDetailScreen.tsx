@@ -1,14 +1,18 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Platform, Alert,
+  Animated, StatusBar, Platform, Alert, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import { supabase } from '../../api/supabase';
+import { useAuth } from '../../context/AuthContext';
 
-export default function ProductDetailScreen({ navigation, route }) {
+export default function ProductDetailScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { product } = route.params;
+  const [ordering, setOrdering] = useState(false);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
@@ -24,9 +28,77 @@ export default function ProductDetailScreen({ navigation, route }) {
     ]).start();
   }, []);
 
-  const handleOrder = () => {
-    Alert.alert('Order Placed!', 'Your order for ' + product.title + ' has been sent to ' + product.seller + '. They will confirm shortly.',
-      [{ text: 'OK', onPress: () => navigation.goBack() }]);
+  const handleOrder = async () => {
+    if (!user?.id) {
+      Alert.alert('Please Log In', 'You need to be logged in to place an order.');
+      return;
+    }
+    if (ordering) return;
+
+    setOrdering(true);
+    try {
+      const { error } = await supabase.from('orders').insert({
+        user_id: user.id,
+        product_id: product.id,
+        product_name: product.title,
+        product_image_url: product.imageUrl || null,
+        price: product.price,
+        quantity: 1,
+        total_amount: product.price || null,
+        status: 'pending',
+      });
+
+      if (error) throw error;
+
+      Alert.alert('Order Placed!', 'Your order for ' + product.title + ' has been sent to ' + product.sellerName + '. They will confirm shortly.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]);
+    } catch (err) {
+      console.error('Order submission error:', err);
+      Alert.alert('Could Not Place Order', 'Something went wrong. Please check your connection and try again.');
+    } finally {
+      setOrdering(false);
+    }
+  };
+
+  const goToChat = () => {
+    navigation.navigate('Chat', { otherUserId: product.workerId, otherUserName: product.sellerName, otherUserAvatar: null });
+  };
+
+  const viewSellerProfile = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, location, experience, verification_status, category, subcategory')
+        .eq('id', product.workerId)
+        .maybeSingle();
+
+      if (error || !data) {
+        Alert.alert('Could Not Load Profile', 'Please try again.');
+        return;
+      }
+
+      const { data: reviewRows } = await supabase.from('reviews').select('rating').eq('worker_id', product.workerId);
+      const ratings = (reviewRows || []).map((r: any) => r.rating);
+      const avgRating = ratings.length > 0 ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length : 0;
+
+      navigation.navigate('WorkerPublicProfile', {
+        worker: {
+          id: data.id,
+          name: data.full_name || 'Worker',
+          rating: avgRating,
+          reviews: ratings.length,
+          location: data.location || 'Location not set',
+          experience: data.experience || 'Not specified',
+          verified: data.verification_status === 'verified' || data.verification_status === 'basic',
+          bio: `Available for ${data.subcategory || data.category || 'various'} jobs.`,
+        },
+        color: product.color || colors.primary,
+        subcategoryName: data.subcategory || data.category,
+      });
+    } catch (err) {
+      console.error('Failed to load seller profile:', err);
+      Alert.alert('Could Not Load Profile', 'Please try again.');
+    }
   };
 
   return (
@@ -46,22 +118,28 @@ export default function ProductDetailScreen({ navigation, route }) {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}>
         {/* Product image */}
         <View style={[st.imageContainer, { backgroundColor: (product.color || colors.primary) + '15' }]}>
-          <Text style={st.imageEmoji}>📦</Text>
+          {product.imageUrl ? (
+            <Image source={{ uri: product.imageUrl }} style={st.heroImage} />
+          ) : (
+            <Text style={st.imageEmoji}>📦</Text>
+          )}
         </View>
 
         <Animated.View style={[st.content, { opacity: contentOpacity, transform: [{ translateY: contentSlide }] }]}>
           <Text style={st.title}>{product.title}</Text>
-          <Text style={[st.price, { color: product.color || colors.primary }]}>{product.price}</Text>
+          <Text style={[st.price, { color: product.color || colors.primary }]}>
+            {product.price != null ? `₦${Number(product.price).toLocaleString()}` : 'Contact for price'}
+          </Text>
 
           <View style={st.sellerRow}>
             <View style={[st.sellerAvatar, { backgroundColor: product.color || colors.primary }]}>
-              <Text style={st.sellerAvatarText}>{(product.seller || 'W')[0]}</Text>
+              <Text style={st.sellerAvatarText}>{(product.sellerName || 'W')[0]}</Text>
             </View>
             <View>
-              <Text style={st.sellerName}>@{product.seller}</Text>
+              <Text style={st.sellerName}>@{product.sellerName}</Text>
               <Text style={st.sellerLabel}>Seller</Text>
             </View>
-            <TouchableOpacity style={st.viewProfileBtn} activeOpacity={0.85}>
+            <TouchableOpacity style={st.viewProfileBtn} onPress={viewSellerProfile} activeOpacity={0.85}>
               <Text style={st.viewProfileText}>View Profile</Text>
             </TouchableOpacity>
           </View>
@@ -69,7 +147,7 @@ export default function ProductDetailScreen({ navigation, route }) {
           <View style={st.section}>
             <Text style={st.sectionTitle}>Description</Text>
             <View style={st.sectionCard}>
-              <Text style={st.descText}>Professional {product.title?.toLowerCase()} service. Quality work guaranteed. Price may vary based on the scope of work. Contact the seller for a custom quote.</Text>
+              <Text style={st.descText}>{product.description || `No description provided for ${product.title}. Contact the seller for details.`}</Text>
             </View>
           </View>
 
@@ -93,11 +171,11 @@ export default function ProductDetailScreen({ navigation, route }) {
       </ScrollView>
 
       <View style={[st.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={st.msgBtn} activeOpacity={0.85}>
+        <TouchableOpacity style={st.msgBtn} onPress={goToChat} activeOpacity={0.85}>
           <Text style={st.msgIcon}>💬</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[st.orderBtn, { backgroundColor: product.color || colors.primary }]} onPress={handleOrder} activeOpacity={0.85}>
-          <Text style={st.orderBtnText}>🛒 Order Now</Text>
+        <TouchableOpacity style={[st.orderBtn, { backgroundColor: product.color || colors.primary }, ordering && { opacity: 0.6 }]} onPress={handleOrder} disabled={ordering} activeOpacity={0.85}>
+          <Text style={st.orderBtnText}>{ordering ? 'Placing Order…' : '🛒 Order Now'}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -114,6 +192,7 @@ const st = StyleSheet.create({
   shareIcon: { fontSize: 16 },
 
   imageContainer: { height: 240, alignItems: 'center', justifyContent: 'center' },
+  heroImage: { width: '100%', height: '100%' },
   imageEmoji: { fontSize: 64, opacity: 0.5 },
 
   content: { padding: spacing.screenPadding },

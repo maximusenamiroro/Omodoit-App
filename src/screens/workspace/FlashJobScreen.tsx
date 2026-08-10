@@ -6,39 +6,28 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import { CATEGORIES as CATEGORY_LIST } from '../../lib/categories';
+import { supabase } from '../../api/supabase';
+import { useAuth } from '../../context/AuthContext';
+import { generateBatchId } from '../../lib/db';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
-const CATEGORIES = {
-  'Handwork & Skilled Workers': ['Carpenter', 'Plumber', 'Electrician', 'Mechanic', 'Welder', 'Tailor', 'Painter', 'Barber', 'Hair Stylist', 'AC Repair', 'Phone Repair', 'Computer Repair', 'Solar Installer', 'Generator Repair'],
-  'Food & Restaurant': ['Restaurant', 'Fast Food', 'Food Vendor', 'Catering', 'Bakery', 'Cake Shop', 'Drinks Vendor'],
-  'Transport & Logistics': ['Taxi', 'Car Hire', 'Bike Rider', 'Delivery Rider', 'Logistics', 'Moving Service'],
-  'Beauty & Fashion': ['Salon', 'Makeup Artist', 'Spa', 'Fashion Designer', 'Nail Studio', 'Wig Seller'],
-  'Health & Medical': ['Pharmacy', 'Clinic', 'Laboratory', 'Dental Clinic', 'Physiotherapy'],
-  'Retail & Shops': ['Supermarket', 'Electronics Shop', 'Phone Shop', 'Clothing Store', 'Hardware Store'],
-  'Construction & Real Estate': ['Building Contractor', 'Real Estate Agent', 'Roofing Company', 'Civil Engineer'],
-  'Media & Event Services': ['Photographer', 'Videographer', 'DJ', 'Event Planner', 'MC'],
-  'Technology & IT': ['Software Developer', 'Web Developer', 'IT Support', 'Computer Store'],
-  'Home & Personal Services': ['Laundry', 'Cleaning Service', 'Caregiver', 'Pest Control', 'Home Chef'],
-  'Agriculture & Farming': ['Poultry', 'Fish Farm', 'Crop Farming', 'Farm Produce Seller'],
-};
+// Derived from the shared taxonomy so this always matches exactly what
+// workers can register under and what shows up when browsing — this
+// used to be a separate hand-maintained copy that had drifted (missing
+// 3 categories, and subcategories that didn't match worker registration).
+const CATEGORIES: Record<string, string[]> = Object.fromEntries(
+  CATEGORY_LIST.map(c => [c.name, c.subs])
+);
+const CATEGORY_ICONS: Record<string, string> = Object.fromEntries(
+  CATEGORY_LIST.map(c => [c.name, c.emoji])
+);
 
-const CATEGORY_ICONS = {
-  'Handwork & Skilled Workers': '🛠️',
-  'Food & Restaurant': '🍔',
-  'Transport & Logistics': '🚗',
-  'Beauty & Fashion': '💄',
-  'Health & Medical': '💊',
-  'Retail & Shops': '🛍️',
-  'Construction & Real Estate': '🏗️',
-  'Media & Event Services': '🎥',
-  'Technology & IT': '💻',
-  'Home & Personal Services': '🏠',
-  'Agriculture & Farming': '🌾',
-};
-
-export default function FlashJobScreen({ navigation }) {
+export default function FlashJobScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
+  const [submitting, setSubmitting] = useState(false);
   const [step, setStep] = useState(1);
   const [category, setCategory] = useState('');
   const [subcategory, setSubcategory] = useState('');
@@ -85,7 +74,7 @@ export default function FlashJobScreen({ navigation }) {
     setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: false }), 50);
   };
 
-  const submitFlash = () => {
+  const submitFlash = async () => {
     if (!address.trim()) {
       Alert.alert('Address Required', 'Please enter your location');
       return;
@@ -94,11 +83,71 @@ export default function FlashJobScreen({ navigation }) {
       Alert.alert('Budget Required', 'Please enter your budget');
       return;
     }
-    Alert.alert(
-      '⚡ Flash Job Sent!',
-      'Your request has been flashed to 15 nearby ' + subcategory + ' workers. The first to accept wins!',
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
-    );
+    if (!user?.id) {
+      Alert.alert('Please Log In', 'You need to be logged in to send a Flash Job.');
+      return;
+    }
+    if (submitting) return;
+
+    setSubmitting(true);
+    try {
+      // Find matching workers to broadcast to. There's no dedicated
+      // flash-job table yet (would need a schema migration), so this
+      // broadcasts by inserting one hire_requests row per matching
+      // worker - functionally the same "first to accept wins" idea,
+      // just without a shared batch ID to auto-cancel the others once
+      // someone accepts. That refinement needs an extra column on
+      // hire_requests to track later.
+      const { data: matchingWorkers, error: matchError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('role', 'worker')
+        .eq('category', category)
+        .eq('subcategory', subcategory)
+        .limit(20);
+
+      if (matchError) throw matchError;
+
+      if (!matchingWorkers || matchingWorkers.length === 0) {
+        Alert.alert(
+          'No Workers Available',
+          `There are no ${subcategory} workers on Omodoit yet in this category. Try Browse Workers instead, or check back soon.`
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      let description = `⚡ Flash Job: ${subcategory}`;
+      if (landmark.trim()) description += `\nNear: ${landmark.trim()}`;
+      if (budgetType === 'Fixed Price' && fixedBudget) description += `\nBudget: ₦${fixedBudget}`;
+      if (budgetType === 'Range' && (minBudget || maxBudget)) description += `\nBudget: ₦${minBudget || '?'} - ₦${maxBudget || '?'}`;
+      if (budgetType === 'Negotiable') description += '\nBudget: Negotiable';
+      if (note.trim()) description += `\n\n${note.trim()}`;
+
+      const batchId = generateBatchId();
+      const rows = matchingWorkers.map((w: any) => ({
+        client_id: user.id,
+        worker_id: w.id,
+        job_description: description,
+        location: address.trim(),
+        status: 'pending',
+        flash_batch_id: batchId,
+      }));
+
+      const { error: insertError } = await supabase.from('hire_requests').insert(rows);
+      if (insertError) throw insertError;
+
+      Alert.alert(
+        '⚡ Flash Job Sent!',
+        `Your request has been flashed to ${matchingWorkers.length} nearby ${subcategory} worker${matchingWorkers.length === 1 ? '' : 's'}. The first to accept wins!`,
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (err) {
+      console.error('Flash job submission error:', err);
+      Alert.alert('Could Not Send Flash Job', 'Something went wrong. Please check your connection and try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const subs = category ? (CATEGORIES[category] || []) : [];
@@ -341,8 +390,9 @@ export default function FlashJobScreen({ navigation }) {
           </TouchableOpacity>
         )}
         <TouchableOpacity
-          style={[st.nextBtn, step === 2 && { flex: 1 }]}
+          style={[st.nextBtn, step === 2 && { flex: 1 }, submitting && { opacity: 0.6 }]}
           onPress={step === 1 ? goNext : submitFlash}
+          disabled={submitting}
           activeOpacity={0.85}
         >
           {step === 1 ? (
@@ -350,7 +400,7 @@ export default function FlashJobScreen({ navigation }) {
           ) : (
             <View style={st.flashBtnContent}>
               <Text style={st.flashBtnIcon}>⚡</Text>
-              <Text style={st.nextBtnText}>Flash Job</Text>
+              <Text style={st.nextBtnText}>{submitting ? 'Sending…' : 'Flash Job'}</Text>
             </View>
           )}
         </TouchableOpacity>

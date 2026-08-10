@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   Dimensions, StatusBar, Animated, Image, ActivityIndicator,
-  TextInput, Modal, Share, KeyboardAvoidingView, Platform,
+  TextInput, Modal, Share, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
@@ -289,14 +289,136 @@ const cs = StyleSheet.create({
   sendText: { fontSize: 16, fontWeight: '700', color: colors.white },
 });
 
+// "Order Now" opens this — shows the reel poster's real products,
+// matching the website's ReelCard exactly. Tapping a product goes to
+// the same ProductDetailScreen used everywhere else in the app.
+function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
+  visible: boolean; onClose: () => void; workerId: string; workerName: string; navigation: any;
+}) {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-interface ReelCardProps { reel: Reel; isClient: boolean; isActive: boolean; userId: string | undefined; }
+  useEffect(() => {
+    if (!visible) return;
+    const fetchProducts = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, title, price, image_url, description, category, worker_id')
+          .eq('worker_id', workerId)
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        setProducts(data || []);
+      } catch (err) {
+        console.error('fetchWorkerProducts error:', err);
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, [visible, workerId]);
 
-function ReelCard({ reel, isClient, isActive, userId }: ReelCardProps) {
+  return (
+    <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
+      <TouchableOpacity style={cs.overlay} activeOpacity={1} onPress={onClose}>
+        <View style={cs.dismissArea} />
+        <View style={[cs.sheet, { maxHeight: SCREEN_H * 0.6 }]}>
+          <TouchableOpacity activeOpacity={1} onPress={(e: any) => e.stopPropagation()} style={cs.sheetInner}>
+            <View style={cs.handle}><View style={cs.handleBar} /></View>
+            <View style={cs.header}>
+              <Text style={cs.headerTitle}>@{workerName} — Products</Text>
+              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Text style={cs.closeBtn}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {loading ? (
+              <View style={cs.center}><ActivityIndicator color={colors.primary} /></View>
+            ) : products.length === 0 ? (
+              <View style={cs.center}>
+                <Text style={cs.emptyEmoji}>📦</Text>
+                <Text style={cs.emptyText}>No products listed yet</Text>
+                <TouchableOpacity onPress={() => {
+                  onClose();
+                  navigation.navigate('WorkerPublicProfile', {
+                    worker: { id: workerId, name: workerName, rating: 0, reviews: 0, location: '', experience: '', verified: false, bio: '' },
+                    subcategoryName: '',
+                  });
+                }}>
+                  <Text style={[cs.emptyDesc, { color: colors.primary, marginTop: 10 }]}>View Profile →</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <ScrollView style={ps.list} showsVerticalScrollIndicator={false}>
+                {products.map(product => (
+                  <TouchableOpacity
+                    key={product.id}
+                    style={ps.productRow}
+                    activeOpacity={0.85}
+                    onPress={() => {
+                      onClose();
+                      navigation.navigate('ProductDetail', {
+                        product: {
+                          id: product.id,
+                          title: product.title,
+                          price: product.price,
+                          category: product.category,
+                          imageUrl: product.image_url,
+                          sellerName: workerName,
+                          workerId: product.worker_id,
+                          description: product.description,
+                        },
+                      });
+                    }}
+                  >
+                    <View style={ps.productThumb}>
+                      {product.image_url ? (
+                        <Image source={{ uri: product.image_url }} style={ps.productImg} />
+                      ) : (
+                        <Text style={ps.productEmoji}>📦</Text>
+                      )}
+                    </View>
+                    <View style={ps.productInfo}>
+                      <Text style={ps.productTitle} numberOfLines={1}>{product.title}</Text>
+                      <Text style={ps.productPrice}>
+                        {product.price != null ? `₦${Number(product.price).toLocaleString()}` : 'Contact for price'}
+                      </Text>
+                    </View>
+                    <Text style={ps.productArrow}>→</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+const ps = StyleSheet.create({
+  list: { flex: 1, paddingHorizontal: 20 },
+  productRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: colors.border },
+  productThumb: { width: 48, height: 48, borderRadius: 10, backgroundColor: colors.bgCard, alignItems: 'center', justifyContent: 'center', marginRight: 12, overflow: 'hidden' },
+  productImg: { width: '100%', height: '100%' },
+  productEmoji: { fontSize: 18 },
+  productInfo: { flex: 1 },
+  productTitle: { fontSize: 13, fontWeight: '600', color: colors.textPrimary, marginBottom: 3 },
+  productPrice: { fontSize: 13, fontWeight: '700', color: colors.primary },
+  productArrow: { fontSize: 14, color: colors.textMuted },
+});
+
+interface ReelCardProps { reel: Reel; isClient: boolean; isActive: boolean; userId: string | undefined; navigation: any; }
+
+function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProps) {
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(reel.likes);
   const [saved, setSaved] = useState(false);
   const [following, setFollowing] = useState(false);
+  const [showProductSheet, setShowProductSheet] = useState(false);
+  const isOwnReel = userId === reel.profiles?.id;
   const [paused, setPaused] = useState(false);
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
@@ -385,6 +507,33 @@ function ReelCard({ reel, isClient, isActive, userId }: ReelCardProps) {
         message: workerName + ' on Omodoit\n\n' + caption + shareUrl,
       });
     } catch (err) {}
+  };
+
+  // "Order Now" for product reels vs "Book Now" for service reels,
+  // matching the website's ReelCard exactly. Only shown to clients,
+  // never on your own reel.
+  const handleBookNow = () => {
+    if (!reel.profiles?.id) return;
+    navigation.navigate('HireWorker', {
+      worker: {
+        id: reel.profiles.id,
+        name: reel.profiles.full_name || 'Worker',
+      },
+      subcategoryName: reel.profiles.subcategory || reel.profiles.category || reel.type,
+    });
+  };
+
+  const handleOrderNow = () => {
+    setShowProductSheet(true);
+  };
+
+  const handleMessage = () => {
+    if (!reel.profiles?.id) return;
+    navigation.navigate('Chat', {
+      otherUserId: reel.profiles.id,
+      otherUserName: reel.profiles.full_name || 'Worker',
+      otherUserAvatar: reel.profiles.avatar_url || null,
+    });
   };
 
   const workerName = reel.profiles?.full_name || 'Worker';
@@ -492,7 +641,22 @@ function ReelCard({ reel, isClient, isActive, userId }: ReelCardProps) {
             <Text style={[styles.typeBadgeText, { color: reel.type === 'service' ? colors.primary : colors.flash }]}>{reel.type === 'service' ? '🔧 Service' : '📦 Product'}</Text>
           </View>
         </View>
-        {isClient && (<TouchableOpacity style={styles.bookNowBtn} activeOpacity={0.85}><Text style={styles.bookNowText}>📋  Book Now</Text></TouchableOpacity>)}
+        {isClient && !isOwnReel && (
+          <View style={styles.reelActionsRow}>
+            {reel.type === 'product' ? (
+              <TouchableOpacity style={styles.bookNowBtn} onPress={handleOrderNow} activeOpacity={0.85}>
+                <Text style={styles.bookNowText}>🛍️  Order Now</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity style={styles.bookNowBtn} onPress={handleBookNow} activeOpacity={0.85}>
+                <Text style={styles.bookNowText}>📋  Book Now</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={styles.messageNowBtn} onPress={handleMessage} activeOpacity={0.85}>
+              <Text style={styles.messageNowText}>💬</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         {!isClient && (<View style={styles.reelStatsRow}><View style={styles.reelStatChip}><Text style={styles.reelStatText}>❤ {formatCount(likeCount)} likes</Text></View><View style={styles.reelStatChip}><Text style={styles.reelStatText}>{timeAgo(reel.created_at)}</Text></View></View>)}
       </Animated.View>
 
@@ -501,12 +665,20 @@ function ReelCard({ reel, isClient, isActive, userId }: ReelCardProps) {
         supabase.from('reel_comments').select('id', { count: 'exact', head: true }).eq('reel_id', reel.id)
           .then(({ count }) => { if (count !== null) setCommentCount(count); });
       }} reelId={reel.id} userId={userId} />
+
+      <ProductSheet
+        visible={showProductSheet}
+        onClose={() => setShowProductSheet(false)}
+        workerId={reel.profiles?.id || ''}
+        workerName={workerName}
+        navigation={navigation}
+      />
     </View>
   );
 }
 
 
-export default function ReelsScreen() {
+export default function ReelsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { role, user } = useAuth();
   const isClient = role === 'client';
@@ -543,8 +715,8 @@ export default function ReelsScreen() {
   const onViewRef = useRef(({ viewableItems }: any) => { if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0); });
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
   const renderReel = useCallback(({ item, index }: { item: Reel; index: number }) => (
-    <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} />
-  ), [isClient, activeIndex, user, isFocused]);
+    <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} navigation={navigation} />
+  ), [isClient, activeIndex, user, isFocused, navigation]);
 
   if (loading) return (
     <View style={styles.container}>
@@ -727,7 +899,10 @@ const styles = StyleSheet.create({
   typeBadgeRow: { flexDirection: 'row', marginBottom: 10 },
   typeBadge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999, borderWidth: 1 },
   typeBadgeText: { fontSize: 11, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.3)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
+  reelActionsRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
   bookNowBtn: { backgroundColor: colors.primary, paddingVertical: 14, paddingHorizontal: 28, borderRadius: 28, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', shadowColor: colors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 6 },
+  messageNowBtn: { backgroundColor: 'rgba(255,255,255,0.2)', width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  messageNowText: { fontSize: 18 },
   bookNowText: { fontSize: 14, fontWeight: '700', color: colors.white, textShadowColor: 'rgba(0,0,0,0.2)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
   reelStatsRow: { flexDirection: 'row', gap: 8 },
   reelStatChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999, backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.white + '20' },

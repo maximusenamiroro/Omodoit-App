@@ -1,11 +1,12 @@
 import React, { useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Alert, Platform, Linking,
+  Animated, StatusBar, Alert, Platform, Linking, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../api/supabase';
 
 interface SettingsItem {
   icon: string;
@@ -17,8 +18,45 @@ interface SettingsItem {
 
 export default function SettingsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { profile, role, logout } = useAuth();
+  const { user, profile, role, logout } = useAuth();
   const accentColor = role === 'client' ? colors.client : colors.primary;
+
+  const comingSoon = (feature: string) => {
+    Alert.alert(feature, 'This feature is coming soon.');
+  };
+
+  const handleChangePassword = async () => {
+    if (!user?.email) return;
+    Alert.alert(
+      'Change Password',
+      `We'll send a password reset link to ${user.email}.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Send Link', onPress: async () => {
+            try {
+              const { error } = await supabase.auth.resetPasswordForEmail(user.email!);
+              if (error) throw error;
+              Alert.alert('Check Your Email', 'A password reset link has been sent.');
+            } catch (err) {
+              console.error('Password reset error:', err);
+              Alert.alert('Something Went Wrong', 'Could not send the reset link. Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: 'Check out Omodoit — find skilled workers or grow your business in Nigeria. https://omoworkit.com',
+      });
+    } catch (err) {
+      console.warn('Share failed:', err);
+    }
+  };
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
@@ -55,24 +93,24 @@ export default function SettingsScreen({ navigation }: any) {
   };
 
   const accountSettings: SettingsItem[] = [
-    { icon: '👤', label: 'Edit Profile', desc: 'Name, photo, location' },
-    { icon: '🔒', label: 'Change Password', desc: 'Update your password' },
-    { icon: '📱', label: 'Phone Number', desc: profile?.phone || 'Not set' },
-    { icon: '📧', label: 'Email', desc: 'Connected' },
-    { icon: '🔔', label: 'Notifications', desc: 'Push notification settings' },
+    { icon: '👤', label: 'Edit Profile', desc: 'Name, photo, location', action: () => navigation.navigate('EditProfile') },
+    { icon: '🔒', label: 'Change Password', desc: 'Update your password', action: handleChangePassword },
+    { icon: '📱', label: 'Phone Number', desc: profile?.phone || 'Not set', action: () => navigation.navigate('EditProfile') },
+    { icon: '📧', label: 'Email', desc: user?.email || 'Not set' },
+    { icon: '🔔', label: 'Notifications', desc: 'Push notification settings', action: () => navigation.navigate('Notifications') },
   ];
 
   const privacySettings: SettingsItem[] = [
-    { icon: '🛡️', label: 'Privacy', desc: 'Control who sees your info' },
-    { icon: '🚫', label: 'Blocked Users', desc: 'Manage blocked accounts' },
-    { icon: '📍', label: 'Location Settings', desc: 'GPS and tracking preferences' },
+    { icon: '🛡️', label: 'Privacy', desc: 'Control who sees your info', action: () => comingSoon('Privacy Settings') },
+    { icon: '🚫', label: 'Blocked Users', desc: 'Manage blocked accounts', action: () => comingSoon('Blocked Users') },
+    { icon: '📍', label: 'Location Settings', desc: 'GPS and tracking preferences', action: () => comingSoon('Location Settings') },
   ];
 
   const supportItems: SettingsItem[] = [
-    { icon: '❓', label: 'Help Center', desc: 'FAQs and support' },
-    { icon: '💬', label: 'Contact Us', desc: 'Get in touch with our team' },
-    { icon: '⭐', label: 'Rate Omodoit', desc: 'Love the app? Rate us!' },
-    { icon: '📣', label: 'Share Omodoit', desc: 'Tell your friends about us' },
+    { icon: '❓', label: 'Help Center', desc: 'FAQs and support', action: () => comingSoon('Help Center') },
+    { icon: '💬', label: 'Contact Us', desc: 'Get in touch with our team', action: () => Linking.openURL('mailto:support@omoworkit.com') },
+    { icon: '⭐', label: 'Rate Omodoit', desc: 'Love the app? Rate us!', action: () => comingSoon('Rate Omodoit') },
+    { icon: '📣', label: 'Share Omodoit', desc: 'Tell your friends about us', action: handleShare },
   ];
 
   const legalItems: SettingsItem[] = [

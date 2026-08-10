@@ -1,104 +1,20 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Platform,
+  Animated, StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
-
-const CATEGORY_DATA: Record<string, { emoji: string; color: string; subs: { name: string; workers: number; icon: string }[] }> = {
-  'Handwork': {
-    emoji: '🔨', color: '#16a34a',
-    subs: [
-      { name: 'Electrician', workers: 12, icon: '⚡' },
-      { name: 'Plumber', workers: 8, icon: '🔧' },
-      { name: 'Carpenter', workers: 6, icon: '🪚' },
-      { name: 'Welder', workers: 5, icon: '🔩' },
-      { name: 'Painter', workers: 7, icon: '🎨' },
-      { name: 'AC Repair', workers: 4, icon: '❄️' },
-      { name: 'Tiler', workers: 3, icon: '🧱' },
-      { name: 'Mason', workers: 5, icon: '🏗️' },
-      { name: 'Tailor', workers: 9, icon: '👗' },
-    ],
-  },
-  'Food': {
-    emoji: '🍽️', color: '#F97316',
-    subs: [
-      { name: 'Caterer', workers: 15, icon: '🍲' },
-      { name: 'Home Chef', workers: 8, icon: '👨‍🍳' },
-      { name: 'Baker', workers: 6, icon: '🍰' },
-      { name: 'Restaurant', workers: 4, icon: '🏪' },
-      { name: 'Food Vendor', workers: 10, icon: '🍛' },
-      { name: 'Drinks', workers: 3, icon: '🥤' },
-    ],
-  },
-  'Transport': {
-    emoji: '🚗', color: '#3B82F6',
-    subs: [
-      { name: 'Driver', workers: 10, icon: '🚙' },
-      { name: 'Dispatch Rider', workers: 8, icon: '🏍️' },
-      { name: 'Moving Service', workers: 3, icon: '🚚' },
-      { name: 'Courier', workers: 5, icon: '📦' },
-      { name: 'Haulage', workers: 2, icon: '🚛' },
-    ],
-  },
-  'Beauty': {
-    emoji: '💄', color: '#D946EF',
-    subs: [
-      { name: 'Makeup Artist', workers: 14, icon: '💄' },
-      { name: 'Hair Stylist', workers: 12, icon: '💇' },
-      { name: 'Barber', workers: 8, icon: '✂️' },
-      { name: 'Fashion Designer', workers: 5, icon: '👗' },
-      { name: 'Nail Tech', workers: 6, icon: '💅' },
-      { name: 'Spa', workers: 3, icon: '🧖' },
-    ],
-  },
-  'Tech & IT': {
-    emoji: '💻', color: '#06B6D4',
-    subs: [
-      { name: 'Software Dev', workers: 5, icon: '💻' },
-      { name: 'Phone Repair', workers: 8, icon: '📱' },
-      { name: 'Computer Repair', workers: 4, icon: '🖥️' },
-      { name: 'CCTV Install', workers: 3, icon: '📷' },
-      { name: 'Networking', workers: 2, icon: '🌐' },
-    ],
-  },
-  'Construction': {
-    emoji: '🏗️', color: '#EAB308',
-    subs: [
-      { name: 'Builder', workers: 6, icon: '🧱' },
-      { name: 'Architect', workers: 3, icon: '📐' },
-      { name: 'Surveyor', workers: 2, icon: '📏' },
-      { name: 'Interior Design', workers: 4, icon: '🛋️' },
-      { name: 'Roofing', workers: 3, icon: '🏠' },
-    ],
-  },
-  'Health': {
-    emoji: '🏥', color: '#EF4444',
-    subs: [
-      { name: 'Nurse', workers: 4, icon: '🏥' },
-      { name: 'Physiotherapist', workers: 2, icon: '💪' },
-      { name: 'Pharmacist', workers: 3, icon: '💊' },
-      { name: 'Caregiver', workers: 5, icon: '🤲' },
-      { name: 'Lab Tech', workers: 2, icon: '🔬' },
-    ],
-  },
-  'Retail': {
-    emoji: '🛒', color: '#8B5CF6',
-    subs: [
-      { name: 'General Store', workers: 10, icon: '🏪' },
-      { name: 'Phone Accessories', workers: 6, icon: '📱' },
-      { name: 'Electronics', workers: 5, icon: '🔌' },
-      { name: 'Clothing', workers: 8, icon: '👕' },
-      { name: 'Auto Parts', workers: 4, icon: '🔧' },
-    ],
-  },
-};
+import { colors, spacing } from '../../theme';
+import { supabase } from '../../api/supabase';
+import { findCategoryLoose } from '../../lib/categories';
 
 export default function SubCategoriesScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { categoryName } = route.params;
-  const category = CATEGORY_DATA[categoryName] || { emoji: '📂', color: colors.primary, subs: [] };
+  const category = findCategoryLoose(categoryName) || { emoji: '📂', color: colors.primary, subs: [], name: categoryName };
+
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const listOpacity = useRef(new Animated.Value(0)).current;
@@ -114,7 +30,39 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
     ]).start();
   }, []);
 
-  const totalWorkers = category.subs.reduce((sum, s) => sum + s.workers, 0);
+  // Real worker counts per subcategory, matched against the category's
+  // canonical full name (via findCategoryLoose, which also tolerates
+  // any older profile rows saved under a slightly different name).
+  useEffect(() => {
+    const fetchCounts = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('subcategory')
+          .eq('role', 'worker')
+          .eq('category', category.name)
+          .not('subcategory', 'is', null);
+
+        if (error) throw error;
+
+        const tally: Record<string, number> = {};
+        (data || []).forEach((row: any) => {
+          if (row.subcategory) tally[row.subcategory] = (tally[row.subcategory] || 0) + 1;
+        });
+        setCounts(tally);
+      } catch (err) {
+        console.error('Failed to load subcategory counts:', err);
+        setCounts({});
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCounts();
+  }, [category.name]);
+
+  const totalWorkers = Object.values(counts).reduce((sum, n) => sum + n, 0);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -135,31 +83,39 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
       {/* Stats banner */}
       <Animated.View style={[styles.statsBanner, { opacity: headerOpacity, backgroundColor: category.color + '10', borderColor: category.color + '25' }]}>
         <Text style={[styles.statsText, { color: category.color }]}>
-          {totalWorkers} workers available · {category.subs.length} specializations
+          {loading ? 'Loading…' : `${totalWorkers} workers available · ${category.subs.length} specializations`}
         </Text>
       </Animated.View>
 
       {/* Subcategories list */}
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}>
-        <Animated.View style={{ opacity: listOpacity, transform: [{ translateY: listSlide }], paddingHorizontal: spacing.screenPadding }}>
-          {category.subs.map((sub, i) => (
-            <TouchableOpacity
-              key={i}
-              style={styles.subRow}
-              onPress={() => navigation.navigate('WorkerList', { categoryName, subcategoryName: sub.name, color: category.color })}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.subIconBg, { backgroundColor: category.color + '12' }]}>
-                <Text style={styles.subIcon}>{sub.icon}</Text>
-              </View>
-              <View style={styles.subInfo}>
-                <Text style={styles.subName}>{sub.name}</Text>
-                <Text style={styles.subWorkers}>{sub.workers} workers available</Text>
-              </View>
-              <Text style={[styles.subArrow, { color: category.color }]}>→</Text>
-            </TouchableOpacity>
-          ))}
-        </Animated.View>
+        {loading ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color={category.color} />
+          </View>
+        ) : (
+          <Animated.View style={{ opacity: listOpacity, transform: [{ translateY: listSlide }], paddingHorizontal: spacing.screenPadding }}>
+            {category.subs.map((subName, i) => (
+              <TouchableOpacity
+                key={i}
+                style={styles.subRow}
+                onPress={() => navigation.navigate('WorkerList', { categoryName: category.name, subcategoryName: subName, color: category.color })}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.subIconBg, { backgroundColor: category.color + '12' }]}>
+                  <Text style={styles.subIcon}>{category.emoji}</Text>
+                </View>
+                <View style={styles.subInfo}>
+                  <Text style={styles.subName}>{subName}</Text>
+                  <Text style={styles.subWorkers}>
+                    {counts[subName] || 0} worker{counts[subName] === 1 ? '' : 's'} available
+                  </Text>
+                </View>
+                <Text style={[styles.subArrow, { color: category.color }]}>→</Text>
+              </TouchableOpacity>
+            ))}
+          </Animated.View>
+        )}
       </ScrollView>
     </View>
   );
@@ -175,6 +131,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
   statsBanner: { marginHorizontal: spacing.screenPadding, marginVertical: 12, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
   statsText: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
+  loadingBox: { paddingVertical: 60, alignItems: 'center' },
   subRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: colors.border },
   subIconBg: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: 14 },
   subIcon: { fontSize: 20 },

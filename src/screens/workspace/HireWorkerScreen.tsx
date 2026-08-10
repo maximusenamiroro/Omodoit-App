@@ -6,6 +6,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
+import { supabase } from '../../api/supabase';
+import { useAuth } from '../../context/AuthContext';
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(' ');
@@ -15,6 +17,7 @@ const getInitials = (name: string): string => {
 
 export default function HireWorkerScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
+  const { user } = useAuth();
   const { worker, subcategoryName } = route.params;
 
   const [jobDescription, setJobDescription] = useState('');
@@ -23,6 +26,7 @@ export default function HireWorkerScreen({ navigation, route }: any) {
   const [location, setLocation] = useState('');
   const [budget, setBudget] = useState('');
   const [focused, setFocused] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
@@ -42,16 +46,70 @@ export default function HireWorkerScreen({ navigation, route }: any) {
     return jobDescription.trim().length >= 10 && location.trim().length >= 3;
   };
 
-  const handleBooking = () => {
+  const handleBooking = async () => {
     if (!isFormValid()) {
       Alert.alert('Complete the Form', 'Please describe the job and enter your location');
       return;
     }
-    Alert.alert(
-      'Booking Sent!',
-      worker.name + ' will be notified of your booking request. They will respond shortly.',
-      [{ text: 'OK', onPress: () => navigation.popToTop() }]
-    );
+    if (!user?.id) {
+      Alert.alert('Please Log In', 'You need to be logged in to book a worker.');
+      return;
+    }
+    if (submitting) return;
+
+    setSubmitting(true);
+    try {
+      // hire_requests only has job_description/location as free-text
+      // fields — fold the optional date/time/budget into the
+      // description itself, clearly labeled, so nothing the client
+      // typed gets silently dropped.
+      let fullDescription = jobDescription.trim();
+      const extras: string[] = [];
+      if (date.trim()) extras.push(`Preferred date: ${date.trim()}`);
+      if (time.trim()) extras.push(`Preferred time: ${time.trim()}`);
+      if (budget.trim()) extras.push(`Budget: ₦${budget.trim()}`);
+      if (extras.length > 0) fullDescription += '\n\n' + extras.join('\n');
+
+      const { data: newBooking, error } = await supabase.from('hire_requests').insert({
+        client_id: user.id,
+        worker_id: worker.id,
+        job_description: fullDescription,
+        location: location.trim(),
+        status: 'pending',
+      }).select('id').single();
+
+      if (error) throw error;
+
+      // Best-effort — if the notifications table/columns don't match,
+      // the booking itself has already succeeded, so this failing
+      // silently shouldn't block anything or show an error here.
+      try {
+        await supabase.from('notifications').insert({
+          user_id: worker.id,
+          type: 'booking',
+          message: `wants to book you for ${subcategoryName || 'a job'}`,
+          from_user_id: user.id,
+          booking_id: newBooking?.id || null,
+          is_read: false,
+        });
+      } catch (notifErr) {
+        console.warn('Could not notify worker (non-fatal):', notifErr);
+      }
+
+      Alert.alert(
+        'Booking Sent!',
+        worker.name + ' will be notified of your booking request. They will respond shortly.',
+        [{ text: 'OK', onPress: () => navigation.popToTop() }]
+      );
+    } catch (err: any) {
+      console.error('Booking submission error:', err);
+      Alert.alert(
+        'Could Not Send Booking',
+        'Something went wrong sending your request. Please check your connection and try again.'
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -187,12 +245,12 @@ export default function HireWorkerScreen({ navigation, route }: any) {
       {/* Bottom */}
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
         <TouchableOpacity
-          style={[styles.submitBtn, !isFormValid() && styles.submitBtnDisabled]}
+          style={[styles.submitBtn, (!isFormValid() || submitting) && styles.submitBtnDisabled]}
           onPress={handleBooking}
-          disabled={!isFormValid()}
+          disabled={!isFormValid() || submitting}
           activeOpacity={0.85}
         >
-          <Text style={styles.submitText}>Send Booking Request</Text>
+          <Text style={styles.submitText}>{submitting ? 'Sending…' : 'Send Booking Request'}</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

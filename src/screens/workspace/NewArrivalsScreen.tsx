@@ -1,34 +1,35 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Platform,
+  Animated, StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import { supabase } from '../../api/supabase';
+import { CATEGORIES } from '../../lib/categories';
 
-const ALL_ARRIVALS = [
-  { id: '1', category: 'Electrician', emoji: '⚡', posterName: 'John Adewale', time: '2h ago', products: 3, color: '#16a34a' },
-  { id: '2', category: 'Caterer', emoji: '🍱', posterName: 'Chidinma Okafor', time: '4h ago', products: 5, color: '#F97316' },
-  { id: '3', category: 'Makeup Artist', emoji: '💄', posterName: 'Blessing Eze', time: '6h ago', products: 2, color: '#D946EF' },
-  { id: '4', category: 'Phone Repair', emoji: '📱', posterName: 'Tunde Bakare', time: '8h ago', products: 4, color: '#06B6D4' },
-  { id: '5', category: 'Barber', emoji: '💈', posterName: 'David Okonkwo', time: '10h ago', products: 1, color: '#EAB308' },
-  { id: '6', category: 'Plumber', emoji: '🔧', posterName: 'Emeka Nwosu', time: '12h ago', products: 2, color: '#3B82F6' },
-  { id: '7', category: 'Baker', emoji: '🍞', posterName: 'Fatima Hassan', time: '18h ago', products: 6, color: '#F97316' },
-  { id: '8', category: 'Tailor', emoji: '🧵', posterName: 'Amina Kalu', time: '20h ago', products: 3, color: '#8B5CF6' },
-  { id: '9', category: 'Mechanic', emoji: '🔩', posterName: 'Ibrahim Musa', time: '24h ago', products: 2, color: '#78716C' },
-  { id: '10', category: 'Photographer', emoji: '📸', posterName: 'Grace Ojo', time: '30h ago', products: 8, color: '#06B6D4' },
-  { id: '11', category: 'Driver', emoji: '🚙', posterName: 'Samuel Ade', time: '36h ago', products: 1, color: '#3B82F6' },
-  { id: '12', category: 'Cleaner', emoji: '🧹', posterName: 'Ngozi Ibe', time: '42h ago', products: 2, color: '#14B8A6' },
-];
+interface Arrival {
+  id: string;
+  workerId: string;
+  category: string;
+  emoji: string;
+  color: string;
+  posterName: string;
+  time: string;
+}
 
-const getInitials = (name: string): string => {
-  const parts = name.trim().split(' ');
-  if (parts.length >= 2) return parts[0][0] + parts[1][0];
-  return parts[0][0];
+const timeAgo = (date: string): string => {
+  const hours = Math.floor((Date.now() - new Date(date).getTime()) / 3600000);
+  if (hours < 1) return 'just now';
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 };
 
 export default function NewArrivalsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
+  const [arrivals, setArrivals] = useState<Arrival[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const listOpacity = useRef(new Animated.Value(0)).current;
@@ -44,66 +45,140 @@ export default function NewArrivalsScreen({ navigation }: any) {
     ]).start();
   }, []);
 
+  const loadArrivals = useCallback(async () => {
+    setLoading(true);
+    try {
+      const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const { data, error } = await supabase
+        .from('reels')
+        .select('id, created_at, profiles(id, full_name, category)')
+        .gte('created_at', cutoff)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      setArrivals((data || []).map((reel: any) => {
+        const posterCategory = reel.profiles?.category;
+        const catMeta = CATEGORIES.find(c => c.name === posterCategory);
+        return {
+          id: reel.id,
+          workerId: reel.profiles?.id,
+          category: posterCategory || 'General',
+          emoji: catMeta?.emoji || '✨',
+          color: catMeta?.color || colors.primary,
+          posterName: reel.profiles?.full_name || 'A worker',
+          time: timeAgo(reel.created_at),
+        };
+      }));
+    } catch (err) {
+      console.error('Failed to load new arrivals:', err);
+      setArrivals([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(useCallback(() => { loadArrivals(); }, [loadArrivals]));
+
+  const viewProfile = async (workerId: string) => {
+    if (!workerId) return;
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, location, experience, verification_status, category, subcategory')
+        .eq('id', workerId)
+        .maybeSingle();
+
+      if (error || !data) return;
+
+      const { data: reviewRows } = await supabase.from('reviews').select('rating').eq('worker_id', workerId);
+      const ratings = (reviewRows || []).map((r: any) => r.rating);
+      const avgRating = ratings.length > 0 ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length : 0;
+      const catMeta = CATEGORIES.find(c => c.name === data.category);
+
+      navigation.navigate('WorkerPublicProfile', {
+        worker: {
+          id: data.id,
+          name: data.full_name || 'Worker',
+          rating: avgRating,
+          reviews: ratings.length,
+          location: data.location || 'Location not set',
+          experience: data.experience || 'Not specified',
+          verified: data.verification_status === 'verified' || data.verification_status === 'basic',
+          bio: `Available for ${data.subcategory || data.category || 'various'} jobs.`,
+        },
+        color: catMeta?.color || colors.primary,
+        subcategoryName: data.subcategory || data.category,
+      });
+    } catch (err) {
+      console.error('Failed to load worker profile:', err);
+    }
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
         <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>New Arrivals</Text>
-          <Text style={styles.headerSub}>Products posted in the last 48 hours</Text>
+          <Text style={styles.headerSub}>Posted in the last 48 hours</Text>
         </View>
         <View style={{ width: 36 }} />
       </Animated.View>
 
-      {/* Stats bar */}
       <Animated.View style={[styles.statsBanner, { opacity: headerOpacity }]}>
         <Text style={styles.statsText}>
-          {ALL_ARRIVALS.length} new listings · {ALL_ARRIVALS.reduce((s, a) => s + a.products, 0)} products
+          {loading ? 'Loading…' : `${arrivals.length} new listing${arrivals.length === 1 ? '' : 's'}`}
         </Text>
       </Animated.View>
 
-      {/* List — one item per line */}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}
-      >
-        <Animated.View style={{
-          opacity: listOpacity, transform: [{ translateY: listSlide }],
-          paddingHorizontal: spacing.screenPadding,
-        }}>
-          {ALL_ARRIVALS.map((item, i) => (
-            <TouchableOpacity key={item.id} style={styles.arrivalRow} activeOpacity={0.85}>
-              {/* Avatar with story ring */}
-              <View style={[styles.rowRing, { borderColor: item.color }]}>
-                <View style={[styles.rowAvatar, { backgroundColor: item.color + '15' }]}>
-                  <Text style={styles.rowEmoji}>{item.emoji}</Text>
-                </View>
-              </View>
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}>
+          {arrivals.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Text style={styles.emptyEmoji}>🆕</Text>
+              <Text style={styles.emptyTitle}>Nothing new right now</Text>
+              <Text style={styles.emptySub}>Check back soon for the latest posts.</Text>
+            </View>
+          ) : (
+            <Animated.View style={{
+              opacity: listOpacity, transform: [{ translateY: listSlide }],
+              paddingHorizontal: spacing.screenPadding,
+            }}>
+              {arrivals.map(item => (
+                <TouchableOpacity key={item.id} style={styles.arrivalRow} onPress={() => viewProfile(item.workerId)} activeOpacity={0.85}>
+                  <View style={[styles.rowRing, { borderColor: item.color }]}>
+                    <View style={[styles.rowAvatar, { backgroundColor: item.color + '15' }]}>
+                      <Text style={styles.rowEmoji}>{item.emoji}</Text>
+                    </View>
+                  </View>
 
-              {/* Info */}
-              <View style={styles.rowInfo}>
-                <Text style={styles.rowCategory}>{item.category}</Text>
-                <Text style={styles.rowPoster}>@{item.posterName}</Text>
-                <View style={styles.rowMeta}>
-                  <Text style={styles.rowTime}>{item.time}</Text>
-                  <Text style={styles.rowDot}>·</Text>
-                  <Text style={styles.rowProducts}>{item.products} new products</Text>
-                </View>
-              </View>
+                  <View style={styles.rowInfo}>
+                    <Text style={styles.rowCategory}>{item.category}</Text>
+                    <Text style={styles.rowPoster}>@{item.posterName}</Text>
+                    <View style={styles.rowMeta}>
+                      <Text style={styles.rowTime}>{item.time}</Text>
+                    </View>
+                  </View>
 
-              {/* View button */}
-              <TouchableOpacity style={[styles.viewBtn, { backgroundColor: item.color + '15', borderColor: item.color + '30' }]} activeOpacity={0.85}>
-                <Text style={[styles.viewBtnText, { color: item.color }]}>View</Text>
-              </TouchableOpacity>
-            </TouchableOpacity>
-          ))}
-        </Animated.View>
-      </ScrollView>
+                  <TouchableOpacity style={[styles.viewBtn, { backgroundColor: item.color + '15', borderColor: item.color + '30' }]} onPress={() => viewProfile(item.workerId)} activeOpacity={0.85}>
+                    <Text style={[styles.viewBtnText, { color: item.color }]}>View</Text>
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              ))}
+            </Animated.View>
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -129,7 +204,12 @@ const styles = StyleSheet.create({
   },
   statsText: { fontSize: 12, fontWeight: '600', color: colors.primary, textAlign: 'center' },
 
-  // Arrival rows — one per line
+  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyBox: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 30 },
+  emptyEmoji: { fontSize: 40, marginBottom: 12, opacity: 0.4 },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginBottom: 6 },
+  emptySub: { fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+
   arrivalRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: colors.border,
@@ -149,8 +229,6 @@ const styles = StyleSheet.create({
   rowPoster: { fontSize: 12, color: colors.textSecondary, marginBottom: 4 },
   rowMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   rowTime: { fontSize: 10, color: colors.textMuted },
-  rowDot: { fontSize: 10, color: colors.textMuted },
-  rowProducts: { fontSize: 10, color: colors.primary, fontWeight: '500' },
   viewBtn: {
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10,
     borderWidth: 1, marginLeft: 10,

@@ -7,61 +7,34 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../api/supabase';
+import { CATEGORIES } from '../../lib/categories';
+import { useOnlinePresence } from '../../lib/presence';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const CAT_CARD_W = (SCREEN_W - spacing.screenPadding * 2 - 24) / 3;
 const VISIBLE_CAT_ROWS = 3;
 
-const MAIN_CATEGORIES = [
-  { name: 'Handwork & Skilled Workers', emoji: '🛠️', color: '#16a34a' },
-  { name: 'Food & Restaurant', emoji: '🍔', color: '#F97316' },
-  { name: 'Hotel & Accommodation', emoji: '🏨', color: '#8B5CF6' },
-  { name: 'Transport & Logistics', emoji: '🚗', color: '#3B82F6' },
-  { name: 'Beauty & Fashion', emoji: '💄', color: '#D946EF' },
-  { name: 'Health & Medical', emoji: '💊', color: '#EF4444' },
-  { name: 'Retail & Shops', emoji: '🛍️', color: '#EAB308' },
-  { name: 'Construction & Real Estate', emoji: '🏗️', color: '#78716C' },
-  { name: 'Media & Event Services', emoji: '🎥', color: '#06B6D4' },
-  { name: 'Technology & IT', emoji: '💻', color: '#6366F1' },
-  { name: 'Home & Personal Services', emoji: '🏠', color: '#14B8A6' },
-  { name: 'Agriculture & Farming', emoji: '🌾', color: '#84CC16' },
-  { name: 'Wholesale & Trade', emoji: '💼', color: '#F59E0B' },
-  { name: 'Other Business', emoji: '📦', color: '#9CA3AF' },
-];
+const MAIN_CATEGORIES = CATEGORIES;
 
-const LIVE_CATEGORIES = new Set([
-  'Handwork & Skilled Workers', 'Food & Restaurant', 'Beauty & Fashion',
-  'Transport & Logistics', 'Technology & IT',
-]);
-
-const NEW_ARRIVALS = [
-  { id: '1', category: 'Electrician', emoji: '⚡', posterName: 'John A.', color: '#16a34a' },
-  { id: '2', category: 'Caterer', emoji: '🍱', posterName: 'Chidinma O.', color: '#F97316' },
-  { id: '3', category: 'Makeup Artist', emoji: '💄', posterName: 'Blessing E.', color: '#D946EF' },
-  { id: '4', category: 'Phone Repair', emoji: '📱', posterName: 'Tunde B.', color: '#06B6D4' },
-  { id: '5', category: 'Barber', emoji: '💈', posterName: 'David O.', color: '#EAB308' },
-  { id: '6', category: 'Plumber', emoji: '🔧', posterName: 'Emeka N.', color: '#3B82F6' },
-  { id: '7', category: 'Baker', emoji: '🍞', posterName: 'Fatima H.', color: '#F97316' },
-  { id: '8', category: 'Tailor', emoji: '🧵', posterName: 'Amina K.', color: '#8B5CF6' },
-];
 
 const VISIBLE_ARRIVALS = 5;
 
-function DraggableFab({ onPress, bottom }) {
+function DraggableFab({ onPress, bottom }: { onPress: () => void; bottom: number }) {
   const pan = useRef(new Animated.ValueXY({ x: SCREEN_W - 74, y: SCREEN_H - bottom - 80 })).current;
 
   const panResponder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 5 || Math.abs(gs.dy) > 5,
     onPanResponderGrant: () => {
-      pan.setOffset({ x: pan.x._value, y: pan.y._value });
+      pan.setOffset({ x: (pan.x as any)._value, y: (pan.y as any)._value });
       pan.setValue({ x: 0, y: 0 });
     },
     onPanResponderMove: Animated.event([null, { dx: pan.x, dy: pan.y }], { useNativeDriver: false }),
     onPanResponderRelease: (_, gs) => {
       pan.flattenOffset();
-      const currentX = pan.x._value;
-      const currentY = pan.y._value;
+      const currentX = (pan.x as any)._value;
+      const currentY = (pan.y as any)._value;
       const snapX = currentX < SCREEN_W / 2 ? 16 : SCREEN_W - 74;
       const clampedY = Math.max(60, Math.min(currentY, SCREEN_H - bottom - 80));
       if (Math.abs(gs.dx) < 10 && Math.abs(gs.dy) < 10) {
@@ -90,12 +63,14 @@ const fabSt = StyleSheet.create({
   fabLabel: { fontSize: 9, fontWeight: '700', color: '#FFC107', marginTop: 4 },
 });
 
-export default function WorkspaceScreen({ navigation }) {
+export default function WorkspaceScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);
+  const [newArrivals, setNewArrivals] = useState<any[]>([]);
+  const [arrivalsLoading, setArrivalsLoading] = useState(true);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const searchSlide = useRef(new Animated.Value(20)).current;
@@ -118,6 +93,57 @@ export default function WorkspaceScreen({ navigation }) {
       Animated.timing(generalOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
   }, []);
+
+  // "New Arrivals" — reels posted by workers in the last 48 hours,
+  // matching the "48h only" badge. Real data only; a section this
+  // visible showing named people who don't exist is exactly the kind
+  // of fake social proof that damages trust once anyone notices.
+  useEffect(() => {
+    const fetchArrivals = async () => {
+      setArrivalsLoading(true);
+      try {
+        const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+        const { data, error } = await supabase
+          .from('reels')
+          .select('id, description, type, created_at, profiles(full_name, category)')
+          .gte('created_at', cutoff)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (error) throw error;
+
+        const mapped = (data || []).map((reel: any) => {
+          const posterCategory = reel.profiles?.category || reel.type || 'General';
+          const catMeta = MAIN_CATEGORIES.find(c =>
+            c.name.toLowerCase().includes((posterCategory || '').toLowerCase().split(' ')[0])
+          );
+          return {
+            id: reel.id,
+            category: posterCategory,
+            emoji: catMeta?.emoji || '✨',
+            posterName: reel.profiles?.full_name || 'A worker',
+            color: catMeta?.color || colors.primary,
+          };
+        });
+
+        setNewArrivals(mapped);
+      } catch (err) {
+        console.error('Failed to load new arrivals:', err);
+        setNewArrivals([]);
+      } finally {
+        setArrivalsLoading(false);
+      }
+    };
+
+    fetchArrivals();
+  }, []);
+
+  // "Live Now" badge on category cards — now driven by real Presence
+  // (see src/lib/presence.ts) instead of polling the database every
+  // 60 seconds. Updates instantly the moment a worker opens/closes
+  // their app, and costs nothing per update since it rides the
+  // existing websocket connection rather than a database query.
+  const { onlineCategories } = useOnlinePresence();
 
   const filteredCategories = searchQuery.trim()
     ? MAIN_CATEGORIES.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -177,44 +203,58 @@ export default function WorkspaceScreen({ navigation }) {
         </Animated.View>
 
         {/* NEW ARRIVALS */}
-        <Animated.View style={{ opacity: arrivalsOpacity }}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionTitleRow}>
-              <Text style={styles.sectionTitle}>🆕 New Arrivals</Text>
-              <View style={styles.badge48h}><Text style={styles.badge48hText}>48h only</Text></View>
+        {(arrivalsLoading || newArrivals.length > 0) && (
+          <Animated.View style={{ opacity: arrivalsOpacity }}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionTitleRow}>
+                <Text style={styles.sectionTitle}>🆕 New Arrivals</Text>
+                <View style={styles.badge48h}><Text style={styles.badge48hText}>48h only</Text></View>
+              </View>
+              <TouchableOpacity onPress={() => navigation.navigate('NewArrivals')} activeOpacity={0.7}>
+                <Text style={styles.seeAll}>See All →</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate('NewArrivals')} activeOpacity={0.7}>
-              <Text style={styles.seeAll}>See All →</Text>
-            </TouchableOpacity>
-          </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.arrivalsScroll}>
-            {NEW_ARRIVALS.slice(0, VISIBLE_ARRIVALS).map(item => (
-              <TouchableOpacity key={item.id} style={styles.arrivalItem} activeOpacity={0.85}>
-                <View style={styles.storyRing}>
-                  <View style={styles.storyInner}>
-                    <View style={[styles.storyAvatar, { backgroundColor: item.color + '20' }]}>
-                      <Text style={styles.storyEmoji}>{item.emoji}</Text>
+            {arrivalsLoading ? (
+              <View style={[styles.arrivalsScroll, { flexDirection: 'row' }]}>
+                {[1, 2, 3].map(i => (
+                  <View key={i} style={styles.arrivalItem}>
+                    <View style={[styles.storyRing, { borderColor: colors.border, opacity: 0.4 }]}>
+                      <View style={[styles.storyInner, { backgroundColor: colors.bgCard }]} />
                     </View>
                   </View>
-                  <View style={styles.storyBadge}><Text style={styles.storyBadgeText}>{item.emoji}</Text></View>
-                </View>
-                <Text style={styles.arrivalCategory} numberOfLines={1}>{item.category}</Text>
-                <Text style={styles.arrivalPoster} numberOfLines={1}>@{item.posterName.split(' ')[0]}</Text>
-              </TouchableOpacity>
-            ))}
-            {NEW_ARRIVALS.length > VISIBLE_ARRIVALS && (
-              <TouchableOpacity style={styles.seeMoreCircle} onPress={() => navigation.navigate('NewArrivals')} activeOpacity={0.85}>
-                <View style={styles.seeMoreRing}>
-                  <View style={styles.seeMoreInner}>
-                    <Text style={styles.seeMoreCount}>+{NEW_ARRIVALS.length - VISIBLE_ARRIVALS}</Text>
-                  </View>
-                </View>
-                <Text style={styles.seeMoreLabel}>See more</Text>
-              </TouchableOpacity>
+                ))}
+              </View>
+            ) : (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.arrivalsScroll}>
+                {newArrivals.slice(0, VISIBLE_ARRIVALS).map(item => (
+                  <TouchableOpacity key={item.id} style={styles.arrivalItem} activeOpacity={0.85}>
+                    <View style={styles.storyRing}>
+                      <View style={styles.storyInner}>
+                        <View style={[styles.storyAvatar, { backgroundColor: item.color + '20' }]}>
+                          <Text style={styles.storyEmoji}>{item.emoji}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.storyBadge}><Text style={styles.storyBadgeText}>{item.emoji}</Text></View>
+                    </View>
+                    <Text style={styles.arrivalCategory} numberOfLines={1}>{item.category}</Text>
+                    <Text style={styles.arrivalPoster} numberOfLines={1}>@{item.posterName.split(' ')[0]}</Text>
+                  </TouchableOpacity>
+                ))}
+                {newArrivals.length > VISIBLE_ARRIVALS && (
+                  <TouchableOpacity style={styles.seeMoreCircle} onPress={() => navigation.navigate('NewArrivals')} activeOpacity={0.85}>
+                    <View style={styles.seeMoreRing}>
+                      <View style={styles.seeMoreInner}>
+                        <Text style={styles.seeMoreCount}>+{newArrivals.length - VISIBLE_ARRIVALS}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.seeMoreLabel}>See more</Text>
+                  </TouchableOpacity>
+                )}
+              </ScrollView>
             )}
-          </ScrollView>
-        </Animated.View>
+          </Animated.View>
+        )}
 
         {/* LIVE BUSINESS */}
         <Animated.View style={{ opacity: liveOpacity, transform: [{ translateY: liveSlide }] }}>
@@ -227,7 +267,7 @@ export default function WorkspaceScreen({ navigation }) {
 
           <View style={styles.categoryGrid}>
             {visibleCategories.map((cat, i) => {
-              const hasLive = LIVE_CATEGORIES.has(cat.name);
+              const hasLive = onlineCategories.has(cat.name);
               return (
                 <TouchableOpacity key={i} style={[styles.categoryCard, hasLive && styles.categoryCardLive]}
                   onPress={() => navigation.navigate('SubCategories', { categoryName: cat.name })} activeOpacity={0.85}>

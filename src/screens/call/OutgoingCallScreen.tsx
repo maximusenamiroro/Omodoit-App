@@ -96,10 +96,6 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
 
         <Text style={s.name}>{workerName}</Text>
         <Text style={s.category}>{workerCategory || 'Worker'}</Text>
-        <View style={s.encRow}>
-          <Text style={s.encIcon}>🔒</Text>
-          <Text style={s.encText}>End-to-end encrypted</Text>
-        </View>
       </Animated.View>
 
       <View style={[s.bottom, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 30 }]}>

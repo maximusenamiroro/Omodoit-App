@@ -1,17 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
-  Animated, StatusBar, Platform,
+  Animated, StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
-
-const getInitials = (name: string): string => {
-  const parts = name.trim().split(' ');
-  if (parts.length >= 2) return parts[0][0] + parts[1][0];
-  return parts[0][0];
-};
+import { supabase } from '../../api/supabase';
 
 const timeAgo = (date: string): string => {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
@@ -24,24 +20,12 @@ const timeAgo = (date: string): string => {
 
 interface Notification {
   id: string;
-  type: 'booking' | 'message' | 'like' | 'comment' | 'follow' | 'system' | 'flash';
-  title: string;
-  body: string;
+  type: string;
+  message: string;
   fromName: string;
   isRead: boolean;
   createdAt: string;
 }
-
-const MOCK_NOTIFICATIONS: Notification[] = [
-  { id: '1', type: 'booking', title: 'New Booking Request', body: 'wants to book you for electrical repair', fromName: 'Fred Dan', isRead: false, createdAt: new Date(Date.now() - 1800000).toISOString() },
-  { id: '2', type: 'like', title: 'Reel Liked', body: 'liked your reel', fromName: 'Chidinma Okafor', isRead: false, createdAt: new Date(Date.now() - 3600000).toISOString() },
-  { id: '3', type: 'comment', title: 'New Comment', body: 'commented on your reel: "Great work!"', fromName: 'Emeka Nwosu', isRead: false, createdAt: new Date(Date.now() - 7200000).toISOString() },
-  { id: '4', type: 'follow', title: 'New Follower', body: 'started following you', fromName: 'Blessing Eze', isRead: true, createdAt: new Date(Date.now() - 14400000).toISOString() },
-  { id: '5', type: 'flash', title: 'Flash Job Nearby', body: 'Someone needs an electrician in Ikeja — ₦15,000 budget', fromName: 'Flash Job', isRead: true, createdAt: new Date(Date.now() - 28800000).toISOString() },
-  { id: '6', type: 'system', title: 'Welcome to Omodoit!', body: 'Complete your profile to start getting bookings', fromName: 'Omodoit', isRead: true, createdAt: new Date(Date.now() - 86400000).toISOString() },
-  { id: '7', type: 'booking', title: 'Booking Confirmed', body: 'Your booking with John Adewale has been confirmed for tomorrow at 10:00 AM', fromName: 'John Adewale', isRead: true, createdAt: new Date(Date.now() - 172800000).toISOString() },
-  { id: '8', type: 'message', title: 'New Message', body: 'sent you a message', fromName: 'Tunde Bakare', isRead: true, createdAt: new Date(Date.now() - 259200000).toISOString() },
-];
 
 const NOTIF_ICONS: Record<string, { emoji: string; color: string }> = {
   booking: { emoji: '📋', color: '#3B82F6' },
@@ -53,12 +37,23 @@ const NOTIF_ICONS: Record<string, { emoji: string; color: string }> = {
   flash: { emoji: '⚡', color: '#F97316' },
 };
 
+const NOTIF_LABELS: Record<string, string> = {
+  booking: 'Booking',
+  message: 'Message',
+  like: 'Like',
+  comment: 'Comment',
+  follow: 'New Follower',
+  system: 'Omodoit',
+  flash: 'Flash Job',
+};
+
 export default function NotificationsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const accentColor = role === 'client' ? colors.client : colors.primary;
 
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const listOpacity = useRef(new Animated.Value(0)).current;
 
@@ -69,10 +64,81 @@ export default function NotificationsScreen({ navigation }: any) {
     ]).start();
   }, []);
 
+  // Reads from the notifications table written to by HireWorkerScreen
+  // (new booking) and WorkstationScreen (accept/decline). Schema
+  // confirmed from the website's own NotificationsPage.jsx, which
+  // reads this same table: id, type, message, is_read, created_at,
+  // reel_id, booking_id, order_id, from_user_id, user_id.
+  const loadNotifications = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const { data: rows, error } = await supabase
+        .from('notifications')
+        .select('id, type, message, from_user_id, is_read, created_at')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+
+      const fromIds = [...new Set((rows || []).map((r: any) => r.from_user_id).filter(Boolean))];
+      let nameMap: Record<string, string> = {};
+      if (fromIds.length > 0) {
+        const { data: profileRows } = await supabase.from('profiles').select('id, full_name').in('id', fromIds);
+        (profileRows || []).forEach((p: any) => { nameMap[p.id] = p.full_name || 'Someone'; });
+      }
+
+      const mapped: Notification[] = (rows || []).map((r: any) => ({
+        id: r.id,
+        type: r.type || 'system',
+        message: r.message || '',
+        fromName: nameMap[r.from_user_id] || 'Omodoit',
+        isRead: !!r.is_read,
+        createdAt: r.created_at,
+      }));
+
+      setNotifications(mapped);
+    } catch (err) {
+      console.warn('Could not load notifications (non-fatal):', err);
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useFocusEffect(useCallback(() => { loadNotifications(); }, [loadNotifications]));
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel('notifications_' + user.id)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}`,
+      }, () => loadNotifications())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, loadNotifications]);
+
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
-  const markAllRead = () => {
+  const markAllRead = async () => {
     setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+    if (!user?.id) return;
+    try {
+      await supabase.from('notifications').update({ is_read: true }).eq('user_id', user.id).eq('is_read', false);
+    } catch (err) {
+      console.warn('Could not mark notifications read (non-fatal):', err);
+    }
+  };
+
+  const markOneRead = async (id: string) => {
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    try {
+      await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    } catch (err) {
+      console.warn('Could not mark notification read (non-fatal):', err);
+    }
   };
 
   const renderNotification = ({ item }: { item: Notification }) => {
@@ -81,9 +147,7 @@ export default function NotificationsScreen({ navigation }: any) {
       <TouchableOpacity
         style={[styles.notifRow, !item.isRead && styles.notifRowUnread]}
         activeOpacity={0.7}
-        onPress={() => {
-          setNotifications(prev => prev.map(n => n.id === item.id ? { ...n, isRead: true } : n));
-        }}
+        onPress={() => markOneRead(item.id)}
       >
         <View style={[styles.notifIconBg, { backgroundColor: icon.color + '15' }]}>
           <Text style={styles.notifEmoji}>{icon.emoji}</Text>
@@ -91,13 +155,13 @@ export default function NotificationsScreen({ navigation }: any) {
         <View style={styles.notifContent}>
           <View style={styles.notifTopRow}>
             <Text style={[styles.notifTitle, !item.isRead && styles.notifTitleBold]} numberOfLines={1}>
-              {item.title}
+              {NOTIF_LABELS[item.type] || 'Notification'}
             </Text>
             <Text style={styles.notifTime}>{timeAgo(item.createdAt)}</Text>
           </View>
           <Text style={styles.notifBody} numberOfLines={2}>
             <Text style={styles.notifFromName}>{item.fromName}</Text>
-            {' '}{item.body}
+            {' '}{item.message}
           </Text>
         </View>
         {!item.isRead && <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />}
@@ -130,23 +194,29 @@ export default function NotificationsScreen({ navigation }: any) {
         )}
       </Animated.View>
 
-      <Animated.View style={{ flex: 1, opacity: listOpacity }}>
-        {notifications.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>🔔</Text>
-            <Text style={styles.emptyTitle}>No notifications yet</Text>
-            <Text style={styles.emptyDesc}>When someone books you, likes your reel, or sends a message, you will see it here</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={notifications}
-            renderItem={renderNotification}
-            keyExtractor={item => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}
-          />
-        )}
-      </Animated.View>
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator color={accentColor} />
+        </View>
+      ) : (
+        <Animated.View style={{ flex: 1, opacity: listOpacity }}>
+          {notifications.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>🔔</Text>
+              <Text style={styles.emptyTitle}>No notifications yet</Text>
+              <Text style={styles.emptyDesc}>When someone books you, likes your reel, or sends a message, you will see it here</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={notifications}
+              renderItem={renderNotification}
+              keyExtractor={item => item.id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}
+            />
+          )}
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -166,6 +236,8 @@ const styles = StyleSheet.create({
   headerBadge: { minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 6 },
   headerBadgeText: { fontSize: 10, fontWeight: '700', color: colors.white },
   markAllText: { fontSize: 12, fontWeight: '600' },
+
+  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
   notifRow: {
     flexDirection: 'row', alignItems: 'center',

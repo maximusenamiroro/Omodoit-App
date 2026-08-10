@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { upsertWithRetry } from '../../lib/db';
 
 export default function ClientRegStep3Screen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
@@ -107,12 +108,20 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
           created_at: new Date().toISOString(),
         };
 
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert(profileData);
+        const { error: profileError } = await upsertWithRetry('profiles', profileData);
 
         if (profileError) {
-          console.error('Profile creation error:', profileError);
+          // Do NOT proceed to setDirectAuth — that would show the user
+          // as fully logged in locally while no profile row actually
+          // exists. They'd appear fine this session, then get locked
+          // out next launch with no way to fix it themselves (their
+          // email is already registered, so they can't just sign up
+          // again). Surface it now instead, while it's still fixable.
+          throw new Error(
+            "Your account was created but we couldn't finish setting up " +
+            'your profile. Please try logging in — this usually resolves ' +
+            'itself, and if not, try again in a moment.'
+          );
         }
 
         // Step 3: Directly set user and profile in AuthContext

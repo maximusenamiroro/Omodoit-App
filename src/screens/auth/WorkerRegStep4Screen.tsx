@@ -8,11 +8,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
+import { upsertWithRetry } from '../../lib/db';
 
 export default function WorkerRegStep4Screen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const params = route.params;
-  const { setDirectAuth } = useAuth();
+  const { setDirectAuth, beginRegistration, endRegistration } = useAuth();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -69,6 +70,11 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
     if (!isFormValid()) return;
     setLoading(true);
 
+    // Block AuthContext's SIGNED_IN listener BEFORE signUp fires it —
+    // same protection the client registration flow uses, so worker
+    // signup doesn't briefly flash back to the auth screen either.
+    beginRegistration();
+
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: params.email,
@@ -97,12 +103,16 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
           created_at: new Date().toISOString(),
         };
 
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .upsert(profileData);
+        const { error: profileError } = await upsertWithRetry('profiles', profileData);
 
         if (profileError) {
-          console.error('Profile creation error:', profileError);
+          // Same reasoning as the client flow: don't proceed to
+          // setDirectAuth with a profile that was never actually saved.
+          throw new Error(
+            "Your account was created but we couldn't finish setting up " +
+            'your business profile. Please try logging in — this usually ' +
+            'resolves itself, and if not, try again in a moment.'
+          );
         }
 
         setDirectAuth(authData.user, {
@@ -120,6 +130,10 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
       }
     } catch (error: any) {
       console.error('Registration error:', error);
+
+      // Registration failed — re-enable normal auth handling
+      endRegistration();
+
       let message = 'Something went wrong. Please try again.';
       if (error.message?.includes('already registered')) {
         message = 'An account with this email already exists. Try logging in instead.';

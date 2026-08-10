@@ -5,17 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
-
-const CATEGORIES = [
-  { emoji: '🔨', name: 'Handwork & Skilled Workers', subs: ['Electrician', 'Plumber', 'Carpenter', 'Tailor', 'Welder', 'Painter', 'AC Repair', 'Tiler', 'Mason'] },
-  { emoji: '🍽️', name: 'Food & Restaurant', subs: ['Caterer', 'Home Chef', 'Baker', 'Restaurant', 'Food Vendor', 'Drinks'] },
-  { emoji: '🚗', name: 'Transport & Logistics', subs: ['Driver', 'Dispatch Rider', 'Moving Service', 'Courier', 'Haulage'] },
-  { emoji: '💄', name: 'Beauty & Fashion', subs: ['Makeup Artist', 'Hair Stylist', 'Barber', 'Fashion Designer', 'Nail Tech', 'Spa'] },
-  { emoji: '💻', name: 'Technology & IT', subs: ['Software Dev', 'Phone Repair', 'Computer Repair', 'CCTV Install', 'Networking'] },
-  { emoji: '🏗️', name: 'Construction', subs: ['Builder', 'Architect', 'Surveyor', 'Interior Design', 'Roofing'] },
-  { emoji: '🏥', name: 'Health & Medical', subs: ['Nurse', 'Physiotherapist', 'Pharmacist', 'Caregiver', 'Lab Tech'] },
-  { emoji: '🛒', name: 'Retail & Shops', subs: ['General Store', 'Phone Accessories', 'Electronics', 'Clothing', 'Auto Parts'] },
-];
+import { CATEGORIES } from '../../lib/categories';
 
 const EXPERIENCE = ['Less than 1 year', '1-3 years', '3-5 years', '5-10 years', '10+ years'];
 

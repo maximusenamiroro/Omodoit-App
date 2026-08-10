@@ -26,6 +26,8 @@ import ProductDetailScreen from '../screens/products/ProductDetailScreen';
 import EditProfileScreen from '../screens/settings/EditProfileScreen';
 import AddProductScreen from '../screens/products/AddProductScreen';
 import CreateReelScreen from '../screens/reels/CreateReelScreen';
+import LeaveReviewScreen from '../screens/reviews/LeaveReviewScreen';
+import BankDetailsScreen from '../screens/bank/BankDetailsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -42,8 +44,17 @@ function LoadingOverlay() {
 }
 
 export default function AppNavigator() {
-  const { user, role, loading, profileLoading } = useAuth();
-  const showLoading = loading || (!!user && profileLoading && !role);
+  const { user, role, loading } = useAuth();
+  // Whenever a user is authenticated but their role hasn't resolved
+  // yet, show loading — full stop. This used to also check
+  // profileLoading, but setUser() and loadProfile()'s internal
+  // setProfileLoading(true) happen across an await boundary, so there
+  // was a real render frame where user was set, role was still null,
+  // and profileLoading hadn't flipped to true yet. In that frame this
+  // fell through to the Auth screen, causing a visible flash back to
+  // login/signup right after a successful sign-in, before correcting
+  // itself a moment later.
+  const showLoading = loading || (!!user && !role);
 
   return (
     <NavigationContainer>
@@ -65,6 +76,8 @@ export default function AppNavigator() {
         <Stack.Screen name="HireWorker" component={HireWorkerScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Tracking" component={TrackingScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
+        <Stack.Screen name="LeaveReview" component={LeaveReviewScreen} options={{ animation: 'slide_from_bottom' }} />
+        <Stack.Screen name="BankDetails" component={BankDetailsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="NewArrivals" component={NewArrivalsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Orders" component={OrdersScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
          <Stack.Screen name="OutgoingCall" component={OutgoingCallScreen} options={{ animation: 'fade', gestureEnabled: false, presentation: 'fullScreenModal' }} />

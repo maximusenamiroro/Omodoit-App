@@ -1,25 +1,38 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
-  StatusBar, Platform, Dimensions, Alert,
+  StatusBar, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import Geolocation from '@react-native-community/geolocation';
 import { colors, spacing } from '../../theme';
+import { useWatchLocation } from '../../lib/tracking';
+import { supabase } from '../../api/supabase';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+// Straight-line distance in km — used for an honest "~X km away"
+// display. Deliberately NOT presented as a road-distance ETA (e.g.
+// "12 min"), since that would need a routing API this app doesn't
+// have; a fabricated countdown would be misleading.
+function distanceKm(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+  const R = 6371;
+  const dLat = (b.latitude - a.latitude) * Math.PI / 180;
+  const dLon = (b.longitude - a.longitude) * Math.PI / 180;
+  const lat1 = a.latitude * Math.PI / 180;
+  const lat2 = b.latitude * Math.PI / 180;
+  const x = Math.sin(dLat / 2) ** 2 + Math.sin(dLon / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2);
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+}
 
-const WORKER_LOCATION = { latitude: 6.5244, longitude: 3.3792 };
-const CLIENT_LOCATION = { latitude: 6.5344, longitude: 3.3892 };
-
-export default function TrackingScreen({ navigation, route }) {
+export default function TrackingScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const workerName = route?.params?.workerName || 'John Adewale';
-  const service = route?.params?.service || 'Electrical Repair';
-  const mapRef = useRef(null);
+  const { bookingId, workerId, workerName = 'Worker', service = '' } = route?.params || {};
+  const mapRef = useRef<MapView | null>(null);
 
-  const [eta, setEta] = useState(12);
-  const [workerPos, setWorkerPos] = useState(WORKER_LOCATION);
+  const { position: workerPos, connected } = useWatchLocation(bookingId || null);
+  const [clientPos, setClientPos] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [rating, setRating] = useState<{ avg: number; count: number } | null>(null);
+
   const cardOpacity = useRef(new Animated.Value(0)).current;
   const cardSlide = useRef(new Animated.Value(50)).current;
 
@@ -29,98 +42,117 @@ export default function TrackingScreen({ navigation, route }) {
       Animated.spring(cardSlide, { toValue: 0, damping: 14, stiffness: 100, useNativeDriver: true }),
     ]).start();
 
-    // Simulate worker moving toward client
-    const moveInterval = setInterval(() => {
-      setWorkerPos(prev => ({
-        latitude: prev.latitude + (CLIENT_LOCATION.latitude - prev.latitude) * 0.05,
-        longitude: prev.longitude + (CLIENT_LOCATION.longitude - prev.longitude) * 0.05,
-      }));
-    }, 3000);
+    // The client's own position, for their marker and initial map
+    // center — this is a one-time read of their own device location,
+    // not shared with anyone.
+    Geolocation.getCurrentPosition(
+      (pos) => setClientPos({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+      (err) => console.warn('Could not get client location:', err.message),
+      { enableHighAccuracy: true }
+    );
+  }, []);
 
-    const etaInterval = setInterval(() => {
-      setEta(prev => Math.max(0, prev - 1));
-    }, 60000);
+  // Real rating for this worker, replacing the hardcoded "4.9 (47 reviews)"
+  useEffect(() => {
+    if (!workerId) return;
+    const fetchRating = async () => {
+      try {
+        const { data } = await supabase.from('reviews').select('rating').eq('worker_id', workerId);
+        if (data && data.length > 0) {
+          const avg = data.reduce((sum: number, r: any) => sum + r.rating, 0) / data.length;
+          setRating({ avg, count: data.length });
+        }
+      } catch {
+        // non-fatal — rating just stays unset
+      }
+    };
+    fetchRating();
+  }, [workerId]);
 
-    // Fit map to show both markers
-    setTimeout(() => {
-      mapRef.current?.fitToCoordinates(
-        [WORKER_LOCATION, CLIENT_LOCATION],
+  useEffect(() => {
+    if (workerPos && clientPos && mapRef.current) {
+      mapRef.current.fitToCoordinates(
+        [workerPos, clientPos],
         { edgePadding: { top: 100, right: 60, bottom: 300, left: 60 }, animated: true }
       );
-    }, 500);
-
-    return () => {
-      clearInterval(moveInterval);
-      clearInterval(etaInterval);
-    };
-  }, []);
+    }
+  }, [workerPos, clientPos]);
 
   const handleCall = () => {
     navigation.navigate('OutgoingCall', { workerName, workerCategory: service });
   };
 
   const handleMessage = () => {
-    navigation.navigate('Chat', { otherUserId: 'mock', otherUserName: workerName, otherUserAvatar: null });
+    navigation.navigate('Chat', { otherUserId: workerId, otherUserName: workerName, otherUserAvatar: null });
   };
 
   const handleCancel = () => {
     Alert.alert('Cancel Booking', 'Are you sure you want to cancel this booking?', [
       { text: 'No', style: 'cancel' },
-      { text: 'Yes, Cancel', style: 'destructive', onPress: () => navigation.goBack() },
+      {
+        text: 'Yes, Cancel', style: 'destructive', onPress: async () => {
+          if (bookingId) {
+            await supabase.from('hire_requests').update({ status: 'cancelled' }).eq('id', bookingId);
+          }
+          navigation.goBack();
+        },
+      },
     ]);
   };
+
+  const km = workerPos && clientPos ? distanceKm(workerPos, clientPos) : null;
+  const initialRegion = clientPos
+    ? { latitude: clientPos.latitude, longitude: clientPos.longitude, latitudeDelta: 0.03, longitudeDelta: 0.03 }
+    : { latitude: 6.5244, longitude: 3.3792, latitudeDelta: 0.05, longitudeDelta: 0.05 };
 
   return (
     <View style={st.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      {/* Map */}
       <MapView
         ref={mapRef}
         style={st.map}
         provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        initialRegion={{
-          latitude: (WORKER_LOCATION.latitude + CLIENT_LOCATION.latitude) / 2,
-          longitude: (WORKER_LOCATION.longitude + CLIENT_LOCATION.longitude) / 2,
-          latitudeDelta: 0.03,
-          longitudeDelta: 0.03,
-        }}
+        initialRegion={initialRegion}
         customMapStyle={darkMapStyle}
       >
-        {/* Worker marker */}
-        <Marker coordinate={workerPos} title={workerName} description="On the way">
-          <View style={st.workerMarker}>
-            <Text style={st.workerMarkerIcon}>🛠️</Text>
-          </View>
-        </Marker>
+        {workerPos && (
+          <Marker coordinate={workerPos} title={workerName} description="On the way">
+            <View style={st.workerMarker}>
+              <Text style={st.workerMarkerIcon}>🛠️</Text>
+            </View>
+          </Marker>
+        )}
 
-        {/* Client marker */}
-        <Marker coordinate={CLIENT_LOCATION} title="Your Location">
-          <View style={st.clientMarker}>
-            <Text style={st.clientMarkerIcon}>📍</Text>
-          </View>
-        </Marker>
+        {clientPos && (
+          <Marker coordinate={clientPos} title="Your Location">
+            <View style={st.clientMarker}>
+              <Text style={st.clientMarkerIcon}>📍</Text>
+            </View>
+          </Marker>
+        )}
 
-        {/* Path */}
-        <Polyline
-          coordinates={[workerPos, CLIENT_LOCATION]}
-          strokeColor={colors.primary}
-          strokeWidth={3}
-          lineDashPattern={[10, 5]}
-        />
+        {workerPos && clientPos && (
+          <Polyline
+            coordinates={[workerPos, clientPos]}
+            strokeColor={colors.primary}
+            strokeWidth={3}
+            lineDashPattern={[10, 5]}
+          />
+        )}
       </MapView>
 
-      {/* Back button */}
       <TouchableOpacity style={[st.backBtn, { top: insets.top + 10 }]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
         <Text style={st.backText}>←</Text>
       </TouchableOpacity>
 
-      {/* Bottom card */}
       <Animated.View style={[st.bottomCard, { opacity: cardOpacity, transform: [{ translateY: cardSlide }], paddingBottom: Platform.OS === 'ios' ? insets.bottom + 10 : 20 }]}>
         <View style={st.etaBanner}>
-          <View style={st.etaDot} />
-          <Text style={st.etaText}>{eta > 0 ? 'Worker is on the way' : 'Worker has arrived!'}</Text>
-          <Text style={st.etaTime}>{eta > 0 ? eta + ' min' : 'Here!'}</Text>
+          <View style={[st.etaDot, { backgroundColor: connected ? colors.primary : colors.textMuted }]} />
+          <Text style={st.etaText}>
+            {!connected ? 'Connecting…' : !workerPos ? 'Waiting for worker to share location' : 'Worker is on the way'}
+          </Text>
+          {km !== null && <Text style={st.etaTime}>{km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km'}</Text>}
         </View>
 
         <View style={st.workerRow}>
@@ -132,8 +164,8 @@ export default function TrackingScreen({ navigation, route }) {
             <Text style={st.workerService}>{service}</Text>
             <View style={st.ratingRow}>
               <Text style={st.ratingStar}>⭐</Text>
-              <Text style={st.ratingValue}>4.9</Text>
-              <Text style={st.ratingCount}>(47 reviews)</Text>
+              <Text style={st.ratingValue}>{rating ? rating.avg.toFixed(1) : '—'}</Text>
+              <Text style={st.ratingCount}>({rating?.count || 0} reviews)</Text>
             </View>
           </View>
         </View>
@@ -182,7 +214,7 @@ const st = StyleSheet.create({
   bottomCard: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: colors.border, padding: spacing.screenPadding },
 
   etaBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '10', borderRadius: 12, borderWidth: 1, borderColor: colors.primary + '25', padding: 12, marginBottom: 16, gap: 8 },
-  etaDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
+  etaDot: { width: 8, height: 8, borderRadius: 4 },
   etaText: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.primary },
   etaTime: { fontSize: 16, fontWeight: '700', color: colors.primary },
 

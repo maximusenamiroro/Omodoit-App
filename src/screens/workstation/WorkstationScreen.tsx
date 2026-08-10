@@ -1,29 +1,40 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Platform, Dimensions,
+  Animated, StatusBar, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../api/supabase';
+import { useBroadcastPresence } from '../../lib/presence';
 
-const { width: SCREEN_W } = Dimensions.get('window');
+interface BookingRow {
+  id: string;
+  clientId: string;
+  clientName: string;
+  job: string;
+  status: string;
+  time: string;
+  location: string;
+  flashBatchId: string | null;
+}
 
-const MOCK_BOOKINGS = [
-  { id: '1', client: 'Fred Dan', job: 'Fix electrical wiring', status: 'pending', time: '30m ago', budget: '₦15,000', location: 'Ikeja' },
-  { id: '2', client: 'Sarah Ade', job: 'AC servicing', status: 'accepted', time: '2h ago', budget: '₦12,000', location: 'Lekki' },
-];
-
-const MOCK_FLASH_JOBS = [
-  { id: '1', service: 'Electrician', location: 'Ikeja, Lagos', budget: '₦15,000', time: '5m ago', distance: '0.8km' },
-  { id: '2', service: 'Plumber', location: 'Surulere, Lagos', budget: '₦8,000', time: '12m ago', distance: '1.2km' },
-  { id: '3', service: 'AC Repair', location: 'Yaba, Lagos', budget: '₦10,000', time: '18m ago', distance: '2.1km' },
-];
-
-export default function WorkstationScreen({ navigation }) {
+export default function WorkstationScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
   const [isOnline, setIsOnline] = useState(true);
+  // Manual toggle controls whether this worker actually broadcasts
+  // presence — a worker might keep the app open to check messages
+  // without wanting new bookings, so "app is open" alone isn't
+  // enough; this hook call is what makes the toggle below meaningful.
+  useBroadcastPresence(isOnline ? user?.id : undefined, profile?.category || null);
+
+  const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actioningId, setActioningId] = useState<string | null>(null);
+  const [stats, setStats] = useState({ active: 0, pending: 0, todayEarnings: 0 });
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
@@ -39,15 +50,148 @@ export default function WorkstationScreen({ navigation }) {
     ]).start();
   }, []);
 
+  const loadBookings = useCallback(async () => {
+    if (!user?.id) return;
+    setLoading(true);
+    try {
+      const { data: rows, error } = await supabase
+        .from('hire_requests')
+        .select('id, client_id, job_description, location, status, created_at, flash_batch_id')
+        .eq('worker_id', user.id)
+        .in('status', ['pending', 'accepted', 'in_progress'])
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      const clientIds = [...new Set((rows || []).map((r: any) => r.client_id).filter(Boolean))];
+      let nameMap: Record<string, string> = {};
+      if (clientIds.length > 0) {
+        const { data: profileRows } = await supabase.from('profiles').select('id, full_name').in('id', clientIds);
+        (profileRows || []).forEach((p: any) => { nameMap[p.id] = p.full_name || 'Client'; });
+      }
+
+      const mapped: BookingRow[] = (rows || []).map((r: any) => ({
+        id: r.id,
+        clientId: r.client_id,
+        clientName: nameMap[r.client_id] || 'Client',
+        job: (r.job_description || '').split('\n')[0].slice(0, 60),
+        status: r.status,
+        time: timeAgo(r.created_at),
+        location: r.location || '',
+        flashBatchId: r.flash_batch_id || null,
+      }));
+
+      setBookings(mapped);
+      setStats({
+        active: mapped.filter(b => b.status === 'accepted' || b.status === 'in_progress').length,
+        pending: mapped.filter(b => b.status === 'pending').length,
+        todayEarnings: 0, // no payments/earnings table wired yet
+      });
+    } catch (err) {
+      console.error('Failed to load bookings:', err);
+      setBookings([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id]);
+
+  useFocusEffect(useCallback(() => { loadBookings(); }, [loadBookings]));
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel('workstation_' + user.id)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'hire_requests', filter: `worker_id=eq.${user.id}`,
+      }, () => loadBookings())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, loadBookings]);
+
+  const respondToBooking = async (bookingId: string, newStatus: 'accepted' | 'declined') => {
+    if (actioningId) return;
+    setActioningId(bookingId);
+    try {
+      // The WHERE status='pending' condition makes this atomic against
+      // a race where two workers both tap Accept on the same Flash Job
+      // request at nearly the same time: Postgres processes each row's
+      // UPDATE individually, so whichever request lands first flips
+      // the row away from 'pending' — the second one then matches zero
+      // rows instead of succeeding twice.
+      const { data: updateResult, error } = await supabase
+        .from('hire_requests')
+        .update({ status: newStatus })
+        .eq('id', bookingId)
+        .eq('status', 'pending')
+        .select('id, flash_batch_id')
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (!updateResult) {
+        Alert.alert('No Longer Available', 'This request is no longer available — it may have already been taken.');
+        loadBookings();
+        return;
+      }
+
+      // If this was part of a Flash Job broadcast, the other workers'
+      // pending requests for the same job are no longer relevant now
+      // that someone has accepted — mark them expired instead of
+      // leaving them sitting as actionable "pending" requests forever.
+      if (newStatus === 'accepted' && updateResult.flash_batch_id) {
+        try {
+          await supabase
+            .from('hire_requests')
+            .update({ status: 'expired' })
+            .eq('flash_batch_id', updateResult.flash_batch_id)
+            .eq('status', 'pending')
+            .neq('id', bookingId);
+        } catch (expireErr) {
+          console.warn('Could not expire sibling flash job requests (non-fatal):', expireErr);
+        }
+      }
+
+      // Best-effort notification for the client — if the notifications
+      // table or its columns don't match, the booking status change
+      // itself has already succeeded, so this failing shouldn't block
+      // anything or show an error to the worker.
+      const booking = bookings.find(b => b.id === bookingId);
+      if (booking) {
+        try {
+          await supabase.from('notifications').insert({
+            user_id: booking.clientId,
+            type: 'booking',
+            message: `${profile?.full_name || 'The worker'} ${newStatus === 'accepted' ? 'accepted' : 'declined'} your booking request`,
+            from_user_id: user?.id,
+            booking_id: bookingId,
+            is_read: false,
+          });
+        } catch (notifErr) {
+          console.warn('Could not create notification (non-fatal):', notifErr);
+        }
+      }
+
+      loadBookings();
+    } catch (err) {
+      console.error('Failed to respond to booking:', err);
+      Alert.alert('Something Went Wrong', 'Could not update this booking. Please check your connection and try again.');
+    } finally {
+      setActioningId(null);
+    }
+  };
+
   const firstName = profile?.full_name?.split(' ')[0] || 'Worker';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
-  const getStatusStyle = (status) => {
-    if (status === 'accepted') return { bg: colors.primary + '20', text: colors.primary };
-    if (status === 'rejected') return { bg: '#EF444420', text: '#EF4444' };
+  const getStatusStyle = (status: string) => {
+    if (status === 'accepted' || status === 'in_progress') return { bg: colors.primary + '20', text: colors.primary };
+    if (status === 'declined' || status === 'cancelled') return { bg: '#EF444420', text: '#EF4444' };
     return { bg: '#F59E0B20', text: '#F59E0B' };
   };
+
+  const pendingBookings = bookings.filter(b => b.status === 'pending');
+  const activeBookings = bookings.filter(b => b.status === 'accepted' || b.status === 'in_progress');
 
   return (
     <View style={[st.container, { paddingTop: insets.top }]}>
@@ -62,18 +206,19 @@ export default function WorkstationScreen({ navigation }) {
           </View>
           <TouchableOpacity style={st.notifBtn} onPress={() => navigation.navigate('Notifications')} activeOpacity={0.7}>
             <Text style={st.notifIcon}>🔔</Text>
-            <View style={st.notifDot} />
           </TouchableOpacity>
         </Animated.View>
 
         <Animated.View style={{ opacity: contentOpacity, transform: [{ translateY: contentSlide }] }}>
 
-          {/* Stats Cards */}
+          {/* Stats Cards — real counts, computed from actual bookings.
+              Today's earnings stays at ₦0 until a payments table
+              exists to compute it from. */}
           <View style={st.statsRow}>
             {[
-              { value: '0', label: 'Active Jobs', icon: '📋', color: colors.primary },
-              { value: '₦0', label: 'Today', icon: '💰', color: colors.flash },
-              { value: '0', label: 'Pending', icon: '⏳', color: '#F59E0B' },
+              { value: stats.active.toString(), label: 'Active Jobs', icon: '📋', color: colors.primary },
+              { value: '₦' + stats.todayEarnings, label: 'Today', icon: '💰', color: colors.flash },
+              { value: stats.pending.toString(), label: 'Pending', icon: '⏳', color: '#F59E0B' },
             ].map((stat, i) => (
               <View key={i} style={st.statCard}>
                 <Text style={st.statIcon}>{stat.icon}</Text>
@@ -83,7 +228,8 @@ export default function WorkstationScreen({ navigation }) {
             ))}
           </View>
 
-          {/* Online toggle */}
+          {/* Online toggle — now actually controls presence broadcast,
+              not just local UI state */}
           <TouchableOpacity style={st.onlineCard} onPress={() => setIsOnline(!isOnline)} activeOpacity={0.85}>
             <View style={st.onlineLeft}>
               <View style={[st.onlineDot, !isOnline && { backgroundColor: colors.textMuted }]} />
@@ -97,78 +243,67 @@ export default function WorkstationScreen({ navigation }) {
             </View>
           </TouchableOpacity>
 
-          {/* Flash Jobs Nearby */}
-          <View style={st.sectionHeader}>
-            <Text style={st.sectionTitle}>⚡ Flash Jobs Nearby</Text>
-            <View style={st.flashCount}>
-              <Text style={st.flashCountText}>{MOCK_FLASH_JOBS.length}</Text>
-            </View>
-          </View>
-
-          {MOCK_FLASH_JOBS.map(job => (
-            <TouchableOpacity key={job.id} style={st.flashCard} activeOpacity={0.85}>
-              <View style={st.flashTop}>
-                <View style={st.flashBadge}>
-                  <Text style={st.flashBadgeIcon}>⚡</Text>
-                </View>
-                <View style={st.flashInfo}>
-                  <Text style={st.flashService}>{job.service}</Text>
-                  <Text style={st.flashLocation}>📍 {job.location} · {job.distance}</Text>
-                </View>
-                <Text style={st.flashTime}>{job.time}</Text>
-              </View>
-              <View style={st.flashBottom}>
-                <Text style={st.flashBudget}>{job.budget}</Text>
-                <TouchableOpacity style={st.acceptBtn} activeOpacity={0.85}>
-                  <Text style={st.acceptBtnText}>Accept</Text>
-                </TouchableOpacity>
-              </View>
-            </TouchableOpacity>
-          ))}
-
-          {/* Recent Bookings */}
-          <Text style={[st.sectionTitle, { paddingHorizontal: spacing.screenPadding, marginTop: 8, marginBottom: 10 }]}>
-            📋 Recent Bookings
+          {/* Pending Bookings */}
+          <Text style={[st.sectionTitle, { paddingHorizontal: spacing.screenPadding, marginBottom: 10 }]}>
+            📋 Booking Requests
           </Text>
 
-          {MOCK_BOOKINGS.length === 0 ? (
+          {loading ? (
+            <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
+          ) : bookings.length === 0 ? (
             <View style={st.emptyCard}>
               <Text style={st.emptyEmoji}>📋</Text>
               <Text style={st.emptyTitle}>No bookings yet</Text>
               <Text style={st.emptyDesc}>When clients book you, they will appear here</Text>
             </View>
           ) : (
-            MOCK_BOOKINGS.map(booking => {
+            [...pendingBookings, ...activeBookings].map(booking => {
               const status = getStatusStyle(booking.status);
               return (
-                <TouchableOpacity key={booking.id} style={st.bookingCard} activeOpacity={0.85}>
+                <View key={booking.id} style={st.bookingCard}>
                   <View style={st.bookingTop}>
                     <View style={[st.bookingAvatar, { backgroundColor: colors.primary }]}>
-                      <Text style={st.bookingAvatarText}>{booking.client[0]}</Text>
+                      <Text style={st.bookingAvatarText}>{booking.clientName[0]}</Text>
                     </View>
                     <View style={st.bookingInfo}>
-                      <Text style={st.bookingClient}>{booking.client}</Text>
-                      <Text style={st.bookingJob}>{booking.job}</Text>
+                      <Text style={st.bookingClient}>{booking.clientName}</Text>
+                      <Text style={st.bookingJob} numberOfLines={1}>{booking.job}</Text>
                       <Text style={st.bookingMeta}>📍 {booking.location} · {booking.time}</Text>
                     </View>
-                    <View>
-                      <View style={[st.statusBadge, { backgroundColor: status.bg }]}>
-                        <Text style={[st.statusText, { color: status.text }]}>{booking.status}</Text>
-                      </View>
-                      <Text style={st.bookingBudget}>{booking.budget}</Text>
+                    <View style={[st.statusBadge, { backgroundColor: status.bg }]}>
+                      <Text style={[st.statusText, { color: status.text }]}>{booking.status}</Text>
                     </View>
                   </View>
                   {booking.status === 'pending' && (
                     <View style={st.bookingActions}>
-                      <TouchableOpacity style={st.declineBtn} activeOpacity={0.85}>
-                        <Text style={st.declineBtnText}>Decline</Text>
+                      <TouchableOpacity
+                        style={st.declineBtn}
+                        onPress={() => respondToBooking(booking.id, 'declined')}
+                        disabled={actioningId === booking.id}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={st.declineBtnText}>{actioningId === booking.id ? '…' : 'Decline'}</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity style={[st.acceptBookBtn, { backgroundColor: colors.primary }]} activeOpacity={0.85}>
-                        <Text style={st.acceptBookBtnText}>Accept</Text>
+                      <TouchableOpacity
+                        style={[st.acceptBookBtn, { backgroundColor: colors.primary }]}
+                        onPress={() => respondToBooking(booking.id, 'accepted')}
+                        disabled={actioningId === booking.id}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={st.acceptBookBtnText}>{actioningId === booking.id ? '…' : 'Accept'}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
-                </TouchableOpacity>
+                  {(booking.status === 'accepted' || booking.status === 'in_progress') && (
+                    <TouchableOpacity
+                      style={[st.acceptBookBtn, { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, marginTop: 10 }]}
+                      onPress={() => navigation.navigate('Chat', { otherUserId: booking.clientId, otherUserName: booking.clientName, otherUserAvatar: null })}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[st.acceptBookBtnText, { color: colors.textPrimary }]}>💬 Message Client</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
               );
             })
           )}
@@ -181,8 +316,6 @@ export default function WorkstationScreen({ navigation }) {
             {[
               { icon: '🎬', label: 'Create Reel', color: colors.primary },
               { icon: '📦', label: 'Add Product', color: colors.flash },
-              { icon: '📊', label: 'Analytics', color: colors.info },
-              { icon: '💰', label: 'Earnings', color: '#16a34a' },
             ].map((action, i) => (
               <TouchableOpacity key={i} style={st.quickCard} onPress={() => { if (action.label === 'Create Reel') navigation.navigate('CreateReel'); if (action.label === 'Add Product') navigation.navigate('AddProduct'); }} activeOpacity={0.85}>
                 <View style={[st.quickIconBg, { backgroundColor: action.color + '15' }]}>
@@ -199,6 +332,14 @@ export default function WorkstationScreen({ navigation }) {
   );
 }
 
+function timeAgo(date: string): string {
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return 'just now';
+  if (seconds < 3600) return Math.floor(seconds / 60) + 'm ago';
+  if (seconds < 86400) return Math.floor(seconds / 3600) + 'h ago';
+  return Math.floor(seconds / 86400) + 'd ago';
+}
+
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bg },
 
@@ -207,7 +348,6 @@ const st = StyleSheet.create({
   headerSub: { fontSize: 12, color: colors.textMuted },
   notifBtn: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   notifIcon: { fontSize: 18 },
-  notifDot: { position: 'absolute', top: 8, right: 10, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.error, borderWidth: 1.5, borderColor: colors.bg },
 
   statsRow: { flexDirection: 'row', paddingHorizontal: spacing.screenPadding, gap: 10, marginBottom: 14 },
   statCard: { flex: 1, backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14, alignItems: 'center' },
@@ -223,23 +363,7 @@ const st = StyleSheet.create({
   toggleTrack: { width: 44, height: 24, borderRadius: 12, backgroundColor: colors.primary, padding: 2, justifyContent: 'center' },
   toggleThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff', alignSelf: 'flex-end' },
 
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.screenPadding, marginBottom: 10, gap: 8 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.textPrimary },
-  flashCount: { backgroundColor: '#F97316', width: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  flashCountText: { fontSize: 10, fontWeight: '700', color: '#fff' },
-
-  flashCard: { marginHorizontal: spacing.screenPadding, marginBottom: 10, backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: '#FFC10730', padding: 14 },
-  flashTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  flashBadge: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#FFC10720', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  flashBadgeIcon: { fontSize: 18 },
-  flashInfo: { flex: 1 },
-  flashService: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
-  flashLocation: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
-  flashTime: { fontSize: 10, color: colors.textMuted },
-  flashBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  flashBudget: { fontSize: 16, fontWeight: '700', color: colors.primary },
-  acceptBtn: { backgroundColor: colors.primary, paddingHorizontal: 20, paddingVertical: 9, borderRadius: 10 },
-  acceptBtnText: { fontSize: 12, fontWeight: '700', color: '#fff' },
 
   bookingCard: { marginHorizontal: spacing.screenPadding, marginBottom: 10, backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14 },
   bookingTop: { flexDirection: 'row', alignItems: 'flex-start' },
@@ -249,7 +373,6 @@ const st = StyleSheet.create({
   bookingClient: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 2 },
   bookingJob: { fontSize: 12, color: colors.textSecondary, marginBottom: 3 },
   bookingMeta: { fontSize: 10, color: colors.textMuted },
-  bookingBudget: { fontSize: 13, fontWeight: '700', color: colors.primary, marginTop: 6, textAlign: 'right' },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
   statusText: { fontSize: 9, fontWeight: '600' },
   bookingActions: { flexDirection: 'row', gap: 10, marginTop: 12 },

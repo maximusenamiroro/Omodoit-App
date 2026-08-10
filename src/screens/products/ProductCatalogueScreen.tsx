@@ -1,30 +1,42 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Platform, Dimensions, Image,
+  Animated, StatusBar, Platform, Dimensions, Image, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import { supabase } from '../../api/supabase';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PRODUCT_W = (SCREEN_W - spacing.screenPadding * 2 - 12) / 2;
 
-const MOCK_PRODUCTS = [
-  { id: '1', title: 'AC Servicing', price: '₦12,000', seller: 'John A.', category: 'Service', color: '#16a34a' },
-  { id: '2', title: 'Hair Braiding', price: '₦5,000', seller: 'Blessing E.', category: 'Beauty', color: '#D946EF' },
-  { id: '3', title: 'Phone Screen Fix', price: '₦8,000', seller: 'Tunde B.', category: 'Tech', color: '#06B6D4' },
-  { id: '4', title: 'Jollof Rice Tray', price: '₦3,500', seller: 'Chidinma O.', category: 'Food', color: '#F97316' },
-  { id: '5', title: 'Generator Repair', price: '₦15,000', seller: 'Emeka N.', category: 'Handwork', color: '#16a34a' },
-  { id: '6', title: 'Wedding Makeup', price: '₦25,000', seller: 'Grace U.', category: 'Beauty', color: '#D946EF' },
-  { id: '7', title: 'House Painting', price: '₦45,000', seller: 'David O.', category: 'Handwork', color: '#EAB308' },
-  { id: '8', title: 'Laptop Repair', price: '₦10,000', seller: 'Musa I.', category: 'Tech', color: '#6366F1' },
-];
+// Matches AddProductScreen's category list exactly, so filtering here
+// always lines up with what a worker could have actually chosen when
+// publishing — previously this used a different, mismatched list
+// ('Service', 'Beauty', 'Tech', 'Food', 'Handwork') that didn't match
+// any category a product could actually be saved under.
+const FILTERS = ['All', 'Service', 'Physical Product', 'Digital Product', 'Consultation', 'Repair', 'Installation', 'Training', 'Other'];
 
-const FILTERS = ['All', 'Service', 'Beauty', 'Tech', 'Food', 'Handwork'];
+const CARD_COLORS = ['#16a34a', '#D946EF', '#06B6D4', '#F97316', '#EAB308', '#6366F1', '#3B82F6', '#8B5CF6'];
+const colorForId = (id: string) => CARD_COLORS[Math.abs(id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % CARD_COLORS.length];
 
-export default function ProductCatalogueScreen({ navigation }) {
+interface ProductRow {
+  id: string;
+  title: string;
+  price: number | null;
+  category: string;
+  imageUrl: string | null;
+  sellerName: string;
+  workerId: string;
+  description: string | null;
+}
+
+export default function ProductCatalogueScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const [activeFilter, setActiveFilter] = useState('All');
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const gridOpacity = useRef(new Animated.Value(0)).current;
@@ -36,7 +48,47 @@ export default function ProductCatalogueScreen({ navigation }) {
     ]).start();
   }, []);
 
-  const filtered = activeFilter === 'All' ? MOCK_PRODUCTS : MOCK_PRODUCTS.filter(p => p.category === activeFilter);
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    try {
+      let query = supabase
+        .from('products')
+        .select('id, title, category, price, image_url, description, worker_id')
+        .order('created_at', { ascending: false });
+
+      if (activeFilter !== 'All') {
+        query = query.eq('category', activeFilter);
+      }
+
+      const { data: rows, error } = await query;
+      if (error) throw error;
+
+      const workerIds = [...new Set((rows || []).map((p: any) => p.worker_id).filter(Boolean))];
+      let nameMap: Record<string, string> = {};
+      if (workerIds.length > 0) {
+        const { data: profileRows } = await supabase.from('profiles').select('id, full_name, business_name').in('id', workerIds);
+        (profileRows || []).forEach((p: any) => { nameMap[p.id] = p.business_name || p.full_name || 'Seller'; });
+      }
+
+      setProducts((rows || []).map((p: any) => ({
+        id: p.id,
+        title: p.title,
+        price: p.price,
+        category: p.category,
+        imageUrl: p.image_url,
+        sellerName: nameMap[p.worker_id] || 'Seller',
+        workerId: p.worker_id,
+        description: p.description,
+      })));
+    } catch (err) {
+      console.error('Failed to load products:', err);
+      setProducts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeFilter]);
+
+  useFocusEffect(useCallback(() => { loadProducts(); }, [loadProducts]));
 
   return (
     <View style={[st.container, { paddingTop: insets.top }]}>
@@ -50,7 +102,6 @@ export default function ProductCatalogueScreen({ navigation }) {
         <View style={{ width: 36 }} />
       </Animated.View>
 
-      {/* Filters */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.filterScroll}>
         {FILTERS.map(f => (
           <TouchableOpacity key={f} style={[st.filterChip, activeFilter === f && st.filterChipActive]} onPress={() => setActiveFilter(f)} activeOpacity={0.85}>
@@ -59,23 +110,46 @@ export default function ProductCatalogueScreen({ navigation }) {
         ))}
       </ScrollView>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}>
-        <Animated.View style={[st.grid, { opacity: gridOpacity }]}>
-          {filtered.map(product => (
-            <TouchableOpacity key={product.id} style={st.productCard}
-              onPress={() => navigation.navigate('ProductDetail', { product })} activeOpacity={0.85}>
-              <View style={[st.productThumb, { backgroundColor: product.color + '15' }]}>
-                <Text style={st.productEmoji}>📦</Text>
-              </View>
-              <View style={st.productInfo}>
-                <Text style={st.productTitle} numberOfLines={1}>{product.title}</Text>
-                <Text style={st.productSeller}>@{product.seller}</Text>
-                <Text style={[st.productPrice, { color: product.color }]}>{product.price}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
-        </Animated.View>
-      </ScrollView>
+      {loading ? (
+        <View style={st.loadingBox}>
+          <ActivityIndicator color={colors.primary} />
+        </View>
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}>
+          {products.length === 0 ? (
+            <View style={st.emptyBox}>
+              <Text style={st.emptyEmoji}>📦</Text>
+              <Text style={st.emptyTitle}>No products yet</Text>
+              <Text style={st.emptySub}>Check back soon, or try a different filter.</Text>
+            </View>
+          ) : (
+            <Animated.View style={[st.grid, { opacity: gridOpacity }]}>
+              {products.map(product => {
+                const accent = colorForId(product.id);
+                return (
+                  <TouchableOpacity key={product.id} style={st.productCard}
+                    onPress={() => navigation.navigate('ProductDetail', { product: { ...product, color: accent } })} activeOpacity={0.85}>
+                    <View style={[st.productThumb, { backgroundColor: accent + '15' }]}>
+                      {product.imageUrl ? (
+                        <Image source={{ uri: product.imageUrl }} style={st.productImg} />
+                      ) : (
+                        <Text style={st.productEmoji}>📦</Text>
+                      )}
+                    </View>
+                    <View style={st.productInfo}>
+                      <Text style={st.productTitle} numberOfLines={1}>{product.title}</Text>
+                      <Text style={st.productSeller}>@{product.sellerName}</Text>
+                      <Text style={[st.productPrice, { color: accent }]}>
+                        {product.price != null ? `₦${product.price.toLocaleString()}` : 'Contact for price'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </Animated.View>
+          )}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -93,9 +167,16 @@ const st = StyleSheet.create({
   filterText: { fontSize: 12, fontWeight: '500', color: colors.textSecondary },
   filterTextActive: { color: '#fff', fontWeight: '700' },
 
+  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyBox: { alignItems: 'center', paddingVertical: 60, paddingHorizontal: 30 },
+  emptyEmoji: { fontSize: 40, marginBottom: 12, opacity: 0.4 },
+  emptyTitle: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginBottom: 6 },
+  emptySub: { fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.screenPadding, gap: 12 },
   productCard: { width: PRODUCT_W, backgroundColor: colors.bgCard, borderRadius: 16, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   productThumb: { height: 120, alignItems: 'center', justifyContent: 'center' },
+  productImg: { width: '100%', height: '100%' },
   productEmoji: { fontSize: 36, opacity: 0.6 },
   productInfo: { padding: 12 },
   productTitle: { fontSize: 13, fontWeight: '700', color: colors.textPrimary, marginBottom: 3 },

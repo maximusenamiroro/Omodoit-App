@@ -1,10 +1,14 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Platform,
+  Animated, StatusBar, Platform, ActivityIndicator, Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { colors, spacing } from '../../theme';
+import { supabase } from '../../api/supabase';
+
+const { width: SCREEN_W } = Dimensions.get('window');
+const REEL_W = (SCREEN_W - spacing.screenPadding * 2 - 8) / 3;
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(' ');
@@ -12,16 +16,28 @@ const getInitials = (name: string): string => {
   return parts[0][0];
 };
 
-const MOCK_REVIEWS = [
-  { id: '1', name: 'Sarah A.', rating: 5, text: 'Excellent work! Came on time and fixed everything quickly.', date: '2 weeks ago' },
-  { id: '2', name: 'Michael O.', rating: 5, text: 'Very professional. Would definitely hire again.', date: '1 month ago' },
-  { id: '3', name: 'Fatima H.', rating: 4, text: 'Good job overall. A bit late but quality was great.', date: '2 months ago' },
-];
+interface ReviewRow {
+  id: string;
+  name: string;
+  rating: number;
+  text: string;
+  date: string;
+}
+
+interface ReelRow {
+  id: string;
+  likes: number;
+}
 
 export default function WorkerPublicProfileScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { worker, color, subcategoryName } = route.params;
   const accentColor = color || colors.primary;
+
+  const [reviews, setReviews] = useState<ReviewRow[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [reels, setReels] = useState<ReelRow[]>([]);
+  const [reelsLoading, setReelsLoading] = useState(true);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerScale = useRef(new Animated.Value(0.95)).current;
@@ -40,6 +56,73 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
       ]),
     ]).start();
   }, []);
+
+  // Real reviews for this worker. Degrades gracefully to an empty list
+  // if the reviews table/columns don't match what's queried here,
+  // rather than crashing the screen — same defensive pattern used
+  // throughout, since this app doesn't have live schema introspection
+  // available while wiring this up.
+  useEffect(() => {
+    const fetchReviews = async () => {
+      setReviewsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('reviews')
+          .select('id, rating, comment, created_at, profiles(full_name)')
+          .eq('worker_id', worker.id)
+          .order('created_at', { ascending: false })
+          .limit(10);
+
+        if (error) throw error;
+
+        const mapped: ReviewRow[] = (data || []).map((r: any) => ({
+          id: r.id,
+          name: r.profiles?.full_name || 'A client',
+          rating: r.rating || 0,
+          text: r.comment || '',
+          date: r.created_at ? new Date(r.created_at).toLocaleDateString('en-NG', { month: 'short', day: 'numeric', year: 'numeric' }) : '',
+        }));
+        setReviews(mapped);
+      } catch (err) {
+        console.warn('Could not load reviews (non-fatal):', err);
+        setReviews([]);
+      } finally {
+        setReviewsLoading(false);
+      }
+    };
+
+    fetchReviews();
+  }, [worker.id]);
+
+  // Real reels posted by this worker — lets a client see actual work
+  // before booking, not just a rating number.
+  useEffect(() => {
+    const fetchReels = async () => {
+      setReelsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('reels')
+          .select('id, likes')
+          .eq('user_id', worker.id)
+          .order('created_at', { ascending: false })
+          .limit(9);
+
+        if (error) throw error;
+        setReels((data || []).map((r: any) => ({ id: r.id, likes: r.likes || 0 })));
+      } catch (err) {
+        console.warn('Could not load reels (non-fatal):', err);
+        setReels([]);
+      } finally {
+        setReelsLoading(false);
+      }
+    };
+
+    fetchReels();
+  }, [worker.id]);
+
+  const goToChat = () => {
+    navigation.navigate('Chat', { otherUserId: worker.id, otherUserName: worker.name, otherUserAvatar: null });
+  };
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -67,8 +150,8 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
 
           <View style={styles.ratingRow}>
             <Text style={styles.ratingStar}>⭐</Text>
-            <Text style={styles.ratingValue}>{worker.rating}</Text>
-            <Text style={styles.ratingReviews}>({worker.reviews} reviews)</Text>
+            <Text style={styles.ratingValue}>{worker.rating > 0 ? worker.rating.toFixed(1) : '—'}</Text>
+            <Text style={styles.ratingReviews}>({worker.reviews} review{worker.reviews === 1 ? '' : 's'})</Text>
           </View>
 
           <View style={styles.badgesRow}>
@@ -95,15 +178,43 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
             </View>
           </View>
 
-          {/* Stats */}
+          {/* Reels — real work, so a client can see what they're
+              actually booking before committing */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Reels</Text>
+            {reelsLoading ? (
+              <ActivityIndicator color={accentColor} style={{ marginVertical: 20 }} />
+            ) : reels.length === 0 ? (
+              <View style={styles.sectionCard}>
+                <Text style={styles.bioText}>No reels posted yet.</Text>
+              </View>
+            ) : (
+              <View style={styles.reelsGrid}>
+                {reels.map(reel => (
+                  <TouchableOpacity key={reel.id} style={styles.reelCard} activeOpacity={0.85}>
+                    <View style={styles.reelThumb}>
+                      <Text style={styles.reelPlayIcon}>▶</Text>
+                    </View>
+                    <View style={styles.reelOverlay}>
+                      <Text style={styles.reelStatIcon}>❤</Text>
+                      <Text style={styles.reelStatText}>{reel.likes}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Stats — only real, computed numbers. Previously included
+              fabricated "98% Response" / "< 1hr Avg Time" figures that
+              weren't backed by any actual data. */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Stats</Text>
             <View style={styles.statsRow}>
               {[
+                { value: reels.length.toString(), label: 'Reels', color: colors.primary },
                 { value: worker.reviews.toString(), label: 'Reviews', color: colors.flash },
-                { value: worker.rating.toString(), label: 'Rating', color: accentColor },
-                { value: '98%', label: 'Response', color: colors.primary },
-                { value: '< 1hr', label: 'Avg Time', color: colors.info },
+                { value: worker.rating > 0 ? worker.rating.toFixed(1) : '—', label: 'Rating', color: accentColor },
               ].map((stat, i) => (
                 <View key={i} style={styles.statItem}>
                   <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
@@ -117,34 +228,41 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Reviews</Text>
-              <TouchableOpacity><Text style={styles.seeAll}>See all →</Text></TouchableOpacity>
             </View>
-            {MOCK_REVIEWS.map(review => (
-              <View key={review.id} style={styles.reviewCard}>
-                <View style={styles.reviewTop}>
-                  <View style={styles.reviewAvatarSmall}>
-                    <Text style={styles.reviewAvatarText}>{review.name[0]}</Text>
-                  </View>
-                  <View style={styles.reviewInfo}>
-                    <Text style={styles.reviewName}>{review.name}</Text>
-                    <Text style={styles.reviewDate}>{review.date}</Text>
-                  </View>
-                  <View style={styles.reviewStars}>
-                    {Array.from({ length: review.rating }, (_, i) => (
-                      <Text key={i} style={styles.reviewStarIcon}>⭐</Text>
-                    ))}
-                  </View>
-                </View>
-                <Text style={styles.reviewText}>{review.text}</Text>
+            {reviewsLoading ? (
+              <ActivityIndicator color={accentColor} style={{ marginVertical: 20 }} />
+            ) : reviews.length === 0 ? (
+              <View style={styles.sectionCard}>
+                <Text style={styles.bioText}>No reviews yet. Be the first to book and leave one!</Text>
               </View>
-            ))}
+            ) : (
+              reviews.map(review => (
+                <View key={review.id} style={styles.reviewCard}>
+                  <View style={styles.reviewTop}>
+                    <View style={styles.reviewAvatarSmall}>
+                      <Text style={styles.reviewAvatarText}>{review.name[0]}</Text>
+                    </View>
+                    <View style={styles.reviewInfo}>
+                      <Text style={styles.reviewName}>{review.name}</Text>
+                      <Text style={styles.reviewDate}>{review.date}</Text>
+                    </View>
+                    <View style={styles.reviewStars}>
+                      {Array.from({ length: review.rating }, (_, i) => (
+                        <Text key={i} style={styles.reviewStarIcon}>⭐</Text>
+                      ))}
+                    </View>
+                  </View>
+                  <Text style={styles.reviewText}>{review.text}</Text>
+                </View>
+              ))
+            )}
           </View>
         </Animated.View>
       </ScrollView>
 
       {/* Bottom action bar */}
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={styles.msgActionBtn} activeOpacity={0.85}>
+        <TouchableOpacity style={styles.msgActionBtn} onPress={goToChat} activeOpacity={0.85}>
           <Text style={styles.msgActionIcon}>💬</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -191,9 +309,16 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: spacing.screenPadding, marginBottom: 20 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.textPrimary, marginBottom: 10 },
-  seeAll: { fontSize: 12, fontWeight: '600', color: colors.client },
   sectionCard: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 16 },
   bioText: { fontSize: 13, color: colors.textSecondary, lineHeight: 20 },
+
+  reelsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  reelCard: { width: REEL_W, aspectRatio: 9 / 16, backgroundColor: colors.bgCard, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
+  reelThumb: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
+  reelPlayIcon: { fontSize: 20, color: colors.white, opacity: 0.5 },
+  reelOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.6)' },
+  reelStatIcon: { fontSize: 10, color: colors.white },
+  reelStatText: { fontSize: 10, color: colors.white, fontWeight: '600' },
 
   statsRow: { flexDirection: 'row', backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14 },
   statItem: { flex: 1, alignItems: 'center' },

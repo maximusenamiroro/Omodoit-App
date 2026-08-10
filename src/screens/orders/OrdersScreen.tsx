@@ -1,11 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
-  Animated, StatusBar, Platform,
+  Animated, StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
+import { supabase } from '../../api/supabase';
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(' ');
@@ -15,14 +17,13 @@ const getInitials = (name: string): string => {
 
 type TabKey = 'all' | 'active' | 'completed' | 'cancelled';
 
-interface Order {
+interface OrderRow {
   id: string;
-  workerName: string;
+  otherPartyId: string;
+  otherPartyName: string;
   service: string;
-  status: 'pending' | 'accepted' | 'in_progress' | 'completed' | 'cancelled';
+  status: string;
   date: string;
-  amount: string | null;
-  type: 'booking' | 'order';
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -31,23 +32,20 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   in_progress: { label: 'In Progress', color: '#16a34a', bg: '#16a34a15' },
   completed: { label: 'Completed', color: '#06B6D4', bg: '#06B6D415' },
   cancelled: { label: 'Cancelled', color: '#EF4444', bg: '#EF444415' },
+  declined: { label: 'Declined', color: '#EF4444', bg: '#EF444415' },
+  expired: { label: 'Taken by Another Worker', color: '#9CA3AF', bg: '#9CA3AF15' },
 };
 
-const MOCK_ORDERS: Order[] = [
-  { id: '1', workerName: 'John Adewale', service: 'Electrical Repair', status: 'in_progress', date: '2026-08-02T10:00:00Z', amount: '₦15,000', type: 'booking' },
-  { id: '2', workerName: 'Chidinma Okafor', service: 'Catering — 50 guests', status: 'accepted', date: '2026-08-05T14:00:00Z', amount: '₦45,000', type: 'booking' },
-  { id: '3', workerName: 'Blessing Eze', service: 'Bridal Makeup', status: 'pending', date: '2026-08-10T08:00:00Z', amount: null, type: 'booking' },
-  { id: '4', workerName: 'Emeka Nwosu', service: 'Kitchen Sink Repair', status: 'completed', date: '2026-07-28T11:00:00Z', amount: '₦8,000', type: 'booking' },
-  { id: '5', workerName: 'Tunde Bakare', service: 'AC Servicing', status: 'completed', date: '2026-07-25T09:00:00Z', amount: '₦12,000', type: 'booking' },
-  { id: '6', workerName: 'David Okonkwo', service: 'Phone Screen Replacement', status: 'cancelled', date: '2026-07-20T16:00:00Z', amount: '₦5,000', type: 'order' },
-];
+const ACTIVE_STATUSES = ['pending', 'accepted', 'in_progress'];
 
 export default function OrdersScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { role } = useAuth();
+  const { user, role } = useAuth();
   const accentColor = role === 'client' ? colors.client : colors.primary;
 
   const [activeTab, setActiveTab] = useState<TabKey>('all');
+  const [orders, setOrders] = useState<OrderRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const listOpacity = useRef(new Animated.Value(0)).current;
 
@@ -58,36 +56,117 @@ export default function OrdersScreen({ navigation }: any) {
     ]).start();
   }, []);
 
-  const filteredOrders = MOCK_ORDERS.filter(order => {
+  const loadOrders = useCallback(async () => {
+    if (!user?.id || !role) return;
+    setLoading(true);
+    try {
+      const column = role === 'client' ? 'client_id' : 'worker_id';
+      let query = supabase
+        .from('hire_requests')
+        .select('id, client_id, worker_id, job_description, location, status, created_at')
+        .eq(column, user.id)
+        .order('created_at', { ascending: false });
+
+      // A single Flash Job creates one request per matching worker, so
+      // a client would otherwise see a pile of near-duplicate 'expired'
+      // entries once someone else accepts. A worker only ever has
+      // their own single row, where 'expired' is meaningful (someone
+      // else responded first) rather than noise, so only hide it here
+      // for the client view.
+      if (role === 'client') {
+        query = query.neq('status', 'expired');
+      }
+
+      const { data: rows, error } = await query;
+
+      if (error) throw error;
+
+      const otherIdColumn = role === 'client' ? 'worker_id' : 'client_id';
+      const otherIds = [...new Set((rows || []).map((r: any) => r[otherIdColumn]).filter(Boolean))];
+
+      let nameMap: Record<string, string> = {};
+      if (otherIds.length > 0) {
+        const { data: profileRows } = await supabase
+          .from('profiles')
+          .select('id, full_name, business_name')
+          .in('id', otherIds);
+        (profileRows || []).forEach((p: any) => {
+          nameMap[p.id] = p.full_name || p.business_name || 'User';
+        });
+      }
+
+      const mapped: OrderRow[] = (rows || []).map((r: any) => ({
+        id: r.id,
+        otherPartyId: r[otherIdColumn],
+        otherPartyName: nameMap[r[otherIdColumn]] || 'User',
+        service: (r.job_description || '').split('\n')[0].slice(0, 60),
+        status: r.status || 'pending',
+        date: r.created_at,
+      }));
+
+      setOrders(mapped);
+    } catch (err) {
+      console.error('Failed to load orders:', err);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.id, role]);
+
+  // Reload every time this screen comes into focus (e.g. returning
+  // from HireWorker after submitting a new booking), plus a live
+  // realtime subscription so status changes from the other party
+  // (worker accepting, etc.) appear instantly without needing to
+  // leave and re-enter the screen.
+  useFocusEffect(
+    useCallback(() => {
+      loadOrders();
+    }, [loadOrders])
+  );
+
+  useEffect(() => {
+    if (!user?.id || !role) return;
+    const column = role === 'client' ? 'client_id' : 'worker_id';
+    const channel = supabase
+      .channel('orders_' + user.id)
+      .on('postgres_changes', {
+        event: '*', schema: 'public', table: 'hire_requests', filter: `${column}=eq.${user.id}`,
+      }, () => loadOrders())
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id, role, loadOrders]);
+
+  const filteredOrders = orders.filter(order => {
     if (activeTab === 'all') return true;
-    if (activeTab === 'active') return ['pending', 'accepted', 'in_progress'].includes(order.status);
+    if (activeTab === 'active') return ACTIVE_STATUSES.includes(order.status);
     if (activeTab === 'completed') return order.status === 'completed';
-    if (activeTab === 'cancelled') return order.status === 'cancelled';
+    if (activeTab === 'cancelled') return order.status === 'cancelled' || order.status === 'declined' || order.status === 'expired';
     return true;
   });
 
   const tabs: { key: TabKey; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: MOCK_ORDERS.length },
-    { key: 'active', label: 'Active', count: MOCK_ORDERS.filter(o => ['pending', 'accepted', 'in_progress'].includes(o.status)).length },
-    { key: 'completed', label: 'Done', count: MOCK_ORDERS.filter(o => o.status === 'completed').length },
-    { key: 'cancelled', label: 'Cancelled', count: MOCK_ORDERS.filter(o => o.status === 'cancelled').length },
+    { key: 'all', label: 'All', count: orders.length },
+    { key: 'active', label: 'Active', count: orders.filter(o => ACTIVE_STATUSES.includes(o.status)).length },
+    { key: 'completed', label: 'Done', count: orders.filter(o => o.status === 'completed').length },
+    { key: 'cancelled', label: 'Cancelled', count: orders.filter(o => o.status === 'cancelled' || o.status === 'declined' || o.status === 'expired').length },
   ];
 
-  const renderOrder = ({ item }: { item: Order }) => {
+  const renderOrder = ({ item }: { item: OrderRow }) => {
     const status = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
     const orderDate = new Date(item.date);
     const dateStr = orderDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const timeStr = orderDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 
     return (
-      <TouchableOpacity style={styles.orderCard} activeOpacity={0.85}>
+      <View style={styles.orderCard}>
         <View style={styles.orderTop}>
           <View style={[styles.orderAvatar, { backgroundColor: accentColor }]}>
-            <Text style={styles.orderAvatarText}>{getInitials(item.workerName)}</Text>
+            <Text style={styles.orderAvatarText}>{getInitials(item.otherPartyName)}</Text>
           </View>
           <View style={styles.orderInfo}>
-            <Text style={styles.orderWorker}>{item.workerName}</Text>
-            <Text style={styles.orderService}>{item.service}</Text>
+            <Text style={styles.orderWorker}>{item.otherPartyName}</Text>
+            <Text style={styles.orderService} numberOfLines={1}>{item.service}</Text>
             <View style={styles.orderDateRow}>
               <Text style={styles.orderDate}>📅 {dateStr} at {timeStr}</Text>
             </View>
@@ -97,28 +176,25 @@ export default function OrdersScreen({ navigation }: any) {
           </View>
         </View>
 
-        {/* Bottom row */}
-        <View style={styles.orderBottom}>
-          <Text style={styles.orderType}>
-            {item.type === 'booking' ? '📋 Booking' : '📦 Order'}
-          </Text>
-          {item.amount && (
-            <Text style={[styles.orderAmount, { color: accentColor }]}>{item.amount}</Text>
-          )}
-        </View>
-
-        {/* Action buttons based on status */}
-        {item.status === 'in_progress' && (
-          <TouchableOpacity style={[styles.trackBtn, { backgroundColor: accentColor }]} onPress={() => navigation.navigate('Tracking', { workerName: item.workerName, service: item.service })} activeOpacity={0.85}>
+        {(item.status === 'accepted' || item.status === 'in_progress') && role === 'client' && (
+          <TouchableOpacity
+            style={[styles.trackBtn, { backgroundColor: accentColor }]}
+            onPress={() => navigation.navigate('Tracking', { bookingId: item.id, workerId: item.otherPartyId, workerName: item.otherPartyName, service: item.service })}
+            activeOpacity={0.85}
+          >
             <Text style={styles.trackBtnText}>📍 Track Worker</Text>
           </TouchableOpacity>
         )}
-        {item.status === 'completed' && (
-          <TouchableOpacity style={styles.reviewBtn} activeOpacity={0.85}>
+        {item.status === 'completed' && role === 'client' && (
+          <TouchableOpacity
+            style={styles.reviewBtn}
+            onPress={() => navigation.navigate('LeaveReview', { workerId: item.otherPartyId, workerName: item.otherPartyName })}
+            activeOpacity={0.85}
+          >
             <Text style={styles.reviewBtnText}>⭐ Leave Review</Text>
           </TouchableOpacity>
         )}
-      </TouchableOpacity>
+      </View>
     );
   };
 
@@ -134,7 +210,6 @@ export default function OrdersScreen({ navigation }: any) {
         <View style={{ width: 36 }} />
       </Animated.View>
 
-      {/* Tabs */}
       <Animated.View style={[styles.tabRow, { opacity: headerOpacity }]}>
         {tabs.map(tab => (
           <TouchableOpacity
@@ -153,27 +228,33 @@ export default function OrdersScreen({ navigation }: any) {
         ))}
       </Animated.View>
 
-      <Animated.View style={{ flex: 1, opacity: listOpacity }}>
-        {filteredOrders.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyEmoji}>📋</Text>
-            <Text style={styles.emptyTitle}>No {activeTab === 'all' ? '' : activeTab + ' '}orders</Text>
-            <Text style={styles.emptyDesc}>
-              {role === 'client'
-                ? 'Book a worker to see your orders here'
-                : 'Accept bookings to see your orders here'}
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={filteredOrders}
-            renderItem={renderOrder}
-            keyExtractor={item => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ padding: spacing.screenPadding, paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}
-          />
-        )}
-      </Animated.View>
+      {loading ? (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator color={accentColor} />
+        </View>
+      ) : (
+        <Animated.View style={{ flex: 1, opacity: listOpacity }}>
+          {filteredOrders.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyEmoji}>📋</Text>
+              <Text style={styles.emptyTitle}>No {activeTab === 'all' ? '' : activeTab + ' '}orders</Text>
+              <Text style={styles.emptyDesc}>
+                {role === 'client'
+                  ? 'Book a worker to see your orders here'
+                  : 'Accept bookings to see your orders here'}
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredOrders}
+              renderItem={renderOrder}
+              keyExtractor={item => item.id}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={{ padding: spacing.screenPadding, paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}
+            />
+          )}
+        </Animated.View>
+      )}
     </View>
   );
 }
@@ -207,6 +288,8 @@ const styles = StyleSheet.create({
   },
   tabCountText: { fontSize: 9, fontWeight: '700', color: colors.white },
 
+  loadingBox: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+
   orderCard: {
     backgroundColor: colors.bgCard, borderRadius: 16,
     borderWidth: 1, borderColor: colors.border, padding: 16, marginBottom: 12,
@@ -221,10 +304,6 @@ const styles = StyleSheet.create({
   orderDate: { fontSize: 11, color: colors.textMuted },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, borderWidth: 1 },
   statusText: { fontSize: 10, fontWeight: '600' },
-
-  orderBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  orderType: { fontSize: 11, color: colors.textMuted },
-  orderAmount: { fontSize: 15, fontWeight: '700' },
 
   trackBtn: {
     marginTop: 12, paddingVertical: 11, borderRadius: 12, alignItems: 'center',
