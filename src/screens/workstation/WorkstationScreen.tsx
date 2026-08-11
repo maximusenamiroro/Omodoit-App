@@ -9,6 +9,8 @@ import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { useBroadcastPresence } from '../../lib/presence';
+import { useBroadcastLocation } from '../../lib/tracking';
+import { respondToBookingRequest } from '../../lib/db';
 
 interface BookingRow {
   id: string;
@@ -34,6 +36,14 @@ export default function WorkstationScreen({ navigation }: any) {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState<string | null>(null);
+  const [sharingBookingId, setSharingBookingId] = useState<string | null>(null);
+  // Worker-side of live tracking — built and channel-ready since
+  // earlier this session, but nothing ever actually called this until
+  // now, so a client watching TrackingScreen would wait forever with
+  // no worker position ever arriving. A worker can only be en route to
+  // one job at a time, so this is deliberately single-booking rather
+  // than per-list-item (hooks can't be called inside a .map() anyway).
+  const { permissionDenied: locationPermissionDenied } = useBroadcastLocation(sharingBookingId, !!sharingBookingId);
   const [stats, setStats] = useState({ active: 0, pending: 0, todayEarnings: 0 });
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
@@ -98,6 +108,16 @@ export default function WorkstationScreen({ navigation }: any) {
   useFocusEffect(useCallback(() => { loadBookings(); }, [loadBookings]));
 
   useEffect(() => {
+    if (locationPermissionDenied) {
+      Alert.alert(
+        'Location Permission Needed',
+        'Enable location access in your phone settings to share your location with the client.'
+      );
+      setSharingBookingId(null);
+    }
+  }, [locationPermissionDenied]);
+
+  useEffect(() => {
     if (!user?.id) return;
     const channel = supabase
       .channel('workstation_' + user.id)
@@ -111,57 +131,58 @@ export default function WorkstationScreen({ navigation }: any) {
   const respondToBooking = async (bookingId: string, newStatus: 'accepted' | 'declined') => {
     if (actioningId) return;
     setActioningId(bookingId);
+
+    const booking = bookings.find(b => b.id === bookingId);
+    const result = await respondToBookingRequest(
+      bookingId, newStatus, booking?.clientId || '', profile?.full_name || '', user?.id || ''
+    );
+
+    if (!result.ok) {
+      if (result.reason === 'taken') {
+        Alert.alert('No Longer Available', 'This request is no longer available — it may have already been taken.');
+      } else {
+        console.error('Failed to respond to booking:', result.error);
+        Alert.alert('Something Went Wrong', 'Could not update this booking. Please check your connection and try again.');
+      }
+    }
+
+    loadBookings();
+    setActioningId(null);
+  };
+
+  // Nothing anywhere in the app could previously mark a job as done -
+  // accept/decline existed, but there was no way to transition
+  // accepted/in_progress into completed. That silently broke two
+  // things downstream: the "Completed" tab on Orders always stayed
+  // empty, and LeaveReviewScreen (only reachable from a completed
+  // booking) could never actually be reached by anyone.
+  const markJobComplete = async (bookingId: string) => {
+    if (actioningId) return;
+    setActioningId(bookingId);
     try {
-      // The WHERE status='pending' condition makes this atomic against
-      // a race where two workers both tap Accept on the same Flash Job
-      // request at nearly the same time: Postgres processes each row's
-      // UPDATE individually, so whichever request lands first flips
-      // the row away from 'pending' — the second one then matches zero
-      // rows instead of succeeding twice.
       const { data: updateResult, error } = await supabase
         .from('hire_requests')
-        .update({ status: newStatus })
+        .update({ status: 'completed' })
         .eq('id', bookingId)
-        .eq('status', 'pending')
-        .select('id, flash_batch_id')
+        .in('status', ['accepted', 'in_progress'])
+        .select('id')
         .maybeSingle();
 
       if (error) throw error;
 
       if (!updateResult) {
-        Alert.alert('No Longer Available', 'This request is no longer available — it may have already been taken.');
+        Alert.alert('Could Not Update', 'This booking may have already changed status.');
         loadBookings();
         return;
       }
 
-      // If this was part of a Flash Job broadcast, the other workers'
-      // pending requests for the same job are no longer relevant now
-      // that someone has accepted — mark them expired instead of
-      // leaving them sitting as actionable "pending" requests forever.
-      if (newStatus === 'accepted' && updateResult.flash_batch_id) {
-        try {
-          await supabase
-            .from('hire_requests')
-            .update({ status: 'expired' })
-            .eq('flash_batch_id', updateResult.flash_batch_id)
-            .eq('status', 'pending')
-            .neq('id', bookingId);
-        } catch (expireErr) {
-          console.warn('Could not expire sibling flash job requests (non-fatal):', expireErr);
-        }
-      }
-
-      // Best-effort notification for the client — if the notifications
-      // table or its columns don't match, the booking status change
-      // itself has already succeeded, so this failing shouldn't block
-      // anything or show an error to the worker.
       const booking = bookings.find(b => b.id === bookingId);
       if (booking) {
         try {
           await supabase.from('notifications').insert({
             user_id: booking.clientId,
             type: 'booking',
-            message: `${profile?.full_name || 'The worker'} ${newStatus === 'accepted' ? 'accepted' : 'declined'} your booking request`,
+            message: `${profile?.full_name || 'The worker'} marked your job as complete. You can now leave a review!`,
             from_user_id: user?.id,
             booking_id: bookingId,
             is_read: false,
@@ -173,7 +194,7 @@ export default function WorkstationScreen({ navigation }: any) {
 
       loadBookings();
     } catch (err) {
-      console.error('Failed to respond to booking:', err);
+      console.error('Failed to mark job complete:', err);
       Alert.alert('Something Went Wrong', 'Could not update this booking. Please check your connection and try again.');
     } finally {
       setActioningId(null);
@@ -295,13 +316,39 @@ export default function WorkstationScreen({ navigation }: any) {
                     </View>
                   )}
                   {(booking.status === 'accepted' || booking.status === 'in_progress') && (
-                    <TouchableOpacity
-                      style={[st.acceptBookBtn, { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, marginTop: 10 }]}
-                      onPress={() => navigation.navigate('Chat', { otherUserId: booking.clientId, otherUserName: booking.clientName, otherUserAvatar: null })}
-                      activeOpacity={0.85}
-                    >
-                      <Text style={[st.acceptBookBtnText, { color: colors.textPrimary }]}>💬 Message Client</Text>
-                    </TouchableOpacity>
+                    <View style={st.bookingActions}>
+                      <TouchableOpacity
+                        style={[st.acceptBookBtn, { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border }]}
+                        onPress={() => navigation.navigate('Chat', { otherUserId: booking.clientId, otherUserName: booking.clientName, otherUserAvatar: null })}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={[st.acceptBookBtnText, { color: colors.textPrimary }]}>💬 Message</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[st.acceptBookBtn, { backgroundColor: colors.bgCard, borderWidth: 1, borderColor: sharingBookingId === booking.id ? colors.primary + '50' : colors.border }]}
+                        onPress={() => setSharingBookingId(sharingBookingId === booking.id ? null : booking.id)}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={[st.acceptBookBtnText, { color: sharingBookingId === booking.id ? colors.primary : colors.textPrimary }]}>
+                          {sharingBookingId === booking.id ? '📍 Sharing…' : '📍 Share Location'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[st.acceptBookBtn, { backgroundColor: colors.primary }]}
+                        onPress={() => Alert.alert(
+                          'Mark as Complete',
+                          `Confirm that the job for ${booking.clientName} is finished? They'll be notified and able to leave a review.`,
+                          [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Mark Complete', onPress: () => { setSharingBookingId(prev => prev === booking.id ? null : prev); markJobComplete(booking.id); } },
+                          ]
+                        )}
+                        disabled={actioningId === booking.id}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={st.acceptBookBtnText}>{actioningId === booking.id ? '…' : '✓ Complete'}</Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
                 </View>
               );
@@ -312,12 +359,14 @@ export default function WorkstationScreen({ navigation }: any) {
           <Text style={[st.sectionTitle, { paddingHorizontal: spacing.screenPadding, marginTop: 8, marginBottom: 10 }]}>
             Quick Actions
           </Text>
-          <View style={st.quickActions}>
+          <View style={st.quickActionsGrid}>
             {[
-              { icon: '🎬', label: 'Create Reel', color: colors.primary },
-              { icon: '📦', label: 'Add Product', color: colors.flash },
+              { icon: '🎬', label: 'Create Reel', color: colors.primary, route: 'CreateReel' },
+              { icon: '📦', label: 'Add Product', color: colors.flash, route: 'AddProduct' },
+              { icon: '📊', label: 'Analytics', color: '#8B5CF6', route: 'Analytics' },
+              { icon: '💰', label: 'Earnings', color: '#06B6D4', route: 'Earnings' },
             ].map((action, i) => (
-              <TouchableOpacity key={i} style={st.quickCard} onPress={() => { if (action.label === 'Create Reel') navigation.navigate('CreateReel'); if (action.label === 'Add Product') navigation.navigate('AddProduct'); }} activeOpacity={0.85}>
+              <TouchableOpacity key={i} style={st.quickCardGrid} onPress={() => navigation.navigate(action.route)} activeOpacity={0.85}>
                 <View style={[st.quickIconBg, { backgroundColor: action.color + '15' }]}>
                   <Text style={st.quickIcon}>{action.icon}</Text>
                 </View>
@@ -383,6 +432,8 @@ const st = StyleSheet.create({
 
   quickActions: { flexDirection: 'row', paddingHorizontal: spacing.screenPadding, gap: 10, marginBottom: 20 },
   quickCard: { flex: 1, alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, paddingVertical: 16 },
+  quickActionsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.screenPadding, gap: 10, marginBottom: 20 },
+  quickCardGrid: { width: '47%', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, paddingVertical: 16 },
   quickIconBg: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   quickIcon: { fontSize: 16 },
   quickLabel: { fontSize: 10, fontWeight: '600', color: colors.textPrimary },

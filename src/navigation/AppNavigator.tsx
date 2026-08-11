@@ -1,9 +1,10 @@
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme';
+import { useIncomingCallListener } from '../lib/calling';
 import AuthNavigator from './AuthNavigator';
 import ClientNavigator from './ClientNavigator';
 import WorkerNavigator from './WorkerNavigator';
@@ -28,8 +29,11 @@ import AddProductScreen from '../screens/products/AddProductScreen';
 import CreateReelScreen from '../screens/reels/CreateReelScreen';
 import LeaveReviewScreen from '../screens/reviews/LeaveReviewScreen';
 import BankDetailsScreen from '../screens/bank/BankDetailsScreen';
+import AnalyticsScreen from '../screens/analytics/AnalyticsScreen';
+import EarningsScreen from '../screens/earnings/EarningsScreen';
 
 const Stack = createNativeStackNavigator();
+export const navigationRef = createNavigationContainerRef();
 
 // Rendered as an opaque overlay INSIDE the NavigationContainer instead
 // of replacing it. Replacing the container unmounts the whole navigation
@@ -56,8 +60,23 @@ export default function AppNavigator() {
   // itself a moment later.
   const showLoading = loading || (!!user && !role);
 
+  // Global — a call can arrive while the user is anywhere in the app,
+  // not just while a specific screen is open. Uses navigationRef
+  // rather than a screen's own navigation prop, since this listener
+  // isn't itself a screen.
+  useIncomingCallListener(user?.id, (payload) => {
+    if (navigationRef.isReady()) {
+      (navigationRef as any).navigate('IncomingCall', {
+        callId: payload.callId,
+        callerId: payload.callerId,
+        callerName: payload.callerName,
+        callerCategory: payload.callerCategory,
+      });
+    }
+  });
+
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false }}>
         {!user ? (
           <Stack.Screen name="Auth" component={AuthNavigator} options={{ animation: 'fade' }} />
@@ -78,6 +97,8 @@ export default function AppNavigator() {
         <Stack.Screen name="Tracking" component={TrackingScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
         <Stack.Screen name="LeaveReview" component={LeaveReviewScreen} options={{ animation: 'slide_from_bottom' }} />
         <Stack.Screen name="BankDetails" component={BankDetailsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="Analytics" component={AnalyticsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="Earnings" component={EarningsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="NewArrivals" component={NewArrivalsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Orders" component={OrdersScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
          <Stack.Screen name="OutgoingCall" component={OutgoingCallScreen} options={{ animation: 'fade', gestureEnabled: false, presentation: 'fullScreenModal' }} />

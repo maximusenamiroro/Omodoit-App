@@ -1,10 +1,12 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
   StatusBar, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
+import { useAuth } from '../../context/AuthContext';
+import { generateCallId, sendCallInvite, useCallResponseListener } from '../../lib/calling';
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(' ');
@@ -14,7 +16,11 @@ const getInitials = (name: string): string => {
 
 export default function OutgoingCallScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { workerName, workerCategory } = route.params;
+  const { user, profile } = useAuth();
+  const { workerName, workerCategory, workerId } = route.params;
+
+  const [callId] = useState(() => generateCallId());
+  const [status, setStatus] = useState<'ringing' | 'declined' | 'sending'>('sending');
 
   const pulse1 = useRef(new Animated.Value(1)).current;
   const pulse1Op = useRef(new Animated.Value(0.6)).current;
@@ -27,6 +33,35 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
   const dot3 = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const avatarScale = useRef(new Animated.Value(0.8)).current;
+
+  // Real signaling — waits for the callee to actually respond instead
+  // of blindly transitioning to InCall after a fixed timer regardless
+  // of whether anyone answered.
+  useCallResponseListener(callId, (response) => {
+    if (response === 'accepted') {
+      navigation.replace('InCall', { workerName, workerCategory, callId, isCaller: true });
+    } else {
+      setStatus('declined');
+      setTimeout(() => navigation.goBack(), 1500);
+    }
+  });
+
+  useEffect(() => {
+    if (!workerId) {
+      // Can't signal without knowing who to call — shouldn't happen
+      // since call sites always pass this, but fail safely rather
+      // than sit on a call that can never connect.
+      navigation.goBack();
+      return;
+    }
+
+    sendCallInvite(workerId, callId, user?.id || '', profile?.full_name || 'Someone', workerCategory || '')
+      .then(() => setStatus('ringing'))
+      .catch((err) => {
+        console.error('Failed to send call invite:', err);
+        navigation.goBack();
+      });
+  }, []);
 
   useEffect(() => {
     Animated.parallel([
@@ -66,10 +101,9 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
       ]),
     ])).start();
 
-    const timer = setTimeout(() => {
-      navigation.replace('InCall', { workerName, workerCategory });
-    }, 3000);
-    return () => clearTimeout(timer);
+    // No more auto-connect timer — the useCallResponseListener above
+    // is what actually transitions to InCall now, only once the
+    // callee has genuinely accepted.
   }, []);
 
   return (
@@ -77,12 +111,16 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <Animated.View style={[s.content, { opacity: contentOpacity }]}>
         <View style={[s.statusRow, { marginTop: insets.top + 60 }]}>
-          <Text style={s.callingText}>Calling</Text>
-          <View style={s.dotsRow}>
-            {[dot1, dot2, dot3].map((d, i) => (
-              <Animated.View key={i} style={[s.dot, { opacity: d }]} />
-            ))}
-          </View>
+          <Text style={s.callingText}>
+            {status === 'declined' ? 'Call Declined' : status === 'sending' ? 'Connecting…' : 'Calling'}
+          </Text>
+          {status === 'ringing' && (
+            <View style={s.dotsRow}>
+              {[dot1, dot2, dot3].map((d, i) => (
+                <Animated.View key={i} style={[s.dot, { opacity: d }]} />
+              ))}
+            </View>
+          )}
         </View>
 
         <View style={s.avatarSection}>
@@ -125,9 +163,6 @@ const s = StyleSheet.create({
   avatarText: { fontSize: 32, fontWeight: '700', color: colors.white },
   name: { fontSize: 24, fontWeight: '700', color: colors.white, marginBottom: 6 },
   category: { fontSize: 14, color: colors.white, opacity: 0.5, marginBottom: 20 },
-  encRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  encIcon: { fontSize: 12 },
-  encText: { fontSize: 11, color: colors.white, opacity: 0.3 },
   bottom: { alignItems: 'center', paddingTop: 20 },
   cancelBtn: { alignItems: 'center' },
   cancelInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '135deg' }], shadowColor: '#EF4444', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 },

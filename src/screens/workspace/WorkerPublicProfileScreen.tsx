@@ -267,7 +267,7 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.callActionBtn}
-          onPress={() => navigation.navigate('OutgoingCall', { workerName: worker.name, workerCategory: subcategoryName })}
+          onPress={() => navigation.navigate('OutgoingCall', { workerName: worker.name, workerCategory: subcategoryName, workerId: worker.id })}
           activeOpacity={0.85}
         >
           <Text style={styles.callActionIcon}>📞</Text>

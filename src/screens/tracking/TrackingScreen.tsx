@@ -79,7 +79,7 @@ export default function TrackingScreen({ navigation, route }: any) {
   }, [workerPos, clientPos]);
 
   const handleCall = () => {
-    navigation.navigate('OutgoingCall', { workerName, workerCategory: service });
+    navigation.navigate('OutgoingCall', { workerName, workerCategory: service, workerId });
   };
 
   const handleMessage = () => {

@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
-  StatusBar, Platform,
+  StatusBar, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
+import { useAgoraCall } from '../../lib/calling';
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(' ');
@@ -20,11 +21,12 @@ const formatDuration = (sec: number): string => {
 
 export default function InCallScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { workerName, workerCategory } = route.params;
+  const { workerName, workerCategory, callId, otherUserId } = route.params;
+
+  const { connected, remoteJoined, muted, speaker, toggleMute, toggleSpeaker, permissionDenied } =
+    useAgoraCall(callId || null, true);
 
   const [duration, setDuration] = useState(0);
-  const [muted, setMuted] = useState(false);
-  const [speaker, setSpeaker] = useState(false);
 
   const wave1 = useRef(new Animated.Value(0.3)).current;
   const wave2 = useRef(new Animated.Value(0.5)).current;
@@ -34,30 +36,58 @@ export default function InCallScreen({ navigation, route }: any) {
   const contentOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    if (permissionDenied) {
+      Alert.alert(
+        'Microphone Permission Needed',
+        'Enable microphone access in your phone settings to use voice calls.',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    }
+  }, [permissionDenied]);
+
+  useEffect(() => {
     Animated.timing(contentOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
 
-    const timer = setInterval(() => setDuration(p => p + 1), 1000);
+    // Duration only counts once the other person has actually joined
+    // the channel — before that there's nothing to time.
+    let timer: ReturnType<typeof setInterval> | null = null;
+    if (remoteJoined) {
+      timer = setInterval(() => setDuration(p => p + 1), 1000);
+    }
 
     const animW = (w: Animated.Value) => Animated.loop(Animated.sequence([
       Animated.timing(w, { toValue: Math.random() * 0.8 + 0.2, duration: 300 + Math.random() * 400, useNativeDriver: true }),
       Animated.timing(w, { toValue: Math.random() * 0.4 + 0.1, duration: 300 + Math.random() * 400, useNativeDriver: true }),
     ]));
 
-    [wave1, wave2, wave3, wave4, wave5].forEach(w => animW(w).start());
+    const animations = [wave1, wave2, wave3, wave4, wave5].map(w => animW(w));
+    if (remoteJoined) animations.forEach(a => a.start());
 
-    return () => clearInterval(timer);
-  }, []);
+    return () => { if (timer) clearInterval(timer); };
+  }, [remoteJoined]);
+
+  const handleEndCall = () => {
+    navigation.goBack();
+  };
+
+  const statusText = permissionDenied
+    ? 'Microphone unavailable'
+    : !connected
+      ? 'Connecting…'
+      : !remoteJoined
+        ? 'Waiting for other party…'
+        : 'Connected';
 
   return (
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <Animated.View style={[s.content, { opacity: contentOpacity }]}>
         <View style={[s.statusRow, { marginTop: insets.top + 40 }]}>
-          <View style={s.connDot} />
-          <Text style={s.connText}>Connected</Text>
+          <View style={[s.connDot, !remoteJoined && { backgroundColor: colors.textMuted }]} />
+          <Text style={[s.connText, !remoteJoined && { color: colors.textMuted }]}>{statusText}</Text>
         </View>
 
-        <Text style={s.timer}>{formatDuration(duration)}</Text>
+        {remoteJoined && <Text style={s.timer}>{formatDuration(duration)}</Text>}
 
         <View style={s.avatarSection}>
           <View style={s.avatarRing}>
@@ -68,41 +98,42 @@ export default function InCallScreen({ navigation, route }: any) {
         <Text style={s.name}>{workerName}</Text>
         <Text style={s.category}>{workerCategory || 'Worker'}</Text>
 
-        <View style={s.wavesRow}>
-          {[wave1, wave2, wave3, wave4, wave5].map((w, i) => (
-            <Animated.View key={i} style={[s.waveBar, { transform: [{ scaleY: w }] }, i === 2 && s.waveCenter]} />
-          ))}
-        </View>
-
-        <View style={s.encRow}>
-          <Text style={s.encIcon}>🔒</Text>
-          <Text style={s.encText}>End-to-end encrypted</Text>
-        </View>
+        {remoteJoined && (
+          <View style={s.wavesRow}>
+            {[wave1, wave2, wave3, wave4, wave5].map((w, i) => (
+              <Animated.View key={i} style={[s.waveBar, { transform: [{ scaleY: w }] }, i === 2 && s.waveCenter]} />
+            ))}
+          </View>
+        )}
       </Animated.View>
 
       <View style={[s.bottom, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 30 }]}>
         <View style={s.actionsRow}>
-          <TouchableOpacity style={s.actionBtn} onPress={() => setMuted(!muted)} activeOpacity={0.85}>
+          <TouchableOpacity style={s.actionBtn} onPress={toggleMute} activeOpacity={0.85}>
             <View style={[s.actionCircle, muted && s.actionCircleActive]}>
               <Text style={s.actionEmoji}>{muted ? '🔇' : '🎤'}</Text>
             </View>
             <Text style={[s.actionLabel, muted && s.actionLabelActive]}>{muted ? 'Unmute' : 'Mute'}</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={s.actionBtn} onPress={() => setSpeaker(!speaker)} activeOpacity={0.85}>
+          <TouchableOpacity style={s.actionBtn} onPress={toggleSpeaker} activeOpacity={0.85}>
             <View style={[s.actionCircle, speaker && s.actionCircleActive]}>
               <Text style={s.actionEmoji}>{speaker ? '🔊' : '🔈'}</Text>
             </View>
             <Text style={[s.actionLabel, speaker && s.actionLabelActive]}>Speaker</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={s.actionBtn} activeOpacity={0.85}>
+          <TouchableOpacity
+            style={s.actionBtn}
+            onPress={() => { if (otherUserId) navigation.navigate('Chat', { otherUserId, otherUserName: workerName, otherUserAvatar: null }); }}
+            activeOpacity={0.85}
+          >
             <View style={s.actionCircle}><Text style={s.actionEmoji}>💬</Text></View>
             <Text style={s.actionLabel}>Message</Text>
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={s.endBtn} onPress={() => navigation.goBack()} activeOpacity={0.85}>
+        <TouchableOpacity style={s.endBtn} onPress={handleEndCall} activeOpacity={0.85}>
           <View style={s.endInner}><Text style={s.endIcon}>📞</Text></View>
           <Text style={s.endLabel}>End Call</Text>
         </TouchableOpacity>
@@ -118,7 +149,7 @@ const s = StyleSheet.create({
   connDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
   connText: { fontSize: 13, fontWeight: '500', color: colors.primary },
   timer: { fontSize: 42, fontWeight: '200', color: colors.white, letterSpacing: 4, marginBottom: 40, fontVariant: ['tabular-nums'] },
-  avatarSection: { marginBottom: 24 },
+  avatarSection: { marginBottom: 24, marginTop: 20 },
   avatarRing: { width: 100, height: 100, borderRadius: 50, borderWidth: 2, borderColor: colors.primary + '30', alignItems: 'center', justifyContent: 'center' },
   avatar: { width: 88, height: 88, borderRadius: 44, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   avatarText: { fontSize: 32, fontWeight: '700', color: colors.white },
@@ -127,9 +158,6 @@ const s = StyleSheet.create({
   wavesRow: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 40, marginBottom: 20 },
   waveBar: { width: 4, height: 40, borderRadius: 2, backgroundColor: colors.primary + '60' },
   waveCenter: { backgroundColor: colors.primary + '90' },
-  encRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  encIcon: { fontSize: 12 },
-  encText: { fontSize: 11, color: colors.white, opacity: 0.25 },
   bottom: { alignItems: 'center', paddingTop: 10 },
   actionsRow: { flexDirection: 'row', gap: 30, marginBottom: 30 },
   actionBtn: { alignItems: 'center', width: 70 },

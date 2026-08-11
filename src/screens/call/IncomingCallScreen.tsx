@@ -1,10 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
   StatusBar, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
+import { sendCallResponse } from '../../lib/calling';
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(' ');
@@ -14,7 +15,8 @@ const getInitials = (name: string): string => {
 
 export default function IncomingCallScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { callerName, callerCategory } = route.params;
+  const { callId, callerId, callerName, callerCategory } = route.params;
+  const [responding, setResponding] = useState(false);
 
   const bounce = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
@@ -38,6 +40,30 @@ export default function IncomingCallScreen({ navigation, route }: any) {
     ])).start();
   }, []);
 
+  const handleDecline = async () => {
+    if (responding) return;
+    setResponding(true);
+    try {
+      await sendCallResponse(callId, 'declined');
+    } catch (err) {
+      console.warn('Failed to send decline response (non-fatal):', err);
+    }
+    navigation.goBack();
+  };
+
+  const handleAccept = async () => {
+    if (responding) return;
+    setResponding(true);
+    try {
+      await sendCallResponse(callId, 'accepted');
+    } catch (err) {
+      console.error('Failed to send accept response:', err);
+    }
+    navigation.replace('InCall', {
+      workerName: callerName, workerCategory: callerCategory, callId, isCaller: false, otherUserId: callerId,
+    });
+  };
+
   return (
     <View style={s.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -58,13 +84,13 @@ export default function IncomingCallScreen({ navigation, route }: any) {
 
       <View style={[s.bottom, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 30 }]}>
         <Animated.View style={{ transform: [{ translateY: declineSlide }] }}>
-          <TouchableOpacity style={s.declineBtn} onPress={() => navigation.goBack()} activeOpacity={0.85}>
+          <TouchableOpacity style={s.declineBtn} onPress={handleDecline} disabled={responding} activeOpacity={0.85}>
             <View style={s.declineInner}><Text style={s.phoneIcon}>📞</Text></View>
             <Text style={s.actionLabel}>Decline</Text>
           </TouchableOpacity>
         </Animated.View>
         <Animated.View style={{ transform: [{ translateY: acceptSlide }] }}>
-          <TouchableOpacity style={s.acceptBtn} onPress={() => navigation.replace('InCall', { workerName: callerName, workerCategory: callerCategory })} activeOpacity={0.85}>
+          <TouchableOpacity style={s.acceptBtn} onPress={handleAccept} disabled={responding} activeOpacity={0.85}>
             <View style={s.acceptInner}><Text style={s.phoneIcon}>📞</Text></View>
             <Text style={s.actionLabel}>Accept</Text>
           </TouchableOpacity>
