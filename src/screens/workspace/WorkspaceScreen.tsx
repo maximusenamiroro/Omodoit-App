@@ -65,7 +65,6 @@ const fabSt = StyleSheet.create({
 
 export default function WorkspaceScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { profile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [showAllCategories, setShowAllCategories] = useState(false);

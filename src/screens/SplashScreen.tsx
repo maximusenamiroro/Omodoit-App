@@ -4,9 +4,8 @@ import {
   Dimensions,
 } from 'react-native';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-export default function SplashScreen({ onFinish }) {
+export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const logoScale = useRef(new Animated.Value(0.6)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;

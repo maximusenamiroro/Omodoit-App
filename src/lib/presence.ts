@@ -22,7 +22,20 @@ const CHANNEL_NAME = 'online-workers';
 
 interface PresencePayload {
   category: string | null;
+  subcategory?: string | null;
+  service?: string | null;
+  name?: string | null;
+  lat?: number | null;
+  lng?: number | null;
   online_at: string;
+}
+
+interface PresenceExtra {
+  subcategory?: string | null;
+  service?: string | null;
+  name?: string | null;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 // ── Worker side: announce presence while mounted ──────────────────────
@@ -31,7 +44,15 @@ interface PresencePayload {
 // needed, and it can't drift out of sync with reality the way a
 // database flag can (e.g. an app that crashes without ever flipping
 // is_online back to false).
-export function useBroadcastPresence(userId: string | null | undefined, category: string | null) {
+export function useBroadcastPresence(
+  userId: string | null | undefined,
+  category: string | null,
+  extra: PresenceExtra = {}
+) {
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const extraRef = useRef(extra);
+  extraRef.current = extra;
+
   useEffect(() => {
     if (!userId) return;
 
@@ -41,15 +62,28 @@ export function useBroadcastPresence(userId: string | null | undefined, category
 
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        const payload: PresencePayload = { category, online_at: new Date().toISOString() };
+        const payload: PresencePayload = { category, ...extraRef.current, online_at: new Date().toISOString() };
         await channel.track(payload);
       }
     });
 
+    channelRef.current = channel;
+
     return () => {
       supabase.removeChannel(channel);
+      channelRef.current = null;
     };
   }, [userId, category]);
+
+  // Re-broadcast when extra fields change (e.g. a live position
+  // update) without tearing down and recreating the channel
+  // subscription — track() again on an already-subscribed channel
+  // just updates the existing presence entry.
+  useEffect(() => {
+    if (channelRef.current) {
+      channelRef.current.track({ category, ...extraRef.current, online_at: new Date().toISOString() });
+    }
+  }, [extra.lat, extra.lng, extra.name, extra.subcategory, extra.service]);
 }
 
 // ── Observer side: read live presence state ────────────────────────────
@@ -59,6 +93,7 @@ export function useBroadcastPresence(userId: string | null | undefined, category
 export function useOnlinePresence() {
   const [onlineCategories, setOnlineCategories] = useState<Set<string>>(new Set());
   const [onlineWorkerIds, setOnlineWorkerIds] = useState<Set<string>>(new Set());
+  const [workers, setWorkers] = useState<Record<string, PresencePayload>>({});
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   useEffect(() => {
@@ -70,16 +105,19 @@ export function useOnlinePresence() {
       const state = channel.presenceState<PresencePayload>();
       const categories = new Set<string>();
       const ids = new Set<string>();
+      const nextWorkers: Record<string, PresencePayload> = {};
 
       Object.entries(state).forEach(([key, presences]) => {
         ids.add(key);
         presences.forEach(p => {
           if (p.category) categories.add(p.category);
+          nextWorkers[key] = p;
         });
       });
 
       setOnlineCategories(categories);
       setOnlineWorkerIds(ids);
+      setWorkers(nextWorkers);
     };
 
     channel.on('presence', { event: 'sync' }, syncState);
@@ -92,5 +130,5 @@ export function useOnlinePresence() {
     };
   }, []);
 
-  return { onlineCategories, onlineWorkerIds };
+  return { onlineCategories, onlineWorkerIds, workers, count: onlineWorkerIds.size };
 }

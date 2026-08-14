@@ -9,12 +9,16 @@ import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { respondToBookingRequest } from '../../lib/db';
+import { parseFlashJob } from '../../lib/flashJob';
 
 interface FlashRequest {
   id: string;
   clientId: string;
   clientName: string;
-  job: string;
+  service: string;
+  budget: string | null;
+  landmark: string | null;
+  note: string | null;
   location: string;
   time: string;
 }
@@ -28,7 +32,7 @@ const timeAgo = (date: string): string => {
 
 export default function FlashJobInboxScreen() {
   const insets = useSafeAreaInsets();
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [requests, setRequests] = useState<FlashRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState<string | null>(null);
@@ -57,14 +61,22 @@ export default function FlashJobInboxScreen() {
         (profileRows || []).forEach((p: any) => { nameMap[p.id] = p.full_name || 'Client'; });
       }
 
-      setRequests((rows || []).map((r: any) => ({
-        id: r.id,
-        clientId: r.client_id,
-        clientName: nameMap[r.client_id] || 'Client',
-        job: (r.job_description || '').split('\n')[0].replace('⚡ Flash Job: ', ''),
-        location: r.location || '',
-        time: timeAgo(r.created_at),
-      })));
+      setRequests((rows || []).map((r: any) => {
+        // Was `.split('\n')[0]` — which discarded the budget and the
+        // client's note, the two things a worker most needs to decide.
+        const parsed = parseFlashJob(r.job_description);
+        return {
+          id: r.id,
+          clientId: r.client_id,
+          clientName: nameMap[r.client_id] || 'Client',
+          service: parsed.service,
+          budget: parsed.budget,
+          landmark: parsed.landmark,
+          note: parsed.note,
+          location: r.location || '',
+          time: timeAgo(r.created_at),
+        };
+      }));
     } catch (err) {
       console.error('Failed to load flash job requests:', err);
       setRequests([]);
@@ -79,9 +91,7 @@ export default function FlashJobInboxScreen() {
     if (actioningId) return;
     setActioningId(requestId);
 
-    await respondToBookingRequest(
-      requestId, newStatus, clientId, profile?.full_name || '', user?.id || ''
-    );
+    await respondToBookingRequest(requestId, newStatus);
 
     loadRequests();
     setActioningId(null);
@@ -117,9 +127,40 @@ export default function FlashJobInboxScreen() {
                   </View>
                   <Text style={st.time}>{req.time}</Text>
                 </View>
-                <Text style={st.clientName}>{req.clientName}</Text>
-                <Text style={st.job} numberOfLines={2}>{req.job}</Text>
-                {!!req.location && <Text style={st.location}>📍 {req.location}</Text>}
+
+                {/* Service is the headline — it's what the worker is
+                    deciding about, so it leads instead of sitting in
+                    small grey body text under the client's name. */}
+                <Text style={st.service} numberOfLines={2}>{req.service}</Text>
+
+                <View style={st.metaRow}>
+                  <Text style={st.metaText} numberOfLines={1}>
+                    👤 {req.clientName}
+                  </Text>
+                  {!!req.location && (
+                    <Text style={st.metaText} numberOfLines={1}>
+                      📍 {req.location}{req.landmark ? ` · ${req.landmark}` : ''}
+                    </Text>
+                  )}
+                </View>
+
+                {/* The pay. Previously dropped entirely by the parser,
+                    so workers were accepting urgent jobs blind. */}
+                {req.budget ? (
+                  <View style={st.budgetBox}>
+                    <Text style={st.budgetLabel}>BUDGET</Text>
+                    <Text style={st.budgetValue}>{req.budget}</Text>
+                  </View>
+                ) : (
+                  <View style={[st.budgetBox, st.budgetBoxEmpty]}>
+                    <Text style={st.budgetLabel}>BUDGET</Text>
+                    <Text style={st.budgetMuted}>Not specified</Text>
+                  </View>
+                )}
+
+                {!!req.note && (
+                  <Text style={st.note} numberOfLines={3}>{req.note}</Text>
+                )}
 
                 <View style={st.actions}>
                   <TouchableOpacity
@@ -165,9 +206,37 @@ const st = StyleSheet.create({
   flashBadge: { backgroundColor: colors.flash + '20', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
   flashBadgeText: { fontSize: 10, fontWeight: '700', color: colors.flash },
   time: { fontSize: 10, color: colors.textMuted },
-  clientName: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
-  job: { fontSize: 12, color: colors.textSecondary, lineHeight: 18, marginBottom: 6 },
-  location: { fontSize: 11, color: colors.textMuted, marginBottom: 12 },
+  // Service headline — the decision the worker is actually making.
+  service: { fontSize: 19, fontWeight: '700', color: colors.textPrimary, marginBottom: 8, lineHeight: 24 },
+
+  metaRow: { gap: 3, marginBottom: 12 },
+  metaText: { fontSize: 12, color: colors.textMuted },
+
+  // Budget gets its own block rather than a line of body text — it's
+  // the number a worker scans for before anything else.
+  budgetBox: {
+    backgroundColor: colors.flash + '14',
+    borderWidth: 1,
+    borderColor: colors.flash + '33',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  budgetBoxEmpty: { backgroundColor: colors.bg, borderColor: colors.border },
+  budgetLabel: { fontSize: 9, fontWeight: '700', color: colors.textMuted, letterSpacing: 1, marginBottom: 3 },
+  budgetValue: { fontSize: 22, fontWeight: '800', color: colors.flash },
+  budgetMuted: { fontSize: 15, fontWeight: '600', color: colors.textMuted },
+
+  note: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 19,
+    marginBottom: 14,
+    paddingLeft: 10,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.border,
+  },
 
   actions: { flexDirection: 'row', gap: 10, marginTop: 4 },
   declineBtn: { flex: 1, paddingVertical: 11, borderRadius: 12, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },

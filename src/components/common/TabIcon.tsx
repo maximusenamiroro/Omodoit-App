@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, spacing } from '../../theme';
+import { colors } from '../../theme';
 
 interface TabIconProps {
   name: 'reels' | 'explore' | 'flash' | 'inbox' | 'profile' | 'station';

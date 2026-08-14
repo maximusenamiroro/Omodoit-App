@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
-import { colors, typography, spacing } from '../../theme';
+import { colors } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { useIsFocused } from '@react-navigation/native';
@@ -50,6 +50,9 @@ interface ReelProfile {
 interface Reel {
   id: string;
   video_url: string;
+  // Poster frame shown while the video buffers. Null for every reel
+  // uploaded before thumbnails existed, so it must stay optional.
+  thumbnail_url: string | null;
   description: string | null;
   type: string | null;
   likes: number;
@@ -57,13 +60,6 @@ interface Reel {
   profiles: ReelProfile;
 }
 
-interface CommentItem {
-  id: string;
-  user_id: string;
-  comment: string;
-  created_at: string;
-  profiles: { full_name: string | null; avatar_url: string | null };
-}
 
 
 function CommentSheet({ visible, onClose, reelId, userId }: {
@@ -473,7 +469,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
         // 23505 = already liked (unique constraint) — treat as success
         if (error && error.code !== '23505') throw error;
       }
-    } catch (err) {
+    } catch {
       // Revert on error
       setLiked(wasLiked);
       setLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
@@ -486,7 +482,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
     try {
       if (wasSaved) { await supabase.from('saved_reels').delete().eq('user_id', userId).eq('reel_id', reel.id); }
       else { await supabase.from('saved_reels').insert({ user_id: userId, reel_id: reel.id }); }
-    } catch (err) { setSaved(wasSaved); }
+    } catch { setSaved(wasSaved); }
   };
 
   const handleFollow = async () => {
@@ -495,7 +491,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
     try {
       if (wasFollowing) { await supabase.from('follows').delete().eq('follower_id', userId).eq('following_id', reel.profiles.id); }
       else { await supabase.from('follows').insert({ follower_id: userId, following_id: reel.profiles.id }); }
-    } catch (err) { setFollowing(wasFollowing); }
+    } catch { setFollowing(wasFollowing); }
   };
 
  const handleShare = async () => {
@@ -506,7 +502,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
       await Share.share({
         message: workerName + ' on Omodoit\n\n' + caption + shareUrl,
       });
-    } catch (err) {}
+    } catch {}
   };
 
   // "Order Now" for product reels vs "Book Now" for service reels,
@@ -577,6 +573,17 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
               <Text style={styles.retryVideoText}>Tap to retry</Text>
             </TouchableOpacity>
           </View>
+        )}
+        {/* Poster frame, sitting under the spinner until the first
+            video frame is ready. Without it this area is pure black
+            for as long as buffering takes, which is what makes the
+            feed feel slow even when it isn't. */}
+        {!videoLoaded && !videoError && !!reel.thumbnail_url && (
+          <Image
+            source={{ uri: reel.thumbnail_url }}
+            style={styles.video}
+            resizeMode="cover"
+          />
         )}
         {!videoLoaded && !videoError && (<View style={styles.loadingOverlay}><ActivityIndicator size="large" color={colors.white} /></View>)}
         {paused && (<View style={styles.pauseOverlay}><View style={styles.pauseIcon}><Text style={styles.pauseText}>▶</Text></View></View>)}
@@ -696,7 +703,7 @@ export default function ReelsScreen({ navigation }: any) {
     setLoading(true); setError(null);
     try {
       let query = supabase.from('reels')
-        .select('id, video_url, description, type, likes, created_at, profiles(id, full_name, avatar_url, role, category, subcategory, location, verification_level)')
+        .select('id, video_url, thumbnail_url, description, type, likes, created_at, profiles(id, full_name, avatar_url, role, category, subcategory, location, verification_level)')
         .order('created_at', { ascending: false }).limit(50);
       if (activeTab === 'following' && user?.id) {
         const { data: followData } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
@@ -714,9 +721,23 @@ export default function ReelsScreen({ navigation }: any) {
 
   const onViewRef = useRef(({ viewableItems }: any) => { if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0); });
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
-  const renderReel = useCallback(({ item, index }: { item: Reel; index: number }) => (
-    <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} navigation={navigation} />
-  ), [isClient, activeIndex, user, isFocused, navigation]);
+  const renderReel = useCallback(({ item, index }: { item: Reel; index: number }) => {
+    // Android has a hard limit on simultaneous hardware video decoders.
+    // Without this, every reel that scrolled into FlatList's render
+    // window stayed fully mounted with its own decoder instance -
+    // scrolling through enough reels would exceed that limit and
+    // crash. Only the current reel and its immediate neighbors get a
+    // real <Video> (and the data queries ReelCard fires on mount);
+    // everything else renders a lightweight placeholder that still
+    // preserves scroll-snap positions.
+    const withinWindow = Math.abs(index - activeIndex) <= 1;
+    if (!withinWindow) {
+      return <View style={{ height: SCREEN_H, backgroundColor: '#000' }} />;
+    }
+    return (
+      <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} navigation={navigation} />
+    );
+  }, [isClient, activeIndex, user, isFocused, navigation]);
 
   if (loading) return (
     <View style={styles.container}>
@@ -828,6 +849,10 @@ export default function ReelsScreen({ navigation }: any) {
         onViewableItemsChanged={onViewRef.current}
         viewabilityConfig={viewConfigRef.current}
         getItemLayout={(_, index) => ({ length: SCREEN_H, offset: SCREEN_H * index, index })}
+        windowSize={3}
+        maxToRenderPerBatch={2}
+        initialNumToRender={2}
+        removeClippedSubviews={Platform.OS === 'android'}
       />
       <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.tabRow}>

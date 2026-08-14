@@ -5,7 +5,7 @@ import {
   Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { colors } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -264,7 +264,13 @@ export default function ChatScreen({ navigation, route }: any) {
           <Text style={styles.chatHeaderStatus}>Tap for profile</Text>
         </View>
 
-        <TouchableOpacity style={styles.headerAction} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.headerAction}
+          onPress={() => navigation.navigate('OutgoingCall', {
+            workerName: otherUserName, workerCategory: '', workerId: otherUserId,
+          })}
+          activeOpacity={0.7}
+        >
           <Text style={styles.headerActionIcon}>📞</Text>
         </TouchableOpacity>
       </View>

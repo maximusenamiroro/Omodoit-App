@@ -56,7 +56,20 @@ export async function sendCallInvite(
   calleeId: string, callId: string, callerId: string, callerName: string, callerCategory: string
 ) {
   const channel = supabase.channel('calls:' + calleeId);
-  await channel.subscribe();
+
+  // await channel.subscribe() does NOT wait for the realtime
+  // connection to actually be established — it returns almost
+  // immediately, which meant channel.send() below could fire before
+  // the WebSocket handshake finished, silently dropping the ring.
+  // Waiting for the 'SUBSCRIBED' status via callback is the reliable
+  // way to know the channel is actually ready to send on.
+  await new Promise<void>((resolve, reject) => {
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') resolve();
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') reject(new Error('Failed to connect: ' + status));
+    });
+  });
+
   await channel.send({
     type: 'broadcast',
     event: 'ring',
@@ -92,14 +105,58 @@ export function useCallResponseListener(
 
 export async function sendCallResponse(callId: string, response: 'accepted' | 'declined') {
   const channel = supabase.channel('call_response:' + callId);
-  await channel.subscribe();
+
+  await new Promise<void>((resolve, reject) => {
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') resolve();
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') reject(new Error('Failed to connect: ' + status));
+    });
+  });
+
   await channel.send({ type: 'broadcast', event: 'response', payload: { response } });
   supabase.removeChannel(channel);
+}
+
+export type CallOutcome = 'completed' | 'declined' | 'missed' | 'cancelled';
+
+export async function logCallOutcome(
+  callerId: string, calleeId: string, status: CallOutcome, durationSeconds = 0
+) {
+  try {
+    await supabase.from('call_logs').insert({
+      caller_id: callerId,
+      callee_id: calleeId,
+      status,
+      duration_seconds: durationSeconds,
+    });
+  } catch (err) {
+    // Best-effort — a failed log entry shouldn't disrupt the call itself
+    console.warn('Could not log call outcome (non-fatal):', err);
+  }
 }
 
 // ── Agora voice engine ──────────────────────────────────────────────
 // Uses "App ID only" auth (no token) — fine for development/testing,
 // see src/config/agora.ts for what's needed before a real launch.
+
+// The engine currently holding a channel, if any. Module-level rather
+// than per-hook because two call screens can be mounted at once (the
+// navigator pushes call screens rather than replacing them), and each
+// hook instance can only see its own ref.
+let activeEngine: IRtcEngine | null = null;
+
+function releaseActiveEngine() {
+  if (!activeEngine) return;
+  try {
+    activeEngine.leaveChannel();
+    activeEngine.release();
+  } catch (err) {
+    // A half-initialised engine can throw here; losing it is still
+    // better than leaving it holding the channel.
+    console.warn('Could not cleanly release previous call engine:', err);
+  }
+  activeEngine = null;
+}
 
 async function ensureMicPermission(): Promise<boolean> {
   if (Platform.OS === 'android') {
@@ -142,8 +199,20 @@ export function useAgoraCall(channelName: string | null, enabled: boolean) {
         return;
       }
 
+      // Only ONE engine may exist at a time. Agora rejects a join with
+      // error -17 (ERR_JOIN_CHANNEL_REJECTED) if the SDK is already in
+      // a channel, and that is exactly what happened: a call screen
+      // that stayed mounted in the navigation stack kept its engine
+      // alive, so the NEXT call could never connect — both sides sat on
+      // "Connecting…" forever with no error shown to the user.
+      //
+      // The per-hook cleanup below is still the normal path; this is
+      // the backstop for when a screen doesn't unmount when we expect.
+      releaseActiveEngine();
+
       const engine = createAgoraRtcEngine();
       engineRef.current = engine;
+      activeEngine = engine;
       engine.initialize({ appId: AGORA_APP_ID });
       engine.enableAudio();
 
@@ -165,6 +234,7 @@ export function useAgoraCall(channelName: string | null, enabled: boolean) {
     return () => {
       cancelled = true;
       if (engineRef.current) {
+        if (engineRef.current === activeEngine) activeEngine = null;
         engineRef.current.leaveChannel();
         engineRef.current.release();
         engineRef.current = null;

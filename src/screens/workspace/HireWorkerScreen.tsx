@@ -5,7 +5,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { colors, spacing } from '../../theme';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 

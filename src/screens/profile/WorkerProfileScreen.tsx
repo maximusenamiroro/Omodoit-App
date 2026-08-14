@@ -21,7 +21,10 @@ const getInitials = (name?: string | null) => {
   return parts[0][0];
 };
 
-interface ReelItem { id: string; likes: number; }
+// video_url/thumbnail_url are needed to delete the underlying files
+// from storage — deleting only the database row would leave the video
+// sitting in the bucket forever, still billed for and unreachable.
+interface ReelItem { id: string; likes: number; videoUrl: string | null; thumbnailUrl: string | null; }
 interface ProductItem { id: string; title: string; price: number | null; category: string; }
 interface ReviewItem { id: string; name: string; rating: number; text: string; date: string; }
 
@@ -47,12 +50,59 @@ export default function WorkerProfileScreen({ navigation }: any) {
     ]).start();
   }, []);
 
+  // Reels could be posted but never removed on mobile — the website
+  // has had a delete since day one, so a worker who posted something
+  // by mistake had to go find a computer.
+  //
+  // Storage files are removed alongside the row. The bucket path is
+  // taken by splitting on '/reels/' rather than just the last URL
+  // segment, because mobile uploads live under a per-user folder
+  // (userId/file.mp4) while the website writes flat filenames.
+  const deleteReel = (reel: ReelItem) => {
+    Alert.alert(
+      'Delete Reel',
+      'This will permanently remove the reel and its video. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.from('reels').delete().eq('id', reel.id);
+              if (error) throw error;
+
+              // Best-effort: the row is already gone, so a storage
+              // hiccup here must not look like a failed delete.
+              const paths = [reel.videoUrl, reel.thumbnailUrl]
+                .filter(Boolean)
+                .map(url => (url as string).split('/reels/')[1])
+                .filter(Boolean)
+                .map(p => decodeURIComponent(p.split('?')[0]));
+              if (paths.length > 0) {
+                try {
+                  await supabase.storage.from('reels').remove(paths);
+                } catch (storageErr) {
+                  console.warn('Reel row deleted but files remain:', storageErr);
+                }
+              }
+
+              setReels(prev => prev.filter(r => r.id !== reel.id));
+            } catch (err: any) {
+              Alert.alert('Could Not Delete', err?.message || 'Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const loadData = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
       const [reelsRes, productsRes, reviewsRes] = await Promise.all([
-        supabase.from('reels').select('id, likes').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('reels').select('id, likes, video_url, thumbnail_url').eq('user_id', user.id).order('created_at', { ascending: false }),
         supabase.from('products').select('id, title, price, category').eq('worker_id', user.id).order('created_at', { ascending: false }),
         supabase.from('reviews').select('id, rating, comment, created_at, client_id').eq('worker_id', user.id).order('created_at', { ascending: false }).limit(20),
       ]);
@@ -73,7 +123,12 @@ export default function WorkerProfileScreen({ navigation }: any) {
         setFollowerCount(0);
       }
 
-      setReels((reelsRes.data || []).map((r: any) => ({ id: r.id, likes: r.likes || 0 })));
+      setReels((reelsRes.data || []).map((r: any) => ({
+        id: r.id,
+        likes: r.likes || 0,
+        videoUrl: r.video_url || null,
+        thumbnailUrl: r.thumbnail_url || null,
+      })));
       setProducts((productsRes.data || []).map((p: any) => ({ id: p.id, title: p.title, price: p.price, category: p.category })));
 
       const reviewRows = reviewsRes.data || [];
@@ -226,8 +281,29 @@ export default function WorkerProfileScreen({ navigation }: any) {
                   {reels.map(reel => (
                     <TouchableOpacity key={reel.id} style={st.reelCard} activeOpacity={0.85}>
                       <View style={st.reelThumb}>
-                        <Text style={st.reelPlayIcon}>▶</Text>
+                        {/* Poster frame when the reel has one; older
+                            reels predate thumbnails and still show the
+                            play glyph. */}
+                        {reel.thumbnailUrl ? (
+                          <Image
+                            source={{ uri: reel.thumbnailUrl }}
+                            style={st.reelThumbImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={st.reelPlayIcon}>▶</Text>
+                        )}
                       </View>
+
+                      <TouchableOpacity
+                        style={st.reelDeleteBtn}
+                        onPress={() => deleteReel(reel)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={st.reelDeleteIcon}>✕</Text>
+                      </TouchableOpacity>
+
                       <View style={st.reelOverlay}>
                         <View style={st.reelStat}>
                           <Text style={st.reelStatIcon}>❤</Text>
@@ -356,6 +432,14 @@ const st = StyleSheet.create({
   reelCard: { width: REEL_W, aspectRatio: 9 / 16, backgroundColor: colors.bgCard, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
   reelThumb: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
   reelPlayIcon: { fontSize: 20, color: colors.white, opacity: 0.5 },
+  reelThumbImage: { width: '100%', height: '100%' },
+  reelDeleteBtn: {
+    position: 'absolute', top: 6, right: 6,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  reelDeleteIcon: { color: colors.white, fontSize: 13, fontWeight: '700', lineHeight: 15 },
   reelOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.6)' },
   reelStat: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   reelStatIcon: { fontSize: 10, color: colors.white },

@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, Image, FlatList,
-} from 'react-native';
+  TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, Image, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
 import { supabase } from '../../api/supabase';

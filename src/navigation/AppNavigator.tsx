@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -74,6 +74,23 @@ export default function AppNavigator() {
       });
     }
   });
+
+  // Sign-out has to reset the stack, not just swap the root screen.
+  //
+  // Settings, Chat, EditProfile and the rest below are registered
+  // OUTSIDE the auth conditional, so they exist whether or not anyone
+  // is logged in. Signing out from Settings therefore swapped the root
+  // from WorkerApp to Auth underneath — while Settings stayed pushed on
+  // top of the stack. The user stayed staring at the settings screen
+  // and it looked like the button did nothing at all.
+  //
+  // Resetting clears those pushed screens so Auth is actually what's
+  // on screen.
+  useEffect(() => {
+    if (!user && !loading && navigationRef.isReady()) {
+      navigationRef.reset({ index: 0, routes: [{ name: 'Auth' }] });
+    }
+  }, [user, loading]);
 
   return (
     <NavigationContainer ref={navigationRef}>

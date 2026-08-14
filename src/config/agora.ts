@@ -13,4 +13,9 @@
 // which must NEVER be embedded in the app itself. This is a deliberate
 // scope boundary: wiring that up is a real backend task, not something
 // to fake or skip past silently.
-export const AGORA_APP_ID = 'REPLACE_WITH_YOUR_AGORA_APP_ID';
+// Annotated as string rather than left to infer a literal type. Without
+// this, TypeScript narrows it to its exact value and the "did you
+// forget to configure Agora?" guard in calling.ts becomes a comparison
+// between two non-overlapping literals — a compile error, even though
+// the check is exactly what we want at runtime.
+export const AGORA_APP_ID: string = '314b40cdcc994d7bb349b33e562b4bd0';

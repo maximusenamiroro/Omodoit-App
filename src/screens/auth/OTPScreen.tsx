@@ -88,7 +88,7 @@ export default function OTPScreen({ navigation, route }: any) {
   };
 
   // Verify OTP
-  const handleVerify = async (code: string) => {
+  const handleVerify = async (_code: string) => {
     setLoading(true);
 
     // TODO: Replace with actual Termii verify API call
