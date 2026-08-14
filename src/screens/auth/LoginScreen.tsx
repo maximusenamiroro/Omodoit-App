@@ -125,7 +125,7 @@ export default function LoginScreen({ navigation }: any) {
       }
 
       // Login with email + password
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: password,
       });
@@ -177,7 +177,7 @@ export default function LoginScreen({ navigation }: any) {
         'If an account exists with this email, we have sent a password reset link. Check your inbox.',
         [{ text: 'OK' }]
       );
-    } catch (error: any) {
+    } catch {
       // Security: always show the same message regardless of whether
       // the email exists — prevents account enumeration
       Alert.alert(

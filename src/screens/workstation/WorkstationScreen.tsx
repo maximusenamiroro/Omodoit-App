@@ -20,7 +20,6 @@ interface BookingRow {
   status: string;
   time: string;
   location: string;
-  flashBatchId: string | null;
 }
 
 export default function WorkstationScreen({ navigation }: any) {
@@ -31,7 +30,10 @@ export default function WorkstationScreen({ navigation }: any) {
   // presence — a worker might keep the app open to check messages
   // without wanting new bookings, so "app is open" alone isn't
   // enough; this hook call is what makes the toggle below meaningful.
-  useBroadcastPresence(isOnline ? user?.id : undefined, profile?.category || null);
+  useBroadcastPresence(isOnline ? user?.id : undefined, profile?.category || null, {
+    subcategory: profile?.subcategory || null,
+    name: profile?.full_name || null,
+  });
 
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,10 +66,15 @@ export default function WorkstationScreen({ navigation }: any) {
     if (!user?.id) return;
     setLoading(true);
     try {
+      // Direct "Book Now" requests only. Flash Jobs are a different
+      // thing with different urgency and their own dedicated screen
+      // (FlashJobInboxScreen), so they're filtered out here rather than
+      // mixed into the normal booking list.
       const { data: rows, error } = await supabase
         .from('hire_requests')
-        .select('id, client_id, job_description, location, status, created_at, flash_batch_id')
+        .select('id, client_id, job_description, location, status, created_at')
         .eq('worker_id', user.id)
+        .is('flash_batch_id', null)
         .in('status', ['pending', 'accepted', 'in_progress'])
         .order('created_at', { ascending: false });
 
@@ -88,7 +95,6 @@ export default function WorkstationScreen({ navigation }: any) {
         status: r.status,
         time: timeAgo(r.created_at),
         location: r.location || '',
-        flashBatchId: r.flash_batch_id || null,
       }));
 
       setBookings(mapped);
@@ -132,10 +138,7 @@ export default function WorkstationScreen({ navigation }: any) {
     if (actioningId) return;
     setActioningId(bookingId);
 
-    const booking = bookings.find(b => b.id === bookingId);
-    const result = await respondToBookingRequest(
-      bookingId, newStatus, booking?.clientId || '', profile?.full_name || '', user?.id || ''
-    );
+    const result = await respondToBookingRequest(bookingId, newStatus);
 
     if (!result.ok) {
       if (result.reason === 'taken') {
@@ -176,21 +179,10 @@ export default function WorkstationScreen({ navigation }: any) {
         return;
       }
 
-      const booking = bookings.find(b => b.id === bookingId);
-      if (booking) {
-        try {
-          await supabase.from('notifications').insert({
-            user_id: booking.clientId,
-            type: 'booking',
-            message: `${profile?.full_name || 'The worker'} marked your job as complete. You can now leave a review!`,
-            from_user_id: user?.id,
-            booking_id: bookingId,
-            is_read: false,
-          });
-        } catch (notifErr) {
-          console.warn('Could not create notification (non-fatal):', notifErr);
-        }
-      }
+      // The client is notified by the on_booking_update database
+      // trigger, which fires on every status change and carries the
+      // "you can now leave a review" prompt. Inserting one here as
+      // well sent the same message twice.
 
       loadBookings();
     } catch (err) {

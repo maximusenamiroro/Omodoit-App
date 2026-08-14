@@ -76,9 +76,26 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
     beginRegistration();
 
     try {
+      // The profile fields ride along as user_metadata so the account
+      // can still be rebuilt correctly if the profiles write below
+      // fails (dropped connection, or email confirmation leaving us
+      // without a session). Without this, AuthContext's recovery path
+      // had nothing to go on and defaulted every affected business to
+      // a client account, permanently.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: params.email,
         password: password,
+        options: {
+          data: {
+            role: 'worker',
+            full_name: params.fullName,
+            phone: params.phoneNumber,
+            location: params.location,
+            business_name: params.businessName,
+            category: params.category,
+            subcategory: params.subcategory,
+          },
+        },
       });
 
       if (authError) throw authError;

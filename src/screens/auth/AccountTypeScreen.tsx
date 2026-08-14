@@ -6,7 +6,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
 
-const { width } = Dimensions.get('window');
 
 type AccountType = 'client' | 'worker' | null;
 

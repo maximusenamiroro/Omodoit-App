@@ -1,12 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
-  StatusBar, Platform,
+  StatusBar, Platform, Vibration,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
-import { generateCallId, sendCallInvite, useCallResponseListener } from '../../lib/calling';
+import { generateCallId, sendCallInvite, useCallResponseListener, logCallOutcome } from '../../lib/calling';
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(' ');
@@ -20,7 +20,7 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
   const { workerName, workerCategory, workerId } = route.params;
 
   const [callId] = useState(() => generateCallId());
-  const [status, setStatus] = useState<'ringing' | 'declined' | 'sending'>('sending');
+  const [status, setStatus] = useState<'ringing' | 'declined' | 'missed' | 'sending'>('sending');
 
   const pulse1 = useRef(new Animated.Value(1)).current;
   const pulse1Op = useRef(new Animated.Value(0.6)).current;
@@ -34,17 +34,49 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const avatarScale = useRef(new Animated.Value(0.8)).current;
 
+  // No audio ringback tone yet — that needs a sound library
+  // (react-native-sound) plus an actual audio asset, neither of which
+  // exist in this project. Vibration is a real, verifiable substitute
+  // that needs no new dependency or asset, giving the caller physical
+  // confirmation the call is actively ringing.
+  useEffect(() => {
+    if (status === 'ringing') {
+      Vibration.vibrate([500, 1000, 500, 1000], true);
+    } else {
+      Vibration.cancel();
+    }
+    return () => Vibration.cancel();
+  }, [status]);
+
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Real signaling — waits for the callee to actually respond instead
   // of blindly transitioning to InCall after a fixed timer regardless
   // of whether anyone answered.
   useCallResponseListener(callId, (response) => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (response === 'accepted') {
-      navigation.replace('InCall', { workerName, workerCategory, callId, isCaller: true });
+      navigation.replace('InCall', { workerName, workerCategory, callId, isCaller: true, otherUserId: workerId });
     } else {
       setStatus('declined');
+      logCallOutcome(user?.id || '', workerId, 'declined');
       setTimeout(() => navigation.goBack(), 1500);
     }
   });
+
+  // A call that never gets answered shouldn't ring forever — 30
+  // seconds with no response is treated as missed, matching normal
+  // phone call behavior.
+  useEffect(() => {
+    if (status === 'ringing') {
+      timeoutRef.current = setTimeout(() => {
+        logCallOutcome(user?.id || '', workerId, 'missed');
+        setStatus('missed');
+        setTimeout(() => navigation.goBack(), 1000);
+      }, 30000);
+    }
+    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
+  }, [status]);
 
   useEffect(() => {
     if (!workerId) {
@@ -112,7 +144,7 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
       <Animated.View style={[s.content, { opacity: contentOpacity }]}>
         <View style={[s.statusRow, { marginTop: insets.top + 60 }]}>
           <Text style={s.callingText}>
-            {status === 'declined' ? 'Call Declined' : status === 'sending' ? 'Connecting…' : 'Calling'}
+            {status === 'declined' ? 'Call Declined' : status === 'missed' ? 'No Answer' : status === 'sending' ? 'Connecting…' : 'Calling'}
           </Text>
           {status === 'ringing' && (
             <View style={s.dotsRow}>
@@ -137,7 +169,16 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
       </Animated.View>
 
       <View style={[s.bottom, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 30 }]}>
-        <TouchableOpacity style={s.cancelBtn} onPress={() => navigation.goBack()} activeOpacity={0.85}>
+        <TouchableOpacity
+          style={s.cancelBtn}
+          onPress={() => {
+            if (status === 'ringing' || status === 'sending') {
+              logCallOutcome(user?.id || '', workerId, 'cancelled');
+            }
+            navigation.goBack();
+          }}
+          activeOpacity={0.85}
+        >
           <View style={s.cancelInner}><Text style={s.cancelIcon}>📞</Text></View>
           <Text style={s.cancelLabel}>Cancel</Text>
         </TouchableOpacity>

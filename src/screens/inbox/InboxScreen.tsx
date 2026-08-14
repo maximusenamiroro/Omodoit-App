@@ -1,10 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
-  Image, StatusBar, Animated, ActivityIndicator, Platform,
+  Image, StatusBar, Animated, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -30,6 +30,13 @@ const formatTime = (date: string): string => {
   return msgDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 };
 
+const formatCallDuration = (seconds: number): string => {
+  if (seconds < 60) return seconds + 's';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m + 'm' + (s > 0 ? ' ' + s + 's' : '');
+};
+
 interface Conversation {
   otherUserId: string;
   otherUserName: string;
@@ -42,10 +49,21 @@ interface Conversation {
   isLastMessageMine: boolean;
 }
 
+interface CallLogItem {
+  id: string;
+  otherUserId: string;
+  otherUserName: string;
+  status: 'completed' | 'declined' | 'missed' | 'cancelled';
+  wasOutgoing: boolean;
+  durationSeconds: number;
+  time: string;
+}
+
 export default function InboxScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { user, role } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [callLogs, setCallLogs] = useState<CallLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -62,9 +80,46 @@ export default function InboxScreen({ navigation }: any) {
   useEffect(() => {
     if (user?.id) {
       fetchConversations();
+      fetchCallLogs();
       setupRealtime();
     }
   }, [user?.id]);
+
+  const fetchCallLogs = async () => {
+    if (!user?.id) return;
+    try {
+      const { data: rows, error } = await supabase
+        .from('call_logs')
+        .select('id, caller_id, callee_id, status, duration_seconds, created_at')
+        .or(`caller_id.eq.${user.id},callee_id.eq.${user.id}`)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+
+      const otherIds = [...new Set((rows || []).map((r: any) =>
+        r.caller_id === user.id ? r.callee_id : r.caller_id
+      ))];
+      let nameMap: Record<string, string> = {};
+      if (otherIds.length > 0) {
+        const { data: profileRows } = await supabase.from('profiles').select('id, full_name').in('id', otherIds);
+        (profileRows || []).forEach((p: any) => { nameMap[p.id] = p.full_name || 'User'; });
+      }
+
+      setCallLogs((rows || []).map((r: any) => ({
+        id: r.id,
+        otherUserId: r.caller_id === user.id ? r.callee_id : r.caller_id,
+        otherUserName: nameMap[r.caller_id === user.id ? r.callee_id : r.caller_id] || 'User',
+        status: r.status,
+        wasOutgoing: r.caller_id === user.id,
+        durationSeconds: r.duration_seconds || 0,
+        time: formatTime(r.created_at),
+      })));
+    } catch (err) {
+      console.warn('Could not load call logs (non-fatal):', err);
+      setCallLogs([]);
+    }
+  };
 
   const channelRef = useRef<any>(null);
 
@@ -80,6 +135,16 @@ export default function InboxScreen({ navigation }: any) {
         const msg = payload.new;
         if (msg.sender_id === user.id || msg.receiver_id === user.id) {
           fetchConversations();
+        }
+      })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'call_logs',
+      }, (payload: any) => {
+        const log = payload.new;
+        if (log.caller_id === user.id || log.callee_id === user.id) {
+          fetchCallLogs();
         }
       })
       .subscribe();
@@ -288,6 +353,48 @@ export default function InboxScreen({ navigation }: any) {
         </View>
       </Animated.View>
 
+      {callLogs.length > 0 && (
+        <Animated.View style={[styles.callLogSection, { opacity: headerOpacity }]}>
+          <Text style={styles.callLogTitle}>Recent Calls</Text>
+          <FlatList
+            data={callLogs}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={item => item.id}
+            contentContainerStyle={styles.callLogList}
+            renderItem={({ item }) => {
+              const missedOrDeclined = item.status === 'missed' || item.status === 'declined' || item.status === 'cancelled';
+              const statusIcon = item.wasOutgoing ? '↗️' : missedOrDeclined ? '↙️' : '↩️';
+              const statusLabel = item.status === 'completed'
+                ? formatCallDuration(item.durationSeconds)
+                : item.status === 'missed' ? 'No answer'
+                : item.status === 'declined' ? 'Declined'
+                : 'Cancelled';
+
+              return (
+                <TouchableOpacity
+                  style={styles.callLogCard}
+                  onPress={() => navigation.navigate('OutgoingCall', { workerName: item.otherUserName, workerCategory: '', workerId: item.otherUserId })}
+                  activeOpacity={0.85}
+                >
+                  <View style={[styles.callLogAvatar, missedOrDeclined && !item.wasOutgoing && styles.callLogAvatarMissed]}>
+                    <Text style={styles.callLogAvatarText}>{getInitials(item.otherUserName)}</Text>
+                  </View>
+                  <Text style={styles.callLogName} numberOfLines={1}>{item.otherUserName}</Text>
+                  <View style={styles.callLogStatusRow}>
+                    <Text style={styles.callLogStatusIcon}>{statusIcon}</Text>
+                    <Text style={[styles.callLogStatusText, missedOrDeclined && !item.wasOutgoing && { color: '#EF4444' }]}>
+                      {statusLabel}
+                    </Text>
+                  </View>
+                  <Text style={styles.callLogTime}>{item.time}</Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </Animated.View>
+      )}
+
       {/* Conversations list */}
       <Animated.View style={[styles.listContainer, { opacity: listOpacity }]}>
         {conversations.length === 0 ? (
@@ -353,6 +460,74 @@ const styles = StyleSheet.create({
   },
   headerBtnIcon: {
     fontSize: 16,
+  },
+
+  // Recent Calls
+  callLogSection: {
+    paddingTop: 12,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  callLogTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: spacing.screenPadding,
+    marginBottom: 10,
+  },
+  callLogList: {
+    paddingHorizontal: spacing.screenPadding,
+    gap: 12,
+    paddingBottom: 12,
+  },
+  callLogCard: {
+    width: 76,
+    alignItems: 'center',
+  },
+  callLogAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  callLogAvatarMissed: {
+    backgroundColor: '#EF444420',
+    borderWidth: 1.5,
+    borderColor: '#EF4444',
+  },
+  callLogAvatarText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.white,
+  },
+  callLogName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  callLogStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  callLogStatusIcon: {
+    fontSize: 9,
+  },
+  callLogStatusText: {
+    fontSize: 9,
+    color: colors.textMuted,
+  },
+  callLogTime: {
+    fontSize: 9,
+    color: colors.textMuted,
+    marginTop: 1,
   },
 
   // Loading

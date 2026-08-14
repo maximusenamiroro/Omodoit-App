@@ -11,7 +11,6 @@ import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { generateBatchId } from '../../lib/db';
 
-const { width: SCREEN_W } = Dimensions.get('window');
 
 // Derived from the shared taxonomy so this always matches exactly what
 // workers can register under and what shows up when browsing — this
@@ -41,7 +40,9 @@ export default function FlashJobScreen({ navigation }: any) {
   const [focused, setFocused] = useState('');
   const [catExpanded, setCatExpanded] = useState('');
 
-  const scrollRef = useRef(null);
+  // Typed, otherwise useRef(null) infers `never` and every
+  // scrollRef.current?.scrollTo(...) below is a type error.
+  const scrollRef = useRef<ScrollView>(null);
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
   const formSlide = useRef(new Animated.Value(30)).current;
@@ -98,7 +99,7 @@ export default function FlashJobScreen({ navigation }: any) {
       // just without a shared batch ID to auto-cancel the others once
       // someone accepts. That refinement needs an extra column on
       // hire_requests to track later.
-      const { data: matchingWorkers, error: matchError } = await supabase
+      let { data: matchingWorkers, error: matchError } = await supabase
         .from('profiles')
         .select('id')
         .eq('role', 'worker')
@@ -108,10 +109,31 @@ export default function FlashJobScreen({ navigation }: any) {
 
       if (matchError) throw matchError;
 
+      // No exact subcategory match — broaden to anyone in the same
+      // general category rather than failing outright. Reaching some
+      // relevant workers is better than reaching none over a narrow
+      // mismatch (e.g. the client picked a slightly different
+      // specialty within the same trade than any worker has listed).
+      let broadenedMatch = false;
+      if (!matchingWorkers || matchingWorkers.length === 0) {
+        const { data: categoryWorkers, error: categoryError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'worker')
+          .eq('category', category)
+          .limit(20);
+
+        if (categoryError) throw categoryError;
+        if (categoryWorkers && categoryWorkers.length > 0) {
+          matchingWorkers = categoryWorkers;
+          broadenedMatch = true;
+        }
+      }
+
       if (!matchingWorkers || matchingWorkers.length === 0) {
         Alert.alert(
           'No Workers Available',
-          `There are no ${subcategory} workers on Omodoit yet in this category. Try Browse Workers instead, or check back soon.`
+          `There are no ${category} workers on Omodoit yet. Try Browse Workers instead, or check back soon.`
         );
         setSubmitting(false);
         return;
@@ -139,7 +161,9 @@ export default function FlashJobScreen({ navigation }: any) {
 
       Alert.alert(
         '⚡ Flash Job Sent!',
-        `Your request has been flashed to ${matchingWorkers.length} nearby ${subcategory} worker${matchingWorkers.length === 1 ? '' : 's'}. The first to accept wins!`,
+        broadenedMatch
+          ? `No exact ${subcategory} match, so your request went to ${matchingWorkers.length} nearby ${category} worker${matchingWorkers.length === 1 ? '' : 's'} instead. The first to accept wins!`
+          : `Your request has been flashed to ${matchingWorkers.length} nearby ${subcategory} worker${matchingWorkers.length === 1 ? '' : 's'}. The first to accept wins!`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (err) {
@@ -150,7 +174,6 @@ export default function FlashJobScreen({ navigation }: any) {
     }
   };
 
-  const subs = category ? (CATEGORIES[category] || []) : [];
 
   return (
     <KeyboardAvoidingView

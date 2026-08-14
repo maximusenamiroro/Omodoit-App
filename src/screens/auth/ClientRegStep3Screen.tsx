@@ -85,9 +85,20 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
 
     try {
       // Step 1: Create the account with Supabase Auth
+      // Carried as user_metadata so AuthContext can rebuild this
+      // profile correctly if the write below fails — see the worker
+      // flow for why a hardcoded fallback role was a problem.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email,
         password: password,
+        options: {
+          data: {
+            role: 'client',
+            full_name: fullName,
+            phone: phoneNumber,
+            location: location,
+          },
+        },
       });
 
       if (authError) throw authError;

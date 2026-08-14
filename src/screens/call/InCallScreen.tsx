@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
-import { useAgoraCall } from '../../lib/calling';
+import { useAgoraCall, logCallOutcome } from '../../lib/calling';
+import { useAuth } from '../../context/AuthContext';
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(' ');
@@ -21,12 +22,15 @@ const formatDuration = (sec: number): string => {
 
 export default function InCallScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { workerName, workerCategory, callId, otherUserId } = route.params;
+  const { user } = useAuth();
+  const { workerName, workerCategory, callId, otherUserId, isCaller } = route.params;
 
   const { connected, remoteJoined, muted, speaker, toggleMute, toggleSpeaker, permissionDenied } =
     useAgoraCall(callId || null, true);
 
   const [duration, setDuration] = useState(0);
+  const hasLoggedRef = useRef(false);
+  const wasRemoteJoinedRef = useRef(false);
 
   const wave1 = useRef(new Animated.Value(0.3)).current;
   const wave2 = useRef(new Animated.Value(0.5)).current;
@@ -66,7 +70,27 @@ export default function InCallScreen({ navigation, route }: any) {
     return () => { if (timer) clearInterval(timer); };
   }, [remoteJoined]);
 
+  useEffect(() => {
+    if (wasRemoteJoinedRef.current && !remoteJoined) {
+      // The other party left the call — same outcome as us ending it,
+      // just triggered from their side instead of ours.
+      if (isCaller && user?.id && otherUserId && !hasLoggedRef.current) {
+        hasLoggedRef.current = true;
+        logCallOutcome(user.id, otherUserId, 'completed', duration);
+      }
+      navigation.goBack();
+    }
+    wasRemoteJoinedRef.current = remoteJoined;
+  }, [remoteJoined]);
+
   const handleEndCall = () => {
+    // Only the caller logs completion — both InCallScreen instances
+    // (caller's and callee's) would otherwise each insert their own
+    // row for the exact same call.
+    if (isCaller && user?.id && otherUserId && !hasLoggedRef.current) {
+      hasLoggedRef.current = true;
+      logCallOutcome(user.id, otherUserId, 'completed', duration);
+    }
     navigation.goBack();
   };
 
