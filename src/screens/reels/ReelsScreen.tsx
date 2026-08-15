@@ -74,9 +74,7 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
   const inputRef = useRef<TextInput>(null);
 
-  useEffect(() => { if (visible) fetchComments(); }, [visible]);
-
-  const fetchComments = async () => {
+  const fetchComments = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -98,7 +96,9 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
       setComments(withReplies);
     } catch (err) { console.error('Fetch comments error:', err); }
     finally { setLoading(false); }
-  };
+  }, [reelId]);
+
+  useEffect(() => { if (visible) fetchComments(); }, [visible, fetchComments]);
 
   const handlePost = async () => {
     if (!newComment.trim() || !userId) return;
@@ -440,7 +440,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
       // Count likes from reel_likes table — same as website
     supabase.from('reel_likes').select('id', { count: 'exact', head: true }).eq('reel_id', reel.id)
       .then(({ count }) => { if (count !== null) setLikeCount(count); });
-  }, [userId, reel.id]);
+  }, [userId, reel.id, reel.profiles.id]);
 
   useEffect(() => {
     if (isActive) {
@@ -450,7 +450,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
         Animated.spring(actionsSlide, { toValue: 0, damping: 14, stiffness: 80, delay: 300, useNativeDriver: true }),
       ]).start();
     } else { setPaused(true); }
-  }, [isActive]);
+  }, [isActive, actionsSlide, contentOpacity]);
 
   const handleLike = async () => {
     if (!userId) return;
@@ -696,10 +696,11 @@ export default function ReelsScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => { fetchReels(); }, [activeTab]);
-
-
-  const fetchReels = async () => {
+  // Memoised and declared before the effect that runs it. Previously
+  // the effect depended only on activeTab, so fetchReels kept whatever
+  // `user` it closed over on first render — signing in did not refetch
+  // the feed, and the "following" tab kept querying with a stale id.
+  const fetchReels = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       let query = supabase.from('reels')
@@ -717,7 +718,9 @@ export default function ReelsScreen({ navigation }: any) {
       setReels(formatted as Reel[]);
     } catch (err: any) { console.error('Fetch reels error:', err); setError(err.message || 'Failed to load reels'); }
     finally { setLoading(false); }
-  };
+  }, [activeTab, user?.id]);
+
+  useEffect(() => { fetchReels(); }, [fetchReels]);
 
   const onViewRef = useRef(({ viewableItems }: any) => { if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0); });
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
