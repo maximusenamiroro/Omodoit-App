@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { ensureMediaPermission } from '../../lib/permissions';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, Image,
@@ -118,7 +119,8 @@ export default function EditProfileScreen({ navigation }: any) {
               </View>
             )}
           </View>
-          <TouchableOpacity style={[st.changePhotoBtn, { backgroundColor: accentColor }]} onPress={() => {
+          <TouchableOpacity style={[st.changePhotoBtn, { backgroundColor: accentColor }]} onPress={async () => {
+            if (!(await ensureMediaPermission('photo'))) return;
             launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 800, maxHeight: 800 }, (res) => {
               const uri = res.assets?.[0]?.uri;
               if (uri) {

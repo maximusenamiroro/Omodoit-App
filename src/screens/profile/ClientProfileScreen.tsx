@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { ensureMediaPermission } from '../../lib/permissions';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Animated, StatusBar, Alert, Platform, Image, ActivityIndicator,
@@ -105,7 +106,10 @@ export default function ClientProfileScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
-  const handleAvatarPick = () => {
+  const handleAvatarPick = async () => {
+    // Android 13+ returns an empty picker without this.
+    if (!(await ensureMediaPermission('photo'))) return;
+
     launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 800, maxHeight: 800 }, async (res) => {
       const uri = res.assets?.[0]?.uri;
       if (!uri || !user?.id) return;

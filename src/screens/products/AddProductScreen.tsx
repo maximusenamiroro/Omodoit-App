@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { ensureMediaPermission } from '../../lib/permissions';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, Image, } from 'react-native';
@@ -103,7 +104,8 @@ export default function AddProductScreen({ navigation }: any) {
               </View>
             ))}
             {photos.length < 5 && (
-              <TouchableOpacity style={st.photoAdd} onPress={() => {
+              <TouchableOpacity style={st.photoAdd} onPress={async () => {
+                if (!(await ensureMediaPermission('photo'))) return;
                 launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 1200, maxHeight: 1200 }, (res) => {
                   if (res.assets && res.assets[0]?.uri) {
                     const uri = res.assets[0].uri;

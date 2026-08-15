@@ -3,7 +3,7 @@ import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView,
-  PermissionsAndroid, ActivityIndicator,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
@@ -13,6 +13,7 @@ import { createThumbnail } from 'react-native-create-thumbnail';
 import VideoTrim, { showEditor } from 'react-native-video-trim';
 import Video from 'react-native-video';
 import { uploadVideoToStorage, uploadReelThumbnail, toFileUri } from '../../lib/uploadImage';
+import { ensureMediaPermission } from '../../lib/permissions';
 
 // These MUST match the reels_type_check constraint on the database,
 // which allows only 'service' and 'product' — the same two the website
@@ -152,35 +153,9 @@ export default function CreateReelScreen({ navigation }: any) {
     );
   };
 
-  // Android 13 split storage access into per-media-type runtime
-  // permissions. Declaring them in the manifest isn't enough — they
-  // still have to be requested, and until they are the library opens
-  // to an empty list with no error, which looks like "there are no
-  // videos on this phone".
-  const ensureMediaPermission = async (): Promise<boolean> => {
-    if (Platform.OS !== 'android') return true;
-
-    const permission =
-      Number(Platform.Version) >= 33
-        ? PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO
-        : PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
-
-    if (await PermissionsAndroid.check(permission)) return true;
-
-    const result = await PermissionsAndroid.request(permission);
-    if (result === PermissionsAndroid.RESULTS.GRANTED) return true;
-
-    Alert.alert(
-      'Permission Needed',
-      result === PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN
-        ? 'Omodoit needs access to your videos to post a reel. Enable it in Settings → Apps → Omodoit → Permissions.'
-        : 'Omodoit needs access to your videos to post a reel.'
-    );
-    return false;
-  };
-
   const handleUpload = async () => {
-    if (!(await ensureMediaPermission())) return;
+    // Shared with the avatar and product pickers — see lib/permissions.
+    if (!(await ensureMediaPermission('video'))) return;
     launchImageLibrary({ mediaType: 'video', videoQuality: VIDEO_QUALITY }, acceptVideo);
   };
 

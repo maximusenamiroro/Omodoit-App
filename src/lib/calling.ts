@@ -158,6 +158,24 @@ function releaseActiveEngine() {
   activeEngine = null;
 }
 
+// Returns '' when no token could be obtained, which is a valid join
+// argument while the Agora project is in App-ID-only mode. A failure
+// here must never block a call outright — a user who can't reach the
+// token endpoint should still be able to talk, right up until the
+// certificate is enforced.
+async function fetchAgoraToken(channelName: string): Promise<string> {
+  try {
+    const { data, error } = await supabase.functions.invoke('agora-token', {
+      body: { channelName },
+    });
+    if (error) throw error;
+    return typeof data?.token === 'string' ? data.token : '';
+  } catch (err) {
+    console.warn('Could not fetch Agora token, joining without one:', err);
+    return '';
+  }
+}
+
 async function ensureMicPermission(): Promise<boolean> {
   if (Platform.OS === 'android') {
     const granted = await PermissionsAndroid.request(
@@ -223,7 +241,21 @@ export function useAgoraCall(channelName: string | null, enabled: boolean) {
         onLeaveChannel: () => setConnected(false),
       });
 
-      engine.joinChannel('', channelName, 0, {
+      // Ask the server to mint a token for this channel. The App
+      // Certificate that signs it never leaves the backend — see
+      // supabase/functions/agora-token.
+      //
+      // Falls back to an empty token, which is what Agora accepts while
+      // the project is still in App-ID-only mode. That fallback is what
+      // makes the migration safe in either order: shipping this before
+      // enabling the certificate keeps working, and enabling the
+      // certificate before everyone has updated still works for anyone
+      // who has. Once every client is on this build and the certificate
+      // is enforced, the fallback simply stops being reachable.
+      const token = await fetchAgoraToken(channelName);
+      if (cancelled) return;
+
+      engine.joinChannel(token, channelName, 0, {
         channelProfile: ChannelProfileType.ChannelProfileCommunication,
         clientRoleType: ClientRoleType.ClientRoleBroadcaster,
       });
