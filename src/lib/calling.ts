@@ -163,13 +163,30 @@ function releaseActiveEngine() {
 // here must never block a call outright — a user who can't reach the
 // token endpoint should still be able to talk, right up until the
 // certificate is enforced.
+const TOKEN_FETCH_TIMEOUT_MS = 6000;
+
 async function fetchAgoraToken(channelName: string): Promise<string> {
   try {
-    const { data, error } = await supabase.functions.invoke('agora-token', {
-      body: { channelName },
-    });
-    if (error) throw error;
-    return typeof data?.token === 'string' ? data.token : '';
+    // The timeout is the important part. functions.invoke has none of
+    // its own, so a hung request — slow network, cold start, DNS —
+    // leaves this awaiting forever. joinChannel is never reached, and
+    // the call sits on "Connecting…" with nothing logged and no error
+    // to show the user. Failing fast to an empty token at least lets
+    // the call proceed the way it did before tokens existed.
+    const token = await Promise.race([
+      supabase.functions
+        .invoke('agora-token', { body: { channelName } })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return typeof data?.token === 'string' ? data.token : '';
+        }),
+      new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('token request timed out')), TOKEN_FETCH_TIMEOUT_MS)
+      ),
+    ]);
+
+    if (!token) console.warn('Agora token endpoint returned no token; joining without one');
+    return token;
   } catch (err) {
     console.warn('Could not fetch Agora token, joining without one:', err);
     return '';
