@@ -75,7 +75,7 @@ export default function InboxScreen({ navigation }: any) {
       Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(listOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [headerOpacity, listOpacity]);
 
   useEffect(() => {
     if (user?.id) {

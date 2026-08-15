@@ -60,7 +60,7 @@ export default function WorkstationScreen({ navigation }: any) {
         Animated.spring(contentSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [contentOpacity, contentSlide, headerOpacity]);
 
   const loadBookings = useCallback(async () => {
     if (!user?.id) return;

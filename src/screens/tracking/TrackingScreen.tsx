@@ -50,7 +50,7 @@ export default function TrackingScreen({ navigation, route }: any) {
       (err) => console.warn('Could not get client location:', err.message),
       { enableHighAccuracy: true }
     );
-  }, []);
+  }, [cardOpacity, cardSlide]);
 
   // Real rating for this worker, replacing the hardcoded "4.9 (47 reviews)"
   useEffect(() => {

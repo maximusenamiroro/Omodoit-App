@@ -44,7 +44,7 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
       Animated.timing(benefitsOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
       Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [benefitsOpacity, buttonOpacity, formOpacity, formSlide, headerOpacity, headerSlide]);
 
   // Password strength
   const getPasswordStrength = () => {

@@ -34,7 +34,7 @@ export default function WorkerRegStep3Screen({ navigation, route }: any) {
       ]),
       Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [buttonOpacity, formOpacity, formSlide, headerOpacity, headerSlide]);
 
   const isFormValid = () => {
     return location.trim().length >= 2 && serviceArea !== null;

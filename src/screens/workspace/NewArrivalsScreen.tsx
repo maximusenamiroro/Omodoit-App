@@ -43,7 +43,7 @@ export default function NewArrivalsScreen({ navigation }: any) {
         Animated.spring(listSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [headerOpacity, listOpacity, listSlide]);
 
   const loadArrivals = useCallback(async () => {
     setLoading(true);

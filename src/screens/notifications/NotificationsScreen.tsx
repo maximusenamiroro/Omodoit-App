@@ -75,7 +75,7 @@ export default function NotificationsScreen({ navigation }: any) {
       Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(listOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [headerOpacity, listOpacity]);
 
   // Reads from the notifications table written to by HireWorkerScreen
   // (new booking) and WorkstationScreen (accept/decline). Schema

@@ -54,7 +54,7 @@ export default function ClientProfileScreen({ navigation }: any) {
       Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(contentOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [contentOpacity, headerOpacity]);
 
   const loadData = useCallback(async () => {
     if (!user?.id) return;

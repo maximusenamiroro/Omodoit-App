@@ -44,7 +44,7 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
       Animated.timing(commissionOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [buttonOpacity, commissionOpacity, formOpacity, formSlide, headerOpacity, headerSlide]);
 
   const getPasswordStrength = () => {
     if (password.length === 0) return { label: '', color: colors.textMuted, width: '0%' };

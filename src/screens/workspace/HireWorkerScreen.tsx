@@ -40,7 +40,7 @@ export default function HireWorkerScreen({ navigation, route }: any) {
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [formOpacity, formSlide, headerOpacity]);
 
   const isFormValid = () => {
     return jobDescription.trim().length >= 10 && location.trim().length >= 3;
