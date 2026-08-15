@@ -37,18 +37,18 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
     const fetchCounts = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('subcategory')
-          .eq('role', 'worker')
-          .eq('category', category.name)
-          .not('subcategory', 'is', null);
+        // Counted in Postgres. This used to download one row per worker
+        // in the category just to tally them here — tens of thousands of
+        // rows to render about twenty numbers.
+        const { data, error } = await supabase.rpc('subcategory_worker_counts', {
+          p_category: category.name,
+        });
 
         if (error) throw error;
 
         const tally: Record<string, number> = {};
         (data || []).forEach((row: any) => {
-          if (row.subcategory) tally[row.subcategory] = (tally[row.subcategory] || 0) + 1;
+          if (row.subcategory) tally[row.subcategory] = Number(row.worker_count) || 0;
         });
         setCounts(tally);
       } catch (err) {

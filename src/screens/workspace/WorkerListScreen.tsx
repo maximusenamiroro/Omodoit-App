@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
   Animated, StatusBar, Platform, ActivityIndicator,
@@ -26,6 +26,10 @@ interface WorkerRow {
   bio: string;
 }
 
+// Workers arrive a page at a time. A popular trade in a city of this
+// size is thousands of people; the list used to fetch all of them.
+const WORKER_PAGE_SIZE = 20;
+
 export default function WorkerListScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { categoryName, subcategoryName, color } = route.params;
@@ -34,6 +38,8 @@ export default function WorkerListScreen({ navigation, route }: any) {
   const [sortBy, setSortBy] = useState<SortOption>('rating');
   const [workers, setWorkers] = useState<WorkerRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [reachedEnd, setReachedEnd] = useState(false);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const listOpacity = useRef(new Animated.Value(0)).current;
@@ -49,82 +55,69 @@ export default function WorkerListScreen({ navigation, route }: any) {
     ]).start();
   }, [headerOpacity, listOpacity, listSlide]);
 
-  useEffect(() => {
-    const fetchWorkers = async () => {
-      setLoading(true);
-      try {
-        let query = supabase
-          .from('profiles')
-          .select('id, full_name, location, experience, verification_status, business_name')
-          .eq('role', 'worker');
+  const loadWorkers = useCallback(async (offset: number) => {
+    // One call returns the page of workers with their ratings already
+    // averaged. This was two unbounded queries: every worker in the
+    // trade, then every review belonging to any of them.
+    const { data, error } = await supabase.rpc('list_workers', {
+      p_category: categoryName && categoryName !== 'All' ? categoryName : null,
+      p_subcategory: subcategoryName && subcategoryName !== 'General Workers' ? subcategoryName : null,
+      p_limit: WORKER_PAGE_SIZE,
+      p_offset: offset,
+    });
 
-        // "General Workers" (categoryName === 'All') browses across every
-        // category; otherwise filter to the specific category/subcategory
-        // the user drilled into.
-        if (categoryName && categoryName !== 'All') {
-          query = query.eq('category', categoryName);
-        }
-        if (subcategoryName && subcategoryName !== 'General Workers') {
-          query = query.eq('subcategory', subcategoryName);
-        }
+    if (error) throw error;
 
-        const { data: profileRows, error } = await query;
-        if (error) throw error;
-
-        const workerIds = (profileRows || []).map((w: any) => w.id);
-
-        // Real rating/review counts, computed from the reviews table.
-        // If the table or its columns don't match (e.g. schema differs
-        // from what's assumed here), this fails gracefully to zero
-        // ratings rather than crashing the list.
-        let ratingMap: Record<string, { avg: number; count: number }> = {};
-        if (workerIds.length > 0) {
-          try {
-            const { data: reviewRows } = await supabase
-              .from('reviews')
-              .select('worker_id, rating')
-              .in('worker_id', workerIds);
-
-            const grouped: Record<string, number[]> = {};
-            (reviewRows || []).forEach((r: any) => {
-              if (!grouped[r.worker_id]) grouped[r.worker_id] = [];
-              grouped[r.worker_id].push(r.rating);
-            });
-            Object.entries(grouped).forEach(([id, ratings]) => {
-              ratingMap[id] = {
-                avg: ratings.reduce((a, b) => a + b, 0) / ratings.length,
-                count: ratings.length,
-              };
-            });
-          } catch (reviewErr) {
-            console.warn('Could not load reviews (non-fatal):', reviewErr);
-          }
-        }
-
-        const mapped: WorkerRow[] = (profileRows || []).map((w: any) => ({
-          id: w.id,
-          name: w.full_name || w.business_name || 'Worker',
-          rating: ratingMap[w.id]?.avg || 0,
-          reviews: ratingMap[w.id]?.count || 0,
-          location: w.location || 'Location not set',
-          experience: w.experience || 'Not specified',
-          verified: w.verification_status === 'verified' || w.verification_status === 'basic',
-          bio: w.business_name
-            ? `${w.business_name} — ${subcategoryName || categoryName}`
-            : `Available for ${subcategoryName || categoryName} jobs.`,
-        }));
-
-        setWorkers(mapped);
-      } catch (err) {
-        console.error('Failed to load workers:', err);
-        setWorkers([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchWorkers();
+    return (data || []).map((w: any): WorkerRow => ({
+      id: w.id,
+      name: w.full_name || w.business_name || 'Worker',
+      rating: Number(w.rating_avg) || 0,
+      reviews: Number(w.review_count) || 0,
+      location: w.location || 'Location not set',
+      experience: w.experience || 'Not specified',
+      verified: w.verification_status === 'verified' || w.verification_status === 'basic',
+      bio: w.business_name
+        ? `${w.business_name} — ${subcategoryName || categoryName}`
+        : `Available for ${subcategoryName || categoryName} jobs.`,
+    }));
   }, [categoryName, subcategoryName]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setReachedEnd(false);
+
+    loadWorkers(0)
+      .then(rows => {
+        if (cancelled) return;
+        setWorkers(rows);
+        setReachedEnd(rows.length < WORKER_PAGE_SIZE);
+      })
+      .catch(err => {
+        console.error('Failed to load workers:', err);
+        if (!cancelled) setWorkers([]);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, [loadWorkers]);
+
+  const loadMoreWorkers = useCallback(async () => {
+    if (loading || loadingMore || reachedEnd) return;
+    setLoadingMore(true);
+    try {
+      const rows = await loadWorkers(workers.length);
+      setWorkers(prev => {
+        const seen = new Set(prev.map(w => w.id));
+        return [...prev, ...rows.filter((r: WorkerRow) => !seen.has(r.id))];
+      });
+      setReachedEnd(rows.length < WORKER_PAGE_SIZE);
+    } catch (err) {
+      console.error('Failed to load more workers:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadWorkers, workers.length, loading, loadingMore, reachedEnd]);
 
   const sortedWorkers = React.useMemo(() => {
     const sorted = [...workers];
@@ -172,7 +165,17 @@ export default function WorkerListScreen({ navigation, route }: any) {
         <>
           <Text style={styles.resultCount}>{sortedWorkers.length} worker{sortedWorkers.length === 1 ? '' : 's'} found</Text>
 
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}
+            onScroll={({ nativeEvent: e }) => {
+              // Within a screen of the bottom: fetch the next page.
+              const nearBottom =
+                e.layoutMeasurement.height + e.contentOffset.y >= e.contentSize.height - e.layoutMeasurement.height;
+              if (nearBottom) loadMoreWorkers();
+            }}
+            scrollEventThrottle={200}
+          >
             <Animated.View style={{ opacity: listOpacity, transform: [{ translateY: listSlide }], paddingHorizontal: spacing.screenPadding }}>
               {sortedWorkers.length === 0 && (
                 <View style={styles.emptyBox}>
@@ -226,6 +229,10 @@ export default function WorkerListScreen({ navigation, route }: any) {
                   </View>
                 </TouchableOpacity>
               ))}
+              {loadingMore && <ActivityIndicator color={colors.primary} style={styles.moreLoader} />}
+              {reachedEnd && workers.length >= WORKER_PAGE_SIZE && (
+                <Text style={styles.endOfList}>That's everyone in this trade.</Text>
+              )}
             </Animated.View>
           </ScrollView>
         </>
@@ -235,6 +242,8 @@ export default function WorkerListScreen({ navigation, route }: any) {
 }
 
 const styles = StyleSheet.create({
+  moreLoader: { marginVertical: 16 },
+  endOfList: { fontSize: 11, color: colors.textMuted, textAlign: 'center', marginVertical: 16 },
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.screenPadding, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white + '08', alignItems: 'center', justifyContent: 'center' },

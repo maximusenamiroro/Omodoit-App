@@ -1,24 +1,42 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../api/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-// Worker online status via Supabase Realtime Presence — NOT the
-// database. This is the cost-conscious pattern from the infrastructure
-// plan: presence is pushed over the existing websocket connection and
-// costs nothing per update, no matter how often a worker's status
-// changes. The old approach (write an is_online/last_seen column to
-// the database, or poll it on an interval) scales linearly with every
-// worker and every client watching them — at even a few hundred
-// concurrent workers this adds up to millions of avoidable writes/reads
-// a month. Presence adds zero.
+// Worker online status.
 //
-// One shared channel ('online-workers') is used for the whole app.
-// Workers call useBroadcastPresence() to announce themselves while
-// their app is open. Anyone (clients browsing, or any other screen)
-// calls useOnlinePresence() to read live state — which categories have
-// someone online, and which specific worker IDs are online.
+// This used to be a single Realtime channel, 'online-workers', that
+// every worker joined and every client subscribed to. Presence sends
+// each subscriber the FULL member list on every join and leave, so the
+// payload grew with the number of online workers AND was re-sent to
+// everyone watching each time anybody opened or closed the app. Fine
+// for fifty workers; impossible at fifty thousand, and worst exactly
+// when the platform is busiest.
+//
+// It is now split by the two questions the app actually asks:
+//
+//   "Which categories have someone online?" — the workspace grid. A
+//   handful of numbers, read from a database aggregate (workers
+//   heartbeat once a minute). No per-worker detail crosses the wire.
+//
+//   "Which workers in THIS trade are online?" — the worker list. Still
+//   Realtime Presence, but on a per-category channel, so a client only
+//   receives members of the one category it is looking at.
 
-const CHANNEL_NAME = 'online-workers';
+const CHANNEL_PREFIX = 'online-workers';
+
+// One beat a minute against a two-minute staleness window on the server:
+// a worker can miss a beat on a bad connection without blinking offline.
+const HEARTBEAT_MS = 60_000;
+
+// How often the workspace grid refreshes its counts. Presence is
+// ambient information — nobody watches the grid waiting for a dot.
+const COUNTS_REFRESH_MS = 30_000;
+
+function channelFor(category: string | null | undefined): string {
+  // Everything unlabelled shares one shard rather than falling back to
+  // a single global channel, which is the thing being fixed here.
+  return `${CHANNEL_PREFIX}:${(category || 'general').toLowerCase()}`;
+}
 
 interface PresencePayload {
   category: string | null;
@@ -39,11 +57,15 @@ interface PresenceExtra {
 }
 
 // ── Worker side: announce presence while mounted ──────────────────────
-// Call this once, near the root of the worker's app (WorkerNavigator),
-// so "online" naturally means "has the app open" — no manual toggle
-// needed, and it can't drift out of sync with reality the way a
-// database flag can (e.g. an app that crashes without ever flipping
-// is_online back to false).
+// Two channels of announcement, deliberately:
+//
+//   * the category's Realtime channel, so a client browsing that trade
+//     sees the worker appear instantly;
+//   * a heartbeat row, so the workspace grid can count online workers
+//     per category without anyone subscribing to anything.
+//
+// The heartbeat is what makes this scale: one write per worker per
+// minute costs the same whether one person or a million are watching.
 export function useBroadcastPresence(
   userId: string | null | undefined,
   category: string | null,
@@ -56,13 +78,15 @@ export function useBroadcastPresence(
   useEffect(() => {
     if (!userId) return;
 
-    const channel = supabase.channel(CHANNEL_NAME, {
+    const channel = supabase.channel(channelFor(category), {
       config: { presence: { key: userId } },
     });
 
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
-        const payload: PresencePayload = { category, ...extraRef.current, online_at: new Date().toISOString() };
+        const payload: PresencePayload = {
+          category, ...extraRef.current, online_at: new Date().toISOString(),
+        };
         await channel.track(payload);
       }
     });
@@ -75,63 +99,118 @@ export function useBroadcastPresence(
     };
   }, [userId, category]);
 
-  // Re-broadcast when extra fields change (e.g. a live position
-  // update) without tearing down and recreating the channel
-  // subscription — track() again on an already-subscribed channel
-  // just updates the existing presence entry.
+  useEffect(() => {
+    if (!userId) return;
+
+    const beat = () => {
+      supabase.rpc('heartbeat_presence', {
+        p_category: category,
+        p_subcategory: extraRef.current.subcategory ?? null,
+        p_lat: extraRef.current.lat ?? null,
+        p_lng: extraRef.current.lng ?? null,
+      }).then(({ error }) => {
+        // Non-fatal: presence is ambient. A missed beat costs a dot on
+        // someone's screen, not a booking.
+        if (error) console.warn('Presence heartbeat failed:', error.message);
+      });
+    };
+
+    beat();
+    const timer = setInterval(beat, HEARTBEAT_MS);
+
+    return () => {
+      clearInterval(timer);
+      // Mark offline on the way out so the grid updates immediately
+      // rather than waiting for the row to age past the window.
+      supabase.rpc('end_presence').then(({ error }) => {
+        if (error) console.warn('Could not clear presence:', error.message);
+      });
+    };
+  }, [userId, category]);
+
+  // Re-broadcast when the extra fields change (a live position update,
+  // say) without tearing the subscription down: track() on an already
+  // subscribed channel just updates the existing entry.
   useEffect(() => {
     if (channelRef.current) {
       channelRef.current.track({ category, ...extraRef.current, online_at: new Date().toISOString() });
     }
-    // category belongs here too: a worker who changes trade should
-    // re-broadcast it, otherwise clients keep seeing them listed under
-    // the category they had when the app started.
   }, [category, extra.lat, extra.lng, extra.name, extra.subcategory, extra.service]);
 }
 
-// ── Observer side: read live presence state ────────────────────────────
-// Returns the set of category names with at least one online worker,
-// and the set of specific worker user IDs currently online. Updates
-// live as workers open/close their app — no polling.
-export function useOnlinePresence() {
+// ── Observer side: which categories are live ──────────────────────────
+// Counts, not members. Used by the workspace grid, which only ever needs
+// to know whether a category has anybody in it.
+export function useLiveCategories() {
   const [onlineCategories, setOnlineCategories] = useState<Set<string>>(new Set());
-  const [onlineWorkerIds, setOnlineWorkerIds] = useState<Set<string>>(new Set());
-  const [workers, setWorkers] = useState<Record<string, PresencePayload>>({});
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+
+  const refresh = useCallback(async () => {
+    try {
+      const { data, error } = await supabase.rpc('live_category_counts');
+      if (error) throw error;
+
+      const next: Record<string, number> = {};
+      (data || []).forEach((row: any) => {
+        if (row.category) next[row.category] = Number(row.worker_count) || 0;
+      });
+      setCounts(next);
+      setOnlineCategories(new Set(Object.keys(next)));
+    } catch (err) {
+      console.warn('Could not load live categories:', err);
+    }
+  }, []);
 
   useEffect(() => {
-    const channel = supabase.channel(CHANNEL_NAME, {
+    refresh();
+    const timer = setInterval(refresh, COUNTS_REFRESH_MS);
+    return () => clearInterval(timer);
+  }, [refresh]);
+
+  return { onlineCategories, counts, refresh };
+}
+
+// ── Observer side: who is online in one category ──────────────────────
+// Subscribes to a single category's shard, so the member list a client
+// receives is bounded by that trade rather than by the whole platform.
+// Pass null/undefined to subscribe to nothing.
+export function useCategoryPresence(category: string | null | undefined) {
+  const [onlineWorkerIds, setOnlineWorkerIds] = useState<Set<string>>(new Set());
+  const [workers, setWorkers] = useState<Record<string, PresencePayload>>({});
+
+  useEffect(() => {
+    if (!category) {
+      setOnlineWorkerIds(new Set());
+      setWorkers({});
+      return;
+    }
+
+    const channel = supabase.channel(channelFor(category), {
       config: { presence: { key: 'observer-' + Math.random().toString(36).slice(2) } },
     });
 
     const syncState = () => {
       const state = channel.presenceState<PresencePayload>();
-      const categories = new Set<string>();
       const ids = new Set<string>();
       const nextWorkers: Record<string, PresencePayload> = {};
 
       Object.entries(state).forEach(([key, presences]) => {
+        // Observers join the same channel to listen; they are not workers
+        // and must not be counted as online.
+        if (key.startsWith('observer-')) return;
         ids.add(key);
-        presences.forEach(p => {
-          if (p.category) categories.add(p.category);
-          nextWorkers[key] = p;
-        });
+        presences.forEach(p => { nextWorkers[key] = p; });
       });
 
-      setOnlineCategories(categories);
       setOnlineWorkerIds(ids);
       setWorkers(nextWorkers);
     };
 
     channel.on('presence', { event: 'sync' }, syncState);
     channel.subscribe();
-    channelRef.current = channel;
 
-    return () => {
-      supabase.removeChannel(channel);
-      channelRef.current = null;
-    };
-  }, []);
+    return () => { supabase.removeChannel(channel); };
+  }, [category]);
 
-  return { onlineCategories, onlineWorkerIds, workers, count: onlineWorkerIds.size };
+  return { onlineWorkerIds, workers, count: onlineWorkerIds.size };
 }

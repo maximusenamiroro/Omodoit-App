@@ -46,12 +46,17 @@ interface Message {
   media_url: string | null;
 }
 
+// One screenful and change. Older messages load as the user scrolls up.
+const MESSAGE_PAGE_SIZE = 50;
+
 export default function ChatScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { user, role } = useAuth();
   const { otherUserId, otherUserName, otherUserAvatar } = route.params;
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasOlder, setHasOlder] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -101,26 +106,65 @@ export default function ChatScreen({ navigation, route }: any) {
       .subscribe();
   }, [user?.id, otherUserId, markAsSeen]);
 
+  // Both directions of one conversation. Written out twice because
+  // PostgREST has no "either of these two pairs" operator.
+  const conversationFilter = useCallback(() => (
+    'and(sender_id.eq.' + user?.id + ',receiver_id.eq.' + otherUserId + '),' +
+    'and(sender_id.eq.' + otherUserId + ',receiver_id.eq.' + user?.id + ')'
+  ), [user?.id, otherUserId]);
+
   const fetchMessages = useCallback(async () => {
     if (!user?.id) return;
     try {
+      // Newest page first, then flipped for display. Fetching the whole
+      // conversation ascending meant a long-running chat re-downloaded
+      // thousands of messages every time it was opened.
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .or(
-          'and(sender_id.eq.' + user.id + ',receiver_id.eq.' + otherUserId + '),' +
-          'and(sender_id.eq.' + otherUserId + ',receiver_id.eq.' + user.id + ')'
-        )
-        .order('created_at', { ascending: true });
+        .or(conversationFilter())
+        .order('created_at', { ascending: false })
+        .limit(MESSAGE_PAGE_SIZE);
 
       if (error) throw error;
-      setMessages((data as Message[]) || []);
+      const page = ((data as Message[]) || []).slice().reverse();
+      setMessages(page);
+      setHasOlder(page.length === MESSAGE_PAGE_SIZE);
     } catch (err) {
       console.error('Fetch messages error:', err);
     } finally {
       setLoading(false);
     }
-  }, [user?.id, otherUserId]);
+  }, [user?.id, conversationFilter]);
+
+  // Pulls the previous page when the user scrolls back to the top.
+  const loadOlderMessages = useCallback(async () => {
+    if (!user?.id || loadingOlder || !hasOlder || messages.length === 0) return;
+    setLoadingOlder(true);
+    try {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(conversationFilter())
+        .lt('created_at', messages[0].created_at)
+        .order('created_at', { ascending: false })
+        .limit(MESSAGE_PAGE_SIZE);
+
+      if (error) throw error;
+      const older = ((data as Message[]) || []).slice().reverse();
+      setHasOlder(older.length === MESSAGE_PAGE_SIZE);
+      if (older.length > 0) {
+        setMessages(prev => {
+          const seen = new Set(prev.map(m => m.id));
+          return [...older.filter(m => !seen.has(m.id)), ...prev];
+        });
+      }
+    } catch (err) {
+      console.error('Fetch older messages error:', err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  }, [user?.id, conversationFilter, messages, loadingOlder, hasOlder]);
 
   useEffect(() => {
     fetchMessages();
@@ -308,8 +352,15 @@ export default function ChatScreen({ navigation, route }: any) {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.msgList}
             onContentSizeChange={() => {
-              flatListRef.current?.scrollToEnd({ animated: true });
+              // Prepending older messages also changes content size;
+              // scrolling to the end there would yank the user back down.
+              if (!loadingOlder) flatListRef.current?.scrollToEnd({ animated: true });
             }}
+            onStartReached={loadOlderMessages}
+            onStartReachedThreshold={0.2}
+            ListHeaderComponent={
+              loadingOlder ? <ActivityIndicator color={colors.primary} style={styles.olderLoader} /> : null
+            }
             onLayout={() => {
               flatListRef.current?.scrollToEnd({ animated: false });
             }}
@@ -432,6 +483,7 @@ const styles = StyleSheet.create({
   chatBody: {
     flex: 1,
   },
+  olderLoader: { marginVertical: 12 },
   msgList: {
     paddingHorizontal: 12,
     paddingTop: 8,

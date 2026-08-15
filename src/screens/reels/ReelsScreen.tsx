@@ -13,6 +13,12 @@ import { useIsFocused } from '@react-navigation/native';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
+// Caps on lists that grow without bound as the platform does. Each is a
+// screenful or two of content — none of these views can show more.
+const COMMENT_FETCH_LIMIT = 100;
+const FOLLOWING_FETCH_LIMIT = 300;
+const WORKER_PRODUCT_LIMIT = 30;
+
 const formatCount = (n: number): string => {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'm';
   if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
@@ -81,7 +87,8 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
         .from('reel_comments')
         .select('id, user_id, comment, created_at, parent_id, profiles(full_name, avatar_url)')
         .eq('reel_id', reelId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .limit(COMMENT_FETCH_LIMIT);
       if (error) throw error;
       const formatted = (data || []).map((item: any) => ({
         ...item,
@@ -303,7 +310,8 @@ function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
           .from('products')
           .select('id, title, price, image_url, description, category, worker_id')
           .eq('worker_id', workerId)
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(WORKER_PRODUCT_LIMIT);
         if (error) throw error;
         setProducts(data || []);
       } catch (err) {
@@ -712,7 +720,8 @@ export default function ReelsScreen({ navigation, route }: any) {
         .select('id, video_url, thumbnail_url, description, type, likes, created_at, profiles(id, full_name, avatar_url, role, category, subcategory, location, verification_level)')
         .order('created_at', { ascending: false }).limit(50);
       if (activeTab === 'following' && user?.id) {
-        const { data: followData } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
+        const { data: followData } = await supabase.from('follows')
+          .select('following_id').eq('follower_id', user.id).limit(FOLLOWING_FETCH_LIMIT);
         const followedIds = (followData || []).map((f: any) => f.following_id);
         if (followedIds.length > 0) { query = query.in('user_id', followedIds); }
         else { setReels([]); setLoading(false); return; }
@@ -729,6 +738,20 @@ export default function ReelsScreen({ navigation, route }: any) {
 
   const onViewRef = useRef(({ viewableItems }: any) => { if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0); });
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
+  // Runs once per requested id, after the feed has the reel in hand.
+  // Silently does nothing when the reel isn't in this batch — it may be
+  // older than the 50 the feed loads, and scrolling somewhere arbitrary
+  // would be worse than staying put.
+  useEffect(() => {
+    if (!focusReelId || loading || focusHandledRef.current === focusReelId) return;
+    const index = reels.findIndex(r => r.id === focusReelId);
+    if (index > 0) {
+      listRef.current?.scrollToIndex({ index, animated: false });
+      setActiveIndex(index);
+    }
+    focusHandledRef.current = focusReelId;
+  }, [focusReelId, loading, reels]);
+
   const renderReel = useCallback(({ item, index }: { item: Reel; index: number }) => {
     // Android has a hard limit on simultaneous hardware video decoders.
     // Without this, every reel that scrolled into FlatList's render
@@ -842,20 +865,6 @@ export default function ReelsScreen({ navigation, route }: any) {
       </View>
     </View>
   );
-
-  // Runs once per requested id, after the feed has the reel in hand.
-  // Silently does nothing when the reel isn't in this batch — it may be
-  // older than the 50 the feed loads, and scrolling somewhere arbitrary
-  // would be worse than staying put.
-  useEffect(() => {
-    if (!focusReelId || loading || focusHandledRef.current === focusReelId) return;
-    const index = reels.findIndex(r => r.id === focusReelId);
-    if (index > 0) {
-      listRef.current?.scrollToIndex({ index, animated: false });
-      setActiveIndex(index);
-    }
-    focusHandledRef.current = focusReelId;
-  }, [focusReelId, loading, reels]);
 
   return (
     <View style={styles.container}>

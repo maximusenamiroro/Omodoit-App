@@ -30,6 +30,9 @@ const timeAgo = (date: string): string => {
   return Math.floor(seconds / 3600) + 'h ago';
 };
 
+// Flash Jobs expire quickly, so anything past the first page is history.
+const FLASH_JOB_LIMIT = 50;
+
 export default function FlashJobInboxScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -50,7 +53,8 @@ export default function FlashJobInboxScreen() {
         .eq('worker_id', user.id)
         .eq('status', 'pending')
         .not('flash_batch_id', 'is', null)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(FLASH_JOB_LIMIT);
 
       if (error) throw error;
 
