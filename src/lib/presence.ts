@@ -83,7 +83,10 @@ export function useBroadcastPresence(
     if (channelRef.current) {
       channelRef.current.track({ category, ...extraRef.current, online_at: new Date().toISOString() });
     }
-  }, [extra.lat, extra.lng, extra.name, extra.subcategory, extra.service]);
+    // category belongs here too: a worker who changes trade should
+    // re-broadcast it, otherwise clients keep seeing them listed under
+    // the category they had when the app started.
+  }, [category, extra.lat, extra.lng, extra.name, extra.subcategory, extra.service]);
 }
 
 // ── Observer side: read live presence state ────────────────────────────

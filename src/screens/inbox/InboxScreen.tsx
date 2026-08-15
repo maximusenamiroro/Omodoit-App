@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   Image, StatusBar, Animated, Platform,
@@ -77,15 +77,8 @@ export default function InboxScreen({ navigation }: any) {
     ]).start();
   }, [headerOpacity, listOpacity]);
 
-  useEffect(() => {
-    if (user?.id) {
-      fetchConversations();
-      fetchCallLogs();
-      setupRealtime();
-    }
-  }, [user?.id]);
 
-  const fetchCallLogs = async () => {
+  const fetchCallLogs = useCallback(async () => {
     if (!user?.id) return;
     try {
       const { data: rows, error } = await supabase
@@ -119,42 +112,11 @@ export default function InboxScreen({ navigation }: any) {
       console.warn('Could not load call logs (non-fatal):', err);
       setCallLogs([]);
     }
-  };
+  }, [user?.id]);
 
   const channelRef = useRef<any>(null);
 
-  const setupRealtime = () => {
-    if (!user?.id) return;
-    channelRef.current = supabase
-      .channel('inbox_messages')
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-      }, (payload: any) => {
-        const msg = payload.new;
-        if (msg.sender_id === user.id || msg.receiver_id === user.id) {
-          fetchConversations();
-        }
-      })
-      .on('postgres_changes', {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'call_logs',
-      }, (payload: any) => {
-        const log = payload.new;
-        if (log.caller_id === user.id || log.callee_id === user.id) {
-          fetchCallLogs();
-        }
-      })
-      .subscribe();
-
-    return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-    };
-  };
-
-  const fetchConversations = async () => {
+  const fetchConversations = useCallback(async () => {
     if (!user?.id) return;
 
     try {
@@ -235,7 +197,46 @@ export default function InboxScreen({ navigation }: any) {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [user?.id]);
+
+  const setupRealtime = useCallback(() => {
+    if (!user?.id) return;
+    channelRef.current = supabase
+      .channel('inbox_messages')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+      }, (payload: any) => {
+        const msg = payload.new;
+        if (msg.sender_id === user.id || msg.receiver_id === user.id) {
+          fetchConversations();
+        }
+      })
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'call_logs',
+      }, (payload: any) => {
+        const log = payload.new;
+        if (log.caller_id === user.id || log.callee_id === user.id) {
+          fetchCallLogs();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+  }, [user?.id, fetchConversations, fetchCallLogs]);
+
+  useEffect(() => {
+    if (user?.id) {
+      fetchConversations();
+      fetchCallLogs();
+      setupRealtime();
+    }
+  }, [user?.id, fetchConversations, fetchCallLogs, setupRealtime]);
 
   const handleRefresh = () => {
     setRefreshing(true);

@@ -76,7 +76,7 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
       }, 30000);
     }
     return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
-  }, [status]);
+  }, [status, navigation, user?.id, workerId]);
 
   useEffect(() => {
     if (!workerId) {
@@ -93,6 +93,11 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
         console.error('Failed to send call invite:', err);
         navigation.goBack();
       });
+    // Deliberately mount-only. This sends the call invite; re-running
+    // it because a dependency changed identity would ring the callee a
+    // second time for the same call. The lint rule can't see that this
+    // is a one-shot side effect rather than a subscription.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

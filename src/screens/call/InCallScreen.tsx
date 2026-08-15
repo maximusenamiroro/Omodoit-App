@@ -47,7 +47,7 @@ export default function InCallScreen({ navigation, route }: any) {
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     }
-  }, [permissionDenied]);
+  }, [permissionDenied, navigation]);
 
   useEffect(() => {
     Animated.timing(contentOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
@@ -68,7 +68,7 @@ export default function InCallScreen({ navigation, route }: any) {
     if (remoteJoined) animations.forEach(a => a.start());
 
     return () => { if (timer) clearInterval(timer); };
-  }, [remoteJoined]);
+  }, [remoteJoined, contentOpacity, wave1, wave2, wave3, wave4, wave5]);
 
   useEffect(() => {
     if (wasRemoteJoinedRef.current && !remoteJoined) {
@@ -81,6 +81,12 @@ export default function InCallScreen({ navigation, route }: any) {
       navigation.goBack();
     }
     wasRemoteJoinedRef.current = remoteJoined;
+    // Only remoteJoined may retrigger this. `duration` ticks every
+    // second, so including it would re-run this block once a second —
+    // logging the call outcome repeatedly and calling goBack() on a
+    // loop. The other values are read at the moment the remote party
+    // leaves, which is exactly when this runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteJoined]);
 
   const handleEndCall = () => {
