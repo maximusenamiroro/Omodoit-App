@@ -61,17 +61,21 @@ export default function ChatScreen({ navigation, route }: any) {
 
   const accentColor = role === 'client' ? colors.client : colors.primary;
 
-  useEffect(() => {
-    fetchMessages();
-    markAsSeen();
-    setupRealtime();
+  const markAsSeen = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      await supabase
+        .from('messages')
+        .update({ seen: true })
+        .eq('sender_id', otherUserId)
+        .eq('receiver_id', user.id)
+        .eq('seen', false);
+    } catch (err) {
+      console.error('Mark seen error:', err);
+    }
+  }, [user?.id, otherUserId]);
 
-    return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-    };
-  }, []);
-
-  const setupRealtime = () => {
+  const setupRealtime = useCallback(() => {
     if (!user?.id) return;
     channelRef.current = supabase
       .channel('chat_' + otherUserId)
@@ -95,9 +99,9 @@ export default function ChatScreen({ navigation, route }: any) {
         }
       })
       .subscribe();
-  };
+  }, [user?.id, otherUserId, markAsSeen]);
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     if (!user?.id) return;
     try {
       const { data, error } = await supabase
@@ -116,21 +120,21 @@ export default function ChatScreen({ navigation, route }: any) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id, otherUserId]);
 
-  const markAsSeen = async () => {
-    if (!user?.id) return;
-    try {
-      await supabase
-        .from('messages')
-        .update({ seen: true })
-        .eq('sender_id', otherUserId)
-        .eq('receiver_id', user.id)
-        .eq('seen', false);
-    } catch (err) {
-      console.error('Mark seen error:', err);
-    }
-  };
+  useEffect(() => {
+    fetchMessages();
+    markAsSeen();
+    setupRealtime();
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+    // These are memoised on user id and the person being messaged, so
+    // this still runs once per conversation — but opening a different
+    // chat now genuinely re-subscribes instead of reusing a channel
+    // bound to the previous one.
+  }, [fetchMessages, markAsSeen, setupRealtime]);
 
   const handleSend = async () => {
     if (!newMessage.trim() || !user?.id || sending) return;
