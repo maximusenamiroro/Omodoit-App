@@ -70,31 +70,20 @@ export default function HireWorkerScreen({ navigation, route }: any) {
       if (budget.trim()) extras.push(`Budget: ₦${budget.trim()}`);
       if (extras.length > 0) fullDescription += '\n\n' + extras.join('\n');
 
-      const { data: newBooking, error } = await supabase.from('hire_requests').insert({
+      const { error } = await supabase.from('hire_requests').insert({
         client_id: user.id,
         worker_id: worker.id,
         job_description: fullDescription,
         location: location.trim(),
         status: 'pending',
-      }).select('id').single();
+      });
 
       if (error) throw error;
 
-      // Best-effort — if the notifications table/columns don't match,
-      // the booking itself has already succeeded, so this failing
-      // silently shouldn't block anything or show an error here.
-      try {
-        await supabase.from('notifications').insert({
-          user_id: worker.id,
-          type: 'booking',
-          message: `wants to book you for ${subcategoryName || 'a job'}`,
-          from_user_id: user.id,
-          booking_id: newBooking?.id || null,
-          is_read: false,
-        });
-      } catch (notifErr) {
-        console.warn('Could not notify worker (non-fatal):', notifErr);
-      }
+      // No notification is inserted here on purpose. The on_booking
+      // trigger fires on every hire_requests insert and writes one
+      // itself, so doing it here as well put two entries in the worker's
+      // feed for a single booking.
 
       Alert.alert(
         'Booking Sent!',

@@ -18,6 +18,9 @@ import WorkerPublicProfileScreen from '../screens/workspace/WorkerPublicProfileS
 import HireWorkerScreen from '../screens/workspace/HireWorkerScreen';
 import NewArrivalsScreen from '../screens/workspace/NewArrivalsScreen';
 import OrdersScreen from '../screens/orders/OrdersScreen';
+import AllBookingsScreen from '../screens/workstation/AllBookingsScreen';
+import AllOrdersScreen from '../screens/workstation/AllOrdersScreen';
+import MyProductsScreen from '../screens/products/MyProductsScreen';
 import OutgoingCallScreen from '../screens/call/OutgoingCallScreen';
 import IncomingCallScreen from '../screens/call/IncomingCallScreen';
 import InCallScreen from '../screens/call/InCallScreen';
@@ -118,6 +121,9 @@ export default function AppNavigator() {
         <Stack.Screen name="Earnings" component={EarningsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="NewArrivals" component={NewArrivalsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Orders" component={OrdersScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="AllBookings" component={AllBookingsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="AllOrders" component={AllOrdersScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="MyProducts" component={MyProductsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
          <Stack.Screen name="OutgoingCall" component={OutgoingCallScreen} options={{ animation: 'fade', gestureEnabled: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="IncomingCall" component={IncomingCallScreen} options={{ animation: 'fade', gestureEnabled: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="InCall" component={InCallScreen} options={{ animation: 'fade', gestureEnabled: false, presentation: 'fullScreenModal' }} />

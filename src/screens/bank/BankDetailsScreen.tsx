@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView,
+  TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
@@ -10,16 +10,49 @@ import { supabase } from '../../api/supabase';
 
 export default function BankDetailsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { user, profile, role, refreshProfile } = useAuth();
+  const { user, role } = useAuth();
   const accentColor = role === 'client' ? colors.client : colors.primary;
 
-  const [bankName, setBankName] = useState(profile?.bank_name || '');
-  const [accountNumber, setAccountNumber] = useState(profile?.account_number || '');
-  const [accountName, setAccountName] = useState(profile?.account_name || '');
+  // Payout details are no longer part of the cached profile: they live in
+  // payout_accounts, which only their owner can read. profiles is
+  // world-readable, so bank details stored there were readable by anyone
+  // holding the anon key — which ships inside the app.
+  const [bankName, setBankName] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [accountName, setAccountName] = useState('');
   const [focused, setFocused] = useState('');
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [hasExisting, setHasExisting] = useState(false);
 
-  const hasExisting = !!(profile?.bank_name || profile?.account_number);
+  useEffect(() => {
+    if (!user?.id) { setLoading(false); return; }
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('payout_accounts')
+          .select('bank_name, account_number, account_name')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (error) throw error;
+        if (cancelled || !data) return;
+
+        setBankName(data.bank_name || '');
+        setAccountNumber(data.account_number || '');
+        setAccountName(data.account_name || '');
+        setHasExisting(!!(data.bank_name || data.account_number));
+      } catch (err) {
+        console.error('Could not load payout details:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [user?.id]);
 
   const isValid = bankName.trim().length > 0 && accountNumber.trim().length >= 10 && accountName.trim().length > 0;
 
@@ -33,18 +66,21 @@ export default function BankDetailsScreen({ navigation }: any) {
 
     setSaving(true);
     try {
+      // upsert rather than update: the first save has no row to update,
+      // and user_id is the primary key so a second save replaces it.
       const { error } = await supabase
-        .from('profiles')
-        .update({
+        .from('payout_accounts')
+        .upsert({
+          user_id: user.id,
           bank_name: bankName.trim(),
           account_number: accountNumber.trim(),
           account_name: accountName.trim(),
-        })
-        .eq('id', user.id);
+          updated_at: new Date().toISOString(),
+        });
 
       if (error) throw error;
 
-      await refreshProfile();
+      setHasExisting(true);
 
       Alert.alert('Bank Details Saved', 'Your payout details have been updated.', [
         { text: 'OK', onPress: () => navigation.goBack() },
@@ -69,6 +105,8 @@ export default function BankDetailsScreen({ navigation }: any) {
         <Text style={st.headerTitle}>Bank Details</Text>
         <View style={{ width: 36 }} />
       </View>
+
+      {loading && <ActivityIndicator color={accentColor} style={st.loader} />}
 
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}>
@@ -141,6 +179,7 @@ export default function BankDetailsScreen({ navigation }: any) {
 }
 
 const st = StyleSheet.create({
+  loader: { marginTop: 20 },
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.screenPadding, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white + '08', alignItems: 'center', justifyContent: 'center' },
