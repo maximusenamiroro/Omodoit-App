@@ -20,7 +20,6 @@ export default function EditProfileScreen({ navigation }: any) {
   const [newAvatarPicked, setNewAvatarPicked] = useState(false);
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [location, setLocation] = useState(profile?.location || '');
-  const [phone, setPhone] = useState(profile?.phone || '');
   const [businessName, setBusinessName] = useState(profile?.business_name || '');
   const [experience, setExperience] = useState(profile?.experience || '');
   const [serviceArea, setServiceArea] = useState(profile?.service_area || '');
@@ -46,7 +45,6 @@ export default function EditProfileScreen({ navigation }: any) {
       const updates: Record<string, any> = {
         full_name: fullName.trim(),
         location: location.trim() || null,
-        phone: phone.trim() || null,
         avatar_url: avatarUrl,
       };
 
@@ -136,7 +134,6 @@ export default function EditProfileScreen({ navigation }: any) {
         <View style={st.form}>
           {renderField('Full Name *', fullName, setFullName, 'Your full name', 'name')}
           {renderField('Location', location, setLocation, 'City, State e.g. Lagos, Nigeria', 'loc')}
-          {renderField('Phone Number', phone, setPhone, '+234...', 'phone', { keyboard: 'phone-pad' })}
 
           {role === 'worker' && (
             <>

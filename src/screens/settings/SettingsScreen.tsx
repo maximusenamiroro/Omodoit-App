@@ -95,7 +95,6 @@ export default function SettingsScreen({ navigation }: any) {
   const accountSettings: SettingsItem[] = [
     { icon: '👤', label: 'Edit Profile', desc: 'Name, photo, location', action: () => navigation.navigate('EditProfile') },
     { icon: '🔒', label: 'Change Password', desc: 'Update your password', action: handleChangePassword },
-    { icon: '📱', label: 'Phone Number', desc: profile?.phone || 'Not set', action: () => navigation.navigate('EditProfile') },
     { icon: '📧', label: 'Email', desc: user?.email || 'Not set' },
     { icon: '🔔', label: 'Notifications', desc: 'Push notification settings', action: () => navigation.navigate('Notifications') },
   ];
