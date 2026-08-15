@@ -1,14 +1,15 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, Animated, StatusBar, Platform,
-  Dimensions, LayoutAnimation, PanResponder,
+  TextInput, Animated, StatusBar, Platform, Image,
+  Dimensions, LayoutAnimation, PanResponder, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
 import { supabase } from '../../api/supabase';
 import { CATEGORIES } from '../../lib/categories';
 import { useOnlinePresence } from '../../lib/presence';
+import { searchWorkspace, matchOnlineWorkers, type SearchResults } from '../../lib/search';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const CAT_CARD_W = (SCREEN_W - spacing.screenPadding * 2 - 24) / 3;
@@ -18,6 +19,11 @@ const MAIN_CATEGORIES = CATEGORIES;
 
 
 const VISIBLE_ARRIVALS = 5;
+
+// Search fires this long after the last keystroke. Short enough to feel
+// immediate, long enough that typing "shoemaker" is one query and not ten.
+const SEARCH_DEBOUNCE_MS = 300;
+const MIN_QUERY_LENGTH = 2;
 
 function DraggableFab({ onPress, bottom }: { onPress: () => void; bottom: number }) {
   const pan = useRef(new Animated.ValueXY({ x: SCREEN_W - 74, y: SCREEN_H - bottom - 80 })).current;
@@ -73,6 +79,8 @@ export default function WorkspaceScreen({ navigation }: any) {
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [newArrivals, setNewArrivals] = useState<any[]>([]);
   const [arrivalsLoading, setArrivalsLoading] = useState(true);
+  const [results, setResults] = useState<SearchResults>({ products: [], reels: [] });
+  const [searching, setSearching] = useState(false);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const searchSlide = useRef(new Animated.Value(20)).current;
@@ -145,7 +153,63 @@ export default function WorkspaceScreen({ navigation }: any) {
   // 60 seconds. Updates instantly the moment a worker opens/closes
   // their app, and costs nothing per update since it rides the
   // existing websocket connection rather than a database query.
-  const { onlineCategories } = useOnlinePresence();
+  const { onlineCategories, workers } = useOnlinePresence();
+
+  const trimmedQuery = searchQuery.trim();
+  const isSearching = trimmedQuery.length >= MIN_QUERY_LENGTH;
+
+  // Debounced so each keystroke doesn't fire its own round trip. The
+  // stale-response guard matters more than the debounce: without it, a
+  // slow query for "sh" can land after the fast one for "shoe" and
+  // overwrite the right answer with the wrong one.
+  useEffect(() => {
+    if (!isSearching) {
+      setResults({ products: [], reels: [] });
+      setSearching(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearching(true);
+    const handle = setTimeout(async () => {
+      try {
+        const found = await searchWorkspace(trimmedQuery);
+        if (!cancelled) setResults(found);
+      } catch (err) {
+        console.error('Search failed:', err);
+        if (!cancelled) setResults({ products: [], reels: [] });
+      } finally {
+        if (!cancelled) setSearching(false);
+      }
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [trimmedQuery, isSearching]);
+
+  const liveMatches = useMemo(
+    () => matchOnlineWorkers(workers, trimmedQuery),
+    [workers, trimmedQuery]
+  );
+
+  const openProductHit = (hit: SearchResults['products'][number]) => {
+    navigation.navigate('ProductDetail', {
+      product: {
+        id: hit.id,
+        workerId: hit.workerId,
+        type: hit.type,
+        title: hit.title,
+        description: hit.description,
+        price: hit.price,
+        imageUrl: hit.imageUrl,
+        videoUrl: hit.videoUrl,
+        category: hit.category,
+        color: colors.primary,
+        sellerName: hit.posterName,
+      },
+    });
+  };
+
+  const totalHits = results.products.length + results.reels.length + liveMatches.length;
 
   const filteredCategories = searchQuery.trim()
     ? MAIN_CATEGORIES.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -191,7 +255,7 @@ export default function WorkspaceScreen({ navigation }: any) {
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={setSearchQuery}
-              placeholder="Search business..."
+              placeholder="Search shoes, cleaning, a worker…"
               placeholderTextColor={colors.textMuted}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
@@ -204,8 +268,107 @@ export default function WorkspaceScreen({ navigation }: any) {
           </View>
         </Animated.View>
 
+        {/* SEARCH RESULTS — products, reels and online workers matching
+            the query, all from the last 48 hours */}
+        {isSearching && (
+          <View style={{ paddingBottom: 10 }}>
+            {searching ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
+            ) : totalHits === 0 ? (
+              <View style={styles.noResults}>
+                <Text style={styles.noResultsEmoji}>🔍</Text>
+                <Text style={styles.noResultsTitle}>Nothing found for “{trimmedQuery}”</Text>
+                <Text style={styles.noResultsSub}>
+                  Search covers posts and reels from the last 48 hours, plus workers who are online now.
+                </Text>
+              </View>
+            ) : (
+              <>
+                {results.products.length > 0 && (
+                  <>
+                    <Text style={styles.resultSection}>🆕 New arrivals ({results.products.length})</Text>
+                    {results.products.map(hit => (
+                      <TouchableOpacity key={hit.id} style={styles.resultRow} onPress={() => openProductHit(hit)} activeOpacity={0.85}>
+                        {hit.imageUrl ? (
+                          <Image source={{ uri: hit.imageUrl }} style={styles.resultThumb} />
+                        ) : (
+                          <View style={[styles.resultThumb, styles.resultThumbFallback]}>
+                            <Text style={styles.resultEmoji}>{hit.videoUrl ? '🎬' : hit.type === 'service' ? '🛠️' : '📦'}</Text>
+                          </View>
+                        )}
+                        <View style={styles.resultInfo}>
+                          <Text style={styles.resultTitle} numberOfLines={1}>{hit.title}</Text>
+                          <Text style={styles.resultSub} numberOfLines={1}>
+                            @{hit.posterName} · {hit.price != null ? `₦${hit.price.toLocaleString()}` : 'Price on request'}
+                          </Text>
+                        </View>
+                        <View style={styles.resultAction}>
+                          <Text style={styles.resultActionText}>{hit.type === 'service' ? 'Book' : 'Order'}</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+
+                {results.reels.length > 0 && (
+                  <>
+                    <Text style={styles.resultSection}>🎬 Reels ({results.reels.length})</Text>
+                    {results.reels.map(hit => (
+                      <TouchableOpacity key={hit.id} style={styles.resultRow} onPress={() => navigation.navigate('Reels', { focusReelId: hit.id })} activeOpacity={0.85}>
+                        {hit.thumbnailUrl ? (
+                          <Image source={{ uri: hit.thumbnailUrl }} style={styles.resultThumb} />
+                        ) : (
+                          <View style={[styles.resultThumb, styles.resultThumbFallback]}>
+                            <Text style={styles.resultEmoji}>🎬</Text>
+                          </View>
+                        )}
+                        <View style={styles.resultInfo}>
+                          <Text style={styles.resultTitle} numberOfLines={1}>{hit.description || 'Untitled reel'}</Text>
+                          <Text style={styles.resultSub} numberOfLines={1}>@{hit.posterName}{hit.category ? ` · ${hit.category}` : ''}</Text>
+                        </View>
+                        <View style={styles.resultAction}>
+                          <Text style={styles.resultActionText}>Watch</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+
+                {liveMatches.length > 0 && (
+                  <>
+                    <Text style={styles.resultSection}>🟢 Live workers ({liveMatches.length})</Text>
+                    {liveMatches.map(w => (
+                      <TouchableOpacity
+                        key={w.id}
+                        style={styles.resultRow}
+                        onPress={() => navigation.navigate('WorkerList', {
+                          categoryName: w.category,
+                          subcategoryName: w.subcategory || w.category,
+                          color: colors.primary,
+                        })}
+                        activeOpacity={0.85}
+                      >
+                        <View style={[styles.resultThumb, styles.resultThumbFallback]}>
+                          <Text style={styles.resultEmoji}>👷</Text>
+                        </View>
+                        <View style={styles.resultInfo}>
+                          <Text style={styles.resultTitle} numberOfLines={1}>{w.name}</Text>
+                          <Text style={styles.resultSub} numberOfLines={1}>{w.subcategory || w.category} · online now</Text>
+                        </View>
+                        <View style={[styles.resultAction, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '30' }]}>
+                          <Text style={[styles.resultActionText, { color: colors.primary }]}>View</Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          </View>
+        )}
+
         {/* NEW ARRIVALS */}
-        {(arrivalsLoading || newArrivals.length > 0) && (
+        {!isSearching && (arrivalsLoading || newArrivals.length > 0) && (
           <Animated.View style={{ opacity: arrivalsOpacity }}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionTitleRow}>
@@ -259,6 +422,7 @@ export default function WorkspaceScreen({ navigation }: any) {
         )}
 
         {/* LIVE BUSINESS */}
+        {!isSearching && (
         <Animated.View style={{ opacity: liveOpacity, transform: [{ translateY: liveSlide }] }}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
@@ -288,8 +452,10 @@ export default function WorkspaceScreen({ navigation }: any) {
             </TouchableOpacity>
           )}
         </Animated.View>
+        )}
 
         {/* GENERAL WORKERS */}
+        {!isSearching && (
         <Animated.View style={{ opacity: generalOpacity }}>
           <Text style={[styles.sectionTitle, { paddingHorizontal: spacing.screenPadding, marginBottom: 10, marginTop: 4 }]}>General Workers</Text>
           <TouchableOpacity style={styles.actionRowBtn}
@@ -306,6 +472,7 @@ export default function WorkspaceScreen({ navigation }: any) {
             <Text style={styles.actionRowArrow}>→</Text>
           </TouchableOpacity>
         </Animated.View>
+        )}
 
       </ScrollView>
 
@@ -358,6 +525,22 @@ const styles = StyleSheet.create({
   seeMoreInner: { width: '100%', height: '100%', borderRadius: 30, backgroundColor: colors.bgCard, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.bg },
   seeMoreCount: { fontSize: 14, fontWeight: '700', color: colors.primary },
   seeMoreLabel: { fontSize: 10, fontWeight: '600', color: colors.primary },
+
+  resultSection: { fontSize: 13, fontWeight: '700', color: colors.textPrimary, paddingHorizontal: spacing.screenPadding, marginTop: 6, marginBottom: 8 },
+  resultRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.screenPadding, marginBottom: 8, padding: 10, borderRadius: 14, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  resultThumb: { width: 44, height: 44, borderRadius: 12, marginRight: 12 },
+  resultThumbFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white + '08' },
+  resultEmoji: { fontSize: 20 },
+  resultInfo: { flex: 1 },
+  resultTitle: { fontSize: 13, fontWeight: '700', color: colors.textPrimary },
+  resultSub: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
+  resultAction: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
+  resultActionText: { fontSize: 11, fontWeight: '700', color: colors.textPrimary },
+
+  noResults: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 30 },
+  noResultsEmoji: { fontSize: 36, marginBottom: 10, opacity: 0.4 },
+  noResultsTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 6, textAlign: 'center' },
+  noResultsSub: { fontSize: 11, color: colors.textMuted, textAlign: 'center', lineHeight: 16 },
 
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.screenPadding, gap: 12, marginBottom: 12 },
   categoryCard: { width: CAT_CARD_W, backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14, alignItems: 'center', minHeight: 100, justifyContent: 'center' },

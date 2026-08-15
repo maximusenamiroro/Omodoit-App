@@ -26,7 +26,11 @@ const getInitials = (name?: string | null) => {
 // from storage — deleting only the database row would leave the video
 // sitting in the bucket forever, still billed for and unreachable.
 interface ReelItem { id: string; likes: number; videoUrl: string | null; thumbnailUrl: string | null; }
-interface ProductItem { id: string; title: string; price: number | null; category: string; }
+interface ProductItem { id: string; title: string; price: number | null; category: string; type: 'service' | 'product'; }
+
+// The profile is a summary. Past two posts it links to the full list
+// rather than growing without limit inside a tab.
+const PRODUCT_PREVIEW_COUNT = 2;
 interface ReviewItem { id: string; name: string; rating: number; text: string; date: string; }
 
 export default function WorkerProfileScreen({ navigation }: any) {
@@ -104,7 +108,7 @@ export default function WorkerProfileScreen({ navigation }: any) {
     try {
       const [reelsRes, productsRes, reviewsRes] = await Promise.all([
         supabase.from('reels').select('id, likes, video_url, thumbnail_url').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('products').select('id, title, price, category').eq('worker_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('products').select('id, title, price, category, type').eq('worker_id', user.id).order('created_at', { ascending: false }),
         supabase.from('reviews').select('id, rating, comment, created_at, client_id').eq('worker_id', user.id).order('created_at', { ascending: false }).limit(20),
       ]);
 
@@ -130,7 +134,10 @@ export default function WorkerProfileScreen({ navigation }: any) {
         videoUrl: r.video_url || null,
         thumbnailUrl: r.thumbnail_url || null,
       })));
-      setProducts((productsRes.data || []).map((p: any) => ({ id: p.id, title: p.title, price: p.price, category: p.category })));
+      setProducts((productsRes.data || []).map((p: any) => ({
+        id: p.id, title: p.title, price: p.price, category: p.category,
+        type: p.type === 'service' ? 'service' : 'product',
+      })));
 
       const reviewRows = reviewsRes.data || [];
       const clientIds = [...new Set(reviewRows.map((r: any) => r.client_id).filter(Boolean))];
@@ -328,14 +335,19 @@ export default function WorkerProfileScreen({ navigation }: any) {
                   {products.length === 0 && (
                     <Text style={st.emptyText}>No products yet</Text>
                   )}
-                  {products.map(product => (
-                    <TouchableOpacity key={product.id} style={st.productCard} activeOpacity={0.85}>
+                  {products.slice(0, PRODUCT_PREVIEW_COUNT).map(product => (
+                    <TouchableOpacity
+                      key={product.id}
+                      style={st.productCard}
+                      activeOpacity={0.85}
+                      onPress={() => navigation.navigate('MyProducts')}
+                    >
                       <View style={st.productThumb}>
-                        <Text style={st.productEmoji}>📦</Text>
+                        <Text style={st.productEmoji}>{product.type === 'service' ? '🛠️' : '📦'}</Text>
                       </View>
                       <View style={st.productInfo}>
                         <Text style={st.productTitle}>{product.title}</Text>
-                        <Text style={st.productCat}>{product.category}</Text>
+                        <Text style={st.productCat}>{product.type === 'service' ? 'Service' : 'Product'}</Text>
                         <Text style={[st.productPrice, { color: colors.primary }]}>
                           {product.price != null ? `₦${product.price.toLocaleString()}` : 'Contact for price'}
                         </Text>
@@ -343,6 +355,13 @@ export default function WorkerProfileScreen({ navigation }: any) {
                       <Text style={st.productArrow}>→</Text>
                     </TouchableOpacity>
                   ))}
+                  {products.length > PRODUCT_PREVIEW_COUNT && (
+                    <TouchableOpacity style={st.showMoreBtn} onPress={() => navigation.navigate('MyProducts')} activeOpacity={0.85}>
+                      <Text style={st.showMoreText}>
+                        Show all {products.length} posts →
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                   <TouchableOpacity style={st.addProductBtn} onPress={() => navigation.navigate('AddProduct')} activeOpacity={0.85}>
                     <Text style={[st.addProductText, { color: colors.primary }]}>+ Add Product</Text>
                   </TouchableOpacity>
@@ -452,6 +471,8 @@ const st = StyleSheet.create({
   addReelIcon: { fontSize: 24, color: colors.primary, marginBottom: 4 },
   addReelText: { fontSize: 10, color: colors.primary, fontWeight: '600' },
 
+  showMoreBtn: { paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, marginBottom: 10 },
+  showMoreText: { fontSize: 12, fontWeight: '700', color: colors.primary },
   productsSection: { padding: spacing.screenPadding },
   productCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14, marginBottom: 10 },
   productThumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: colors.primary + '10', alignItems: 'center', justifyContent: 'center', marginRight: 12 },

@@ -130,6 +130,43 @@ export async function uploadReelThumbnail(
   return data?.publicUrl || '';
 }
 
+// A product or service post can carry a short video instead of (or as
+// well as) a photo. Lives in the 'products' bucket beside the image so
+// the two share a lifecycle.
+// Matches the products bucket's file_size_limit. Storage rejects an
+// oversized upload with a 413 whose message says nothing useful, so this
+// checks first and fails with something a worker can act on.
+export const PRODUCT_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+
+export async function uploadProductVideo(
+  localUri: string,
+  userId: string
+): Promise<string> {
+  const ext = (localUri.split('.').pop() || 'mp4').toLowerCase().split('?')[0];
+  const fileName = `${Date.now()}_video.${ext}`;
+  const path = `${userId}/${fileName}`;
+  const contentType = ext === 'mov' ? 'video/quicktime' : 'video/mp4';
+
+  const response = await fetch(toFileUri(localUri));
+  const arrayBuffer = await response.arrayBuffer();
+
+  if (arrayBuffer.byteLength > PRODUCT_VIDEO_MAX_BYTES) {
+    throw new Error(
+      'This video is too large even after compression (' +
+      Math.round(arrayBuffer.byteLength / (1024 * 1024)) + 'MB). Please choose a shorter clip.'
+    );
+  }
+
+  const { error } = await supabase.storage
+    .from('products')
+    .upload(path, arrayBuffer, { contentType, upsert: true, cacheControl: IMMUTABLE_CACHE });
+
+  if (error) throw new Error('Video upload failed: ' + error.message);
+
+  const { data } = supabase.storage.from('products').getPublicUrl(path);
+  return data?.publicUrl || '';
+}
+
 // Removes all previously uploaded files for this user in a bucket
 // before uploading a new one — mirrors the website's avatar cleanup
 // pattern so old, orphaned files don't accumulate in storage.

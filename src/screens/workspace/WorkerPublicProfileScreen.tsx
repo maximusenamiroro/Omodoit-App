@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Platform, ActivityIndicator, Dimensions,
+  Animated, StatusBar, Platform, ActivityIndicator, Dimensions, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
@@ -29,6 +29,22 @@ interface ReelRow {
   likes: number;
 }
 
+// What this worker offers. The profile previews the two most recent and
+// links to the rest — a worker with twenty listings shouldn't push the
+// reviews off the bottom of the page.
+const POST_PREVIEW_COUNT = 2;
+
+interface PostRow {
+  id: string;
+  type: 'service' | 'product';
+  title: string;
+  description: string | null;
+  price: number | null;
+  imageUrl: string | null;
+  videoUrl: string | null;
+  category: string | null;
+}
+
 export default function WorkerPublicProfileScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { worker, color, subcategoryName } = route.params;
@@ -38,6 +54,8 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reels, setReels] = useState<ReelRow[]>([]);
   const [reelsLoading, setReelsLoading] = useState(true);
+  const [posts, setPosts] = useState<PostRow[]>([]);
+  const [postsLoading, setPostsLoading] = useState(true);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerScale = useRef(new Animated.Value(0.95)).current;
@@ -120,6 +138,57 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
     fetchReels();
   }, [worker.id]);
 
+  useEffect(() => {
+    const fetchPosts = async () => {
+      setPostsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, type, title, description, price, image_url, video_url, category')
+          .eq('worker_id', worker.id)
+          .order('created_at', { ascending: false })
+          .limit(POST_PREVIEW_COUNT + 1);
+
+        if (error) throw error;
+        setPosts((data || []).map((p: any) => ({
+          id: p.id,
+          type: p.type === 'service' ? 'service' : 'product',
+          title: p.title || 'Untitled',
+          description: p.description || null,
+          price: p.price != null ? Number(p.price) : null,
+          imageUrl: p.image_url || null,
+          videoUrl: p.video_url || null,
+          category: p.category || null,
+        })));
+      } catch (err) {
+        console.warn('Could not load posts (non-fatal):', err);
+        setPosts([]);
+      } finally {
+        setPostsLoading(false);
+      }
+    };
+
+    fetchPosts();
+  }, [worker.id]);
+
+  const openPost = (post: PostRow) => {
+    navigation.navigate('ProductDetail', {
+      product: {
+        id: post.id,
+        workerId: worker.id,
+        type: post.type,
+        title: post.title,
+        description: post.description,
+        price: post.price,
+        imageUrl: post.imageUrl,
+        videoUrl: post.videoUrl,
+        category: post.category,
+        color: accentColor,
+        sellerName: worker.name,
+      },
+    });
+  };
+
   const goToChat = () => {
     navigation.navigate('Chat', { otherUserId: worker.id, otherUserName: worker.name, otherUserAvatar: null });
   };
@@ -176,6 +245,52 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
             <View style={styles.sectionCard}>
               <Text style={styles.bioText}>{worker.bio}</Text>
             </View>
+          </View>
+
+          {/* Services & products this worker offers */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Services & Products</Text>
+            {postsLoading ? (
+              <ActivityIndicator color={accentColor} style={{ marginVertical: 20 }} />
+            ) : posts.length === 0 ? (
+              <View style={styles.sectionCard}>
+                <Text style={styles.bioText}>Nothing posted yet.</Text>
+              </View>
+            ) : (
+              <>
+                {posts.slice(0, POST_PREVIEW_COUNT).map(post => (
+                  <TouchableOpacity key={post.id} style={styles.postCard} onPress={() => openPost(post)} activeOpacity={0.85}>
+                    {post.imageUrl ? (
+                      <Image source={{ uri: post.imageUrl }} style={styles.postThumb} />
+                    ) : (
+                      <View style={[styles.postThumb, styles.postThumbFallback]}>
+                        <Text style={styles.postEmoji}>{post.videoUrl ? '🎬' : post.type === 'service' ? '🛠️' : '📦'}</Text>
+                      </View>
+                    )}
+                    <View style={styles.postInfo}>
+                      <Text style={styles.postTitle} numberOfLines={1}>{post.title}</Text>
+                      <Text style={styles.postPrice}>
+                        {post.price != null ? `₦${post.price.toLocaleString()}` : 'Price on request'}
+                      </Text>
+                    </View>
+                    <View style={[styles.postAction, { backgroundColor: accentColor + '15', borderColor: accentColor + '30' }]}>
+                      <Text style={[styles.postActionText, { color: accentColor }]}>
+                        {post.type === 'service' ? 'Book' : 'Order'}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+                {posts.length > POST_PREVIEW_COUNT && (
+                  <TouchableOpacity
+                    style={styles.showMoreBtn}
+                    onPress={() => navigation.navigate('MyProducts', { workerId: worker.id, workerName: worker.name })}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.showMoreText, { color: accentColor }]}>Show more →</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            )}
           </View>
 
           {/* Reels — real work, so a client can see what they're
@@ -312,6 +427,17 @@ const styles = StyleSheet.create({
   sectionCard: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 16 },
   bioText: { fontSize: 13, color: colors.textSecondary, lineHeight: 20 },
 
+  postCard: { flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 10, borderRadius: 14, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  postThumb: { width: 48, height: 48, borderRadius: 12, marginRight: 12 },
+  postThumbFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white + '08' },
+  postEmoji: { fontSize: 20 },
+  postInfo: { flex: 1 },
+  postTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  postPrice: { fontSize: 12, color: colors.textSecondary, marginTop: 3 },
+  postAction: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1 },
+  postActionText: { fontSize: 12, fontWeight: '700' },
+  showMoreBtn: { paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  showMoreText: { fontSize: 12, fontWeight: '700' },
   reelsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   reelCard: { width: REEL_W, aspectRatio: 9 / 16, backgroundColor: colors.bgCard, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
   reelThumb: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },

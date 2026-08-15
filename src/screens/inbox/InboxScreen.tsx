@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
-  Image, StatusBar, Animated, Platform,
+  Image, StatusBar, Animated, Platform, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
@@ -66,6 +66,12 @@ export default function InboxScreen({ navigation }: any) {
   const [callLogs, setCallLogs] = useState<CallLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // The magnifier in the header used to be decorative. Filtering happens
+  // on the already-loaded list rather than in a query: a conversation
+  // list is small, and a local filter answers on every keystroke with
+  // no round trip and no spinner.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const listOpacity = useRef(new Animated.Value(0)).current;
@@ -340,6 +346,13 @@ export default function InboxScreen({ navigation }: any) {
     );
   }
 
+  const query = searchQuery.trim().toLowerCase();
+  const visibleConversations = query
+    ? conversations.filter(c =>
+        c.otherUserName.toLowerCase().includes(query) ||
+        (c.lastMessage || '').toLowerCase().includes(query))
+    : conversations;
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
@@ -348,11 +361,39 @@ export default function InboxScreen({ navigation }: any) {
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
         <Text style={styles.headerTitle}>Messages</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.headerBtn} activeOpacity={0.7}>
-            <Text style={styles.headerBtnIcon}>🔍</Text>
+          <TouchableOpacity
+            style={styles.headerBtn}
+            onPress={() => {
+              // Closing clears the query, so reopening never shows a
+              // filtered list with an empty-looking box above it.
+              setSearchOpen(open => { if (open) setSearchQuery(''); return !open; });
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.headerBtnIcon}>{searchOpen ? '✕' : '🔍'}</Text>
           </TouchableOpacity>
         </View>
       </Animated.View>
+
+      {searchOpen && (
+        <View style={styles.searchBar}>
+          <Text style={styles.searchIcon}>🔍</Text>
+          <TextInput
+            style={styles.searchInput}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder={role === 'client' ? 'Search workers…' : 'Search clients…'}
+            placeholderTextColor={colors.textMuted}
+            autoFocus
+            returnKeyType="search"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
+              <Text style={styles.searchClear}>✕</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {callLogs.length > 0 && (
         <Animated.View style={[styles.callLogSection, { opacity: headerOpacity }]}>
@@ -398,21 +439,23 @@ export default function InboxScreen({ navigation }: any) {
 
       {/* Conversations list */}
       <Animated.View style={[styles.listContainer, { opacity: listOpacity }]}>
-        {conversations.length === 0 ? (
+        {visibleConversations.length === 0 ? (
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
-              <Text style={styles.emptyIcon}>💬</Text>
+              <Text style={styles.emptyIcon}>{query ? '🔍' : '💬'}</Text>
             </View>
-            <Text style={styles.emptyTitle}>No messages yet</Text>
+            <Text style={styles.emptyTitle}>{query ? 'No match' : 'No messages yet'}</Text>
             <Text style={styles.emptyDesc}>
-              {role === 'client'
-                ? 'When you book a worker or send a message, it will appear here'
-                : 'When clients contact you, their messages will appear here'}
+              {query
+                ? `Nobody in your messages matches “${searchQuery.trim()}”.`
+                : role === 'client'
+                  ? 'When you book a worker or send a message, it will appear here'
+                  : 'When clients contact you, their messages will appear here'}
             </Text>
           </View>
         ) : (
           <FlatList
-            data={conversations}
+            data={visibleConversations}
             renderItem={renderConversation}
             keyExtractor={item => item.otherUserId}
             showsVerticalScrollIndicator={false}
@@ -431,6 +474,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
+
+  searchBar: {
+    flexDirection: 'row', alignItems: 'center',
+    marginHorizontal: spacing.screenPadding, marginBottom: 10,
+    paddingHorizontal: 14, height: 42, borderRadius: 12,
+    backgroundColor: colors.white + '05', borderWidth: 1, borderColor: colors.border,
+  },
+  searchIcon: { fontSize: 13, marginRight: 10 },
+  searchInput: { flex: 1, fontSize: 13, color: colors.textPrimary, padding: 0 },
+  searchClear: { fontSize: 13, color: colors.textMuted, padding: 4 },
 
   // Header
   header: {

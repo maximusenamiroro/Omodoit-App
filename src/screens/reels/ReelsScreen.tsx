@@ -685,7 +685,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
 }
 
 
-export default function ReelsScreen({ navigation }: any) {
+export default function ReelsScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { role, user } = useAuth();
   const isClient = role === 'client';
@@ -695,6 +695,11 @@ export default function ReelsScreen({ navigation }: any) {
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Set when arriving from workspace search: open on that reel instead
+  // of the top of the feed.
+  const focusReelId: string | undefined = route?.params?.focusReelId;
+  const listRef = useRef<FlatList<Reel>>(null);
+  const focusHandledRef = useRef<string | null>(null);
 
   // Memoised and declared before the effect that runs it. Previously
   // the effect depended only on activeTab, so fetchReels kept whatever
@@ -838,10 +843,25 @@ export default function ReelsScreen({ navigation }: any) {
     </View>
   );
 
+  // Runs once per requested id, after the feed has the reel in hand.
+  // Silently does nothing when the reel isn't in this batch — it may be
+  // older than the 50 the feed loads, and scrolling somewhere arbitrary
+  // would be worse than staying put.
+  useEffect(() => {
+    if (!focusReelId || loading || focusHandledRef.current === focusReelId) return;
+    const index = reels.findIndex(r => r.id === focusReelId);
+    if (index > 0) {
+      listRef.current?.scrollToIndex({ index, animated: false });
+      setActiveIndex(index);
+    }
+    focusHandledRef.current = focusReelId;
+  }, [focusReelId, loading, reels]);
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <FlatList
+        ref={listRef}
         data={reels}
         renderItem={renderReel}
         keyExtractor={item => item.id}

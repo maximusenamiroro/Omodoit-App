@@ -55,10 +55,10 @@ interface Profile {
   subcategory?: string | null;
   experience?: string | null;
   service_area?: string | null;
-  // Bank/payout details — used for withdrawals (worker) or refunds (client)
-  bank_name?: string | null;
-  account_number?: string | null;
-  account_name?: string | null;
+  // Payout details deliberately absent. They live in payout_accounts,
+  // which only their owner can read — profiles is world-readable, so
+  // bank details sitting in it were readable by anyone holding the anon
+  // key. BankDetailsScreen loads them on demand instead.
 }
 
 interface AuthContextValue {
@@ -133,8 +133,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .select(
           'id, full_name, avatar_url, role, phone, location, ' +
           'verification_level, verification_status, last_seen, created_at, ' +
-          'business_name, category, subcategory, experience, service_area, ' +
-          'bank_name, account_number, account_name'
+          'business_name, category, subcategory, experience, service_area'
         )
         .eq('id', userId)
         .maybeSingle();

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Platform, ActivityIndicator,
+  Animated, StatusBar, Platform, ActivityIndicator, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,9 +9,19 @@ import { colors, spacing } from '../../theme';
 import { supabase } from '../../api/supabase';
 import { CATEGORIES } from '../../lib/categories';
 
+// A "new arrival" is a product or service a worker posted in the last
+// 48 hours. It used to list reels instead, which meant the screen never
+// showed anything a client could actually act on — no title, no price,
+// and a View button that just opened the worker's profile.
 interface Arrival {
   id: string;
   workerId: string;
+  type: 'service' | 'product';
+  title: string;
+  description: string | null;
+  price: number | null;
+  imageUrl: string | null;
+  videoUrl: string | null;
   category: string;
   emoji: string;
   color: string;
@@ -19,12 +29,36 @@ interface Arrival {
   time: string;
 }
 
+const CUTOFF_HOURS = 48;
+
 const timeAgo = (date: string): string => {
   const hours = Math.floor((Date.now() - new Date(date).getTime()) / 3600000);
   if (hours < 1) return 'just now';
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
 };
+
+// Shared by this screen and the workspace search, so a product looks
+// and behaves the same wherever a client runs into it.
+export function mapProductRow(row: any, posterName: string): Arrival {
+  const catMeta = CATEGORIES.find(c => c.name === row.category);
+  const type: 'service' | 'product' = row.type === 'service' ? 'service' : 'product';
+  return {
+    id: row.id,
+    workerId: row.worker_id,
+    type,
+    title: row.title || 'Untitled',
+    description: row.description || null,
+    price: row.price != null ? Number(row.price) : null,
+    imageUrl: row.image_url || null,
+    videoUrl: row.video_url || null,
+    category: row.category || 'General',
+    emoji: catMeta?.emoji || (type === 'service' ? '🛠️' : '📦'),
+    color: catMeta?.color || colors.primary,
+    posterName,
+    time: timeAgo(row.created_at),
+  };
+}
 
 export default function NewArrivalsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -48,29 +82,33 @@ export default function NewArrivalsScreen({ navigation }: any) {
   const loadArrivals = useCallback(async () => {
     setLoading(true);
     try {
-      const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+      const cutoff = new Date(Date.now() - CUTOFF_HOURS * 60 * 60 * 1000).toISOString();
       const { data, error } = await supabase
-        .from('reels')
-        .select('id, created_at, profiles(id, full_name, category)')
+        .from('products')
+        .select('id, worker_id, type, title, description, price, image_url, video_url, category, created_at')
         .gte('created_at', cutoff)
         .order('created_at', { ascending: false })
         .limit(50);
 
       if (error) throw error;
 
-      setArrivals((data || []).map((reel: any) => {
-        const posterCategory = reel.profiles?.category;
-        const catMeta = CATEGORIES.find(c => c.name === posterCategory);
-        return {
-          id: reel.id,
-          workerId: reel.profiles?.id,
-          category: posterCategory || 'General',
-          emoji: catMeta?.emoji || '✨',
-          color: catMeta?.color || colors.primary,
-          posterName: reel.profiles?.full_name || 'A worker',
-          time: timeAgo(reel.created_at),
-        };
-      }));
+      // Names come from a second query rather than a join: products has
+      // no foreign-key relationship declared to profiles, so PostgREST
+      // can't embed it, and asking it to returns an error instead of rows.
+      const workerIds = [...new Set((data || []).map((p: any) => p.worker_id).filter(Boolean))];
+      const nameMap: Record<string, string> = {};
+      if (workerIds.length > 0) {
+        const { data: profileRows } = await supabase
+          .from('profiles')
+          .select('id, full_name, business_name')
+          .in('id', workerIds);
+        (profileRows || []).forEach((p: any) => {
+          nameMap[p.id] = p.business_name || p.full_name || 'A worker';
+        });
+      }
+
+      setArrivals((data || []).map((row: any) =>
+        mapProductRow(row, nameMap[row.worker_id] || 'A worker')));
     } catch (err) {
       console.error('Failed to load new arrivals:', err);
       setArrivals([]);
@@ -81,39 +119,22 @@ export default function NewArrivalsScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => { loadArrivals(); }, [loadArrivals]));
 
-  const viewProfile = async (workerId: string) => {
-    if (!workerId) return;
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id, full_name, location, experience, verification_status, category, subcategory')
-        .eq('id', workerId)
-        .maybeSingle();
-
-      if (error || !data) return;
-
-      const { data: reviewRows } = await supabase.from('reviews').select('rating').eq('worker_id', workerId);
-      const ratings = (reviewRows || []).map((r: any) => r.rating);
-      const avgRating = ratings.length > 0 ? ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length : 0;
-      const catMeta = CATEGORIES.find(c => c.name === data.category);
-
-      navigation.navigate('WorkerPublicProfile', {
-        worker: {
-          id: data.id,
-          name: data.full_name || 'Worker',
-          rating: avgRating,
-          reviews: ratings.length,
-          location: data.location || 'Location not set',
-          experience: data.experience || 'Not specified',
-          verified: data.verification_status === 'verified' || data.verification_status === 'basic',
-          bio: `Available for ${data.subcategory || data.category || 'various'} jobs.`,
-        },
-        color: catMeta?.color || colors.primary,
-        subcategoryName: data.subcategory || data.category,
-      });
-    } catch (err) {
-      console.error('Failed to load worker profile:', err);
-    }
+  const openArrival = (item: Arrival) => {
+    navigation.navigate('ProductDetail', {
+      product: {
+        id: item.id,
+        workerId: item.workerId,
+        type: item.type,
+        title: item.title,
+        description: item.description,
+        price: item.price,
+        imageUrl: item.imageUrl,
+        videoUrl: item.videoUrl,
+        category: item.category,
+        color: item.color,
+        sellerName: item.posterName,
+      },
+    });
   };
 
   return (
@@ -155,31 +176,48 @@ export default function NewArrivalsScreen({ navigation }: any) {
               paddingHorizontal: spacing.screenPadding,
             }}>
               {arrivals.map(item => (
-                <TouchableOpacity key={item.id} style={styles.arrivalRow} onPress={() => viewProfile(item.workerId)} activeOpacity={0.85}>
-                  <View style={[styles.rowRing, { borderColor: item.color }]}>
-                    <View style={[styles.rowAvatar, { backgroundColor: item.color + '15' }]}>
-                      <Text style={styles.rowEmoji}>{item.emoji}</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.rowInfo}>
-                    <Text style={styles.rowCategory}>{item.category}</Text>
-                    <Text style={styles.rowPoster}>@{item.posterName}</Text>
-                    <View style={styles.rowMeta}>
-                      <Text style={styles.rowTime}>{item.time}</Text>
-                    </View>
-                  </View>
-
-                  <TouchableOpacity style={[styles.viewBtn, { backgroundColor: item.color + '15', borderColor: item.color + '30' }]} onPress={() => viewProfile(item.workerId)} activeOpacity={0.85}>
-                    <Text style={[styles.viewBtnText, { color: item.color }]}>View</Text>
-                  </TouchableOpacity>
-                </TouchableOpacity>
+                <ArrivalRow key={item.id} item={item} onPress={() => openArrival(item)} />
               ))}
             </Animated.View>
           )}
         </ScrollView>
       )}
     </View>
+  );
+}
+
+// The action word is the whole point of the service/product split: you
+// book a service, you order a product. Exported so search results show
+// the same card.
+export function ArrivalRow({ item, onPress }: { item: Arrival; onPress: () => void }) {
+  const actionLabel = item.type === 'service' ? 'Book' : 'Order';
+  return (
+    <TouchableOpacity style={styles.arrivalRow} onPress={onPress} activeOpacity={0.85}>
+      <View style={[styles.rowRing, { borderColor: item.color }]}>
+        {item.imageUrl ? (
+          <Image source={{ uri: item.imageUrl }} style={styles.rowImage} />
+        ) : (
+          <View style={[styles.rowAvatar, { backgroundColor: item.color + '15' }]}>
+            <Text style={styles.rowEmoji}>{item.videoUrl ? '🎬' : item.emoji}</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.rowInfo}>
+        <Text style={styles.rowCategory} numberOfLines={1}>{item.title}</Text>
+        <Text style={styles.rowPoster} numberOfLines={1}>@{item.posterName}</Text>
+        <View style={styles.rowMeta}>
+          <Text style={[styles.rowPrice, { color: item.color }]}>
+            {item.price != null ? `₦${item.price.toLocaleString()}` : 'Ask for price'}
+          </Text>
+          <Text style={styles.rowTime}>· {item.time}</Text>
+        </View>
+      </View>
+
+      <View style={[styles.viewBtn, { backgroundColor: item.color + '15', borderColor: item.color + '30' }]}>
+        <Text style={[styles.viewBtnText, { color: item.color }]}>{actionLabel}</Text>
+      </View>
+    </TouchableOpacity>
   );
 }
 
@@ -216,18 +254,20 @@ const styles = StyleSheet.create({
   },
   rowRing: {
     width: 52, height: 52, borderRadius: 26, padding: 2,
-    borderWidth: 2, marginRight: 14,
+    borderWidth: 2, marginRight: 14, overflow: 'hidden',
   },
   rowAvatar: {
     width: '100%', height: '100%', borderRadius: 24,
     alignItems: 'center', justifyContent: 'center',
     borderWidth: 2, borderColor: colors.bg,
   },
+  rowImage: { width: '100%', height: '100%', borderRadius: 24 },
   rowEmoji: { fontSize: 22 },
   rowInfo: { flex: 1 },
   rowCategory: { fontSize: 15, fontWeight: '700', color: colors.textPrimary, marginBottom: 2 },
   rowPoster: { fontSize: 12, color: colors.textSecondary, marginBottom: 4 },
   rowMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  rowPrice: { fontSize: 12, fontWeight: '700' },
   rowTime: { fontSize: 10, color: colors.textMuted },
   viewBtn: {
     paddingHorizontal: 16, paddingVertical: 8, borderRadius: 10,
@@ -235,3 +275,5 @@ const styles = StyleSheet.create({
   },
   viewBtnText: { fontSize: 12, fontWeight: '600' },
 });
+
+export type { Arrival };
