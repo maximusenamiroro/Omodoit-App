@@ -55,7 +55,7 @@ export default function FlashJobScreen({ navigation }: any) {
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, [step]);
+  }, [step, formOpacity, formSlide, headerOpacity]);
 
   const goNext = () => {
     if (!category || !subcategory) {

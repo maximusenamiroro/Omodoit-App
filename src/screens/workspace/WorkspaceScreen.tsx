@@ -43,6 +43,10 @@ function DraggableFab({ onPress, bottom }: { onPress: () => void; bottom: number
       }
       Animated.spring(pan, { toValue: { x: snapX, y: clampedY }, damping: 15, stiffness: 150, useNativeDriver: false }).start();
     },
+    // Created once on purpose. PanResponder captures the gesture it is
+    // tracking; recreating it because a callback changed identity would
+    // drop a drag already in progress.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
 
   return (

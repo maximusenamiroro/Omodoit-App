@@ -27,6 +27,10 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     ]).start(() => {
       if (onFinish) onFinish();
     });
+    // Mount-only by design: the splash animation runs once and then
+    // hands off. Re-running it because onFinish changed identity would
+    // replay the whole intro.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
