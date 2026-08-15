@@ -28,7 +28,7 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
         Animated.spring(listSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [headerOpacity, listOpacity, listSlide]);
 
   // Real worker counts per subcategory, matched against the category's
   // canonical full name (via findCategoryLoose, which also tolerates

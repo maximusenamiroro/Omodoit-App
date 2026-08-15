@@ -45,7 +45,7 @@ export default function PhoneVerifyScreen({ navigation, route }: any) {
 
     // Auto-focus the input after animation
     setTimeout(() => inputRef.current?.focus(), 600);
-  }, []);
+  }, [buttonOpacity, buttonSlide, headerOpacity, headerSlide, inputOpacity, inputSlide, trustOpacity]);
 
   // Format phone number as user types
   // Input: 8050963733 → Display: 805 096 3733

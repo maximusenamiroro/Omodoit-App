@@ -6,7 +6,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
-import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { CATEGORIES } from '../../lib/categories';
 import { useOnlinePresence } from '../../lib/presence';
@@ -91,7 +90,7 @@ export default function WorkspaceScreen({ navigation }: any) {
       ]),
       Animated.timing(generalOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [arrivalsOpacity, generalOpacity, headerOpacity, liveOpacity, liveSlide, searchSlide]);
 
   // "New Arrivals" — reels posted by workers in the last 48 hours,
   // matching the "48h only" badge. Real data only; a section this

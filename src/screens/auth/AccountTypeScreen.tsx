@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated,
-  Dimensions, StatusBar, ScrollView,
+  StatusBar, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
@@ -62,7 +62,7 @@ export default function AccountTypeScreen({ navigation }: any) {
     ];
 
     Animated.stagger(120, animations).start();
-  }, []);
+  }, [buttonOpacity, buttonSlide, clientOpacity, clientSlide, loginOpacity, logoOpacity, logoScale, subtitleOpacity, titleOpacity, titleSlide, workerOpacity, workerSlide]);
 
   const handleContinue = () => {
     if (!selected) return;

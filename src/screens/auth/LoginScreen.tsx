@@ -44,7 +44,7 @@ export default function LoginScreen({ navigation }: any) {
       Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
       Animated.timing(registerOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [buttonOpacity, formOpacity, formSlide, logoOpacity, logoScale, registerOpacity, titleOpacity, titleSlide]);
 
   // Detect if input is phone or email
   const isPhoneInput = () => {

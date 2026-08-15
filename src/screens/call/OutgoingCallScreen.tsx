@@ -136,7 +136,7 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
     // No more auto-connect timer — the useCallResponseListener above
     // is what actually transitions to InCall now, only once the
     // callee has genuinely accepted.
-  }, []);
+  }, [avatarScale, contentOpacity, dot1, dot2, dot3, pulse1, pulse1Op, pulse2, pulse2Op, pulse3, pulse3Op]);
 
   return (
     <View style={s.container}>

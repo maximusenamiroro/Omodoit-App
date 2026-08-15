@@ -47,7 +47,7 @@ export default function WorkerListScreen({ navigation, route }: any) {
         Animated.spring(listSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [headerOpacity, listOpacity, listSlide]);
 
   useEffect(() => {
     const fetchWorkers = async () => {

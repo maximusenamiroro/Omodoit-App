@@ -26,7 +26,7 @@ export default function ProductDetailScreen({ navigation, route }: any) {
         Animated.spring(contentSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [contentOpacity, contentSlide, headerOpacity]);
 
   const handleOrder = async () => {
     if (!user?.id) {

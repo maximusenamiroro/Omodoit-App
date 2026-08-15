@@ -49,7 +49,7 @@ export default function WorkerProfileScreen({ navigation }: any) {
       Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
       Animated.timing(contentOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [contentOpacity, headerOpacity]);
 
   // Reels could be posted but never removed on mobile — the website
   // has had a delete since day one, so a worker who posted something

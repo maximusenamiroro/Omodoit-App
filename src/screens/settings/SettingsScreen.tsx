@@ -70,7 +70,7 @@ export default function SettingsScreen({ navigation }: any) {
         Animated.timing(contentSlide, { toValue: 0, duration: 300, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [contentOpacity, contentSlide, headerOpacity]);
 
   const handleLogout = () => {
     Alert.alert('Logout', 'Are you sure you want to sign out?', [

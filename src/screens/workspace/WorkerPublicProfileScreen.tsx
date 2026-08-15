@@ -55,7 +55,7 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
         Animated.spring(contentSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [contentOpacity, contentSlide, headerOpacity, headerScale]);
 
   // Real reviews for this worker. Degrades gracefully to an empty list
   // if the reviews table/columns don't match what's queried here,

@@ -37,7 +37,7 @@ export default function WorkerRegStep1Screen({ navigation, route }: any) {
       ]),
       Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [buttonOpacity, formOpacity, formSlide, headerOpacity, headerSlide, verifiedOpacity]);
 
   const isValidEmail = (e: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.trim());
 

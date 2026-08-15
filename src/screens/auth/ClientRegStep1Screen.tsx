@@ -39,7 +39,7 @@ export default function ClientRegStep1Screen({ navigation, route }: any) {
       ]),
       Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [buttonOpacity, formOpacity, formSlide, headerOpacity, headerSlide, verifiedOpacity]);
 
   // Validation
   const isValidEmail = (e: string) => {

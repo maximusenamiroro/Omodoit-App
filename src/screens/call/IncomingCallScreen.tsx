@@ -38,7 +38,7 @@ export default function IncomingCallScreen({ navigation, route }: any) {
       Animated.timing(bounce, { toValue: 0, duration: 100, useNativeDriver: true }),
       Animated.delay(1500),
     ])).start();
-  }, []);
+  }, [acceptSlide, bounce, contentOpacity, declineSlide]);
 
   const handleDecline = async () => {
     if (responding) return;

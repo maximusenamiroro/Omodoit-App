@@ -42,7 +42,7 @@ export default function OTPScreen({ navigation, route }: any) {
 
     // Auto-focus first input
     setTimeout(() => inputRefs.current[0]?.focus(), 500);
-  }, []);
+  }, [boxesOpacity, boxesScale, headerOpacity, headerSlide, infoOpacity]);
 
   // Countdown timer for resend
   useEffect(() => {

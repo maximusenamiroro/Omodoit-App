@@ -36,7 +36,7 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
       ]),
       Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [buttonOpacity, catsOpacity, catsSlide, headerOpacity, headerSlide]);
 
   const isFormValid = () => {
     return selectedCategory !== null && selectedSub !== null && selectedExperience !== null;
