@@ -68,9 +68,9 @@ async function namesAndCategories(ids: string[]) {
 /**
  * Searches products and reels posted in the last 48 hours.
  *
- * Live workers are NOT queried here: who is online lives in Realtime
- * Presence, not in the database, so the caller filters the presence map
- * it already holds instead of asking Postgres a question it can't answer.
+ * Online workers are a separate call — see searchLiveWorkers below —
+ * because they come from the presence heartbeat table rather than from
+ * posted content, and the two run in parallel.
  */
 export async function searchWorkspace(rawQuery: string): Promise<SearchResults> {
   const query = escapeForFilter(rawQuery);
@@ -129,26 +129,36 @@ export async function searchWorkspace(rawQuery: string): Promise<SearchResults> 
   };
 }
 
-/**
- * Online workers whose category, trade or name matches the query.
- * Fed straight from the presence map the workspace already subscribes
- * to, so it costs nothing and updates the instant someone goes offline.
- */
-export function matchOnlineWorkers(
-  workers: Record<string, { category: string | null; subcategory?: string | null; service?: string | null; name?: string | null }>,
-  rawQuery: string
-) {
-  const q = rawQuery.trim().toLowerCase();
-  if (q.length < 2) return [];
+export interface LiveWorkerHit {
+  id: string;
+  name: string;
+  category: string;
+  subcategory: string | null;
+}
 
-  return Object.entries(workers)
-    .filter(([, w]) =>
-      [w.category, w.subcategory, w.service, w.name]
-        .some(field => (field || '').toLowerCase().includes(q)))
-    .map(([id, w]) => ({
-      id,
-      name: w.name || 'Worker',
-      category: w.category || 'General',
-      subcategory: w.subcategory || null,
-    }));
+/**
+ * Online workers whose trade or name matches the query.
+ *
+ * This used to filter the Realtime Presence member list on the phone,
+ * which only worked because every online worker on the platform was in
+ * that list — the thing that stops being true at scale. Presence is now
+ * sharded per category, so the search asks the database instead, which
+ * matches against the heartbeat table and returns a bounded page.
+ */
+export async function searchLiveWorkers(rawQuery: string): Promise<LiveWorkerHit[]> {
+  const query = rawQuery.trim();
+  if (query.length < 2) return [];
+
+  const { data, error } = await supabase.rpc('search_live_workers', {
+    p_query: query,
+    p_limit: 20,
+  });
+  if (error) throw error;
+
+  return (data || []).map((w: any) => ({
+    id: w.id,
+    name: w.full_name || 'Worker',
+    category: w.category || 'General',
+    subcategory: w.subcategory || null,
+  }));
 }

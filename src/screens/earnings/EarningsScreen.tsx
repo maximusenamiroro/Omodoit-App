@@ -16,6 +16,10 @@ interface CompletedJob {
   date: string;
 }
 
+// A worker's completed-job history is a record, not a feed. The screen
+// shows the recent ones; the total is what matters above it.
+const COMPLETED_JOBS_LIMIT = 100;
+
 export default function EarningsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
@@ -31,7 +35,8 @@ export default function EarningsScreen({ navigation }: any) {
         .select('id, client_id, job_description, created_at')
         .eq('worker_id', user.id)
         .eq('status', 'completed')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(COMPLETED_JOBS_LIMIT);
 
       if (error) throw error;
 

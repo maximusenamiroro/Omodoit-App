@@ -59,6 +59,10 @@ interface CallLogItem {
   time: string;
 }
 
+// One screenful of conversations. The list is ordered by recency, so
+// anyone you are actually talking to is on the first page.
+const CONVERSATION_PAGE_SIZE = 30;
+
 export default function InboxScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { user, role } = useAuth();
@@ -126,77 +130,35 @@ export default function InboxScreen({ navigation }: any) {
     if (!user?.id) return;
 
     try {
-      const { data: allMessages, error } = await supabase
-        .from('messages')
-        .select('id, sender_id, receiver_id, text, seen, created_at, message_type')
-        .or('sender_id.eq.' + user.id + ',receiver_id.eq.' + user.id)
-        .order('created_at', { ascending: false });
+      // One row per conversation, built by Postgres. This used to fetch
+      // every message the user had ever exchanged and group them here —
+      // 10,000 rows over a phone connection to draw 50 lines.
+      const { data, error } = await supabase.rpc('get_conversations', {
+        p_limit: CONVERSATION_PAGE_SIZE,
+        p_offset: 0,
+      });
 
       if (error) throw error;
-      if (!allMessages || allMessages.length === 0) {
-        setConversations([]);
-        setLoading(false);
-        return;
-      }
 
-      const convMap = new Map<string, {
-        lastMsg: any;
-        unread: number;
-      }>();
-
-      allMessages.forEach((msg: any) => {
-        const otherId = msg.sender_id === user.id ? msg.receiver_id : msg.sender_id;
-        if (!convMap.has(otherId)) {
-          convMap.set(otherId, {
-            lastMsg: msg,
-            unread: (!msg.seen && msg.receiver_id === user.id) ? 1 : 0,
-          });
-        } else {
-          const existing = convMap.get(otherId)!;
-          if (!msg.seen && msg.receiver_id === user.id) {
-            existing.unread += 1;
-          }
-        }
-      });
-
-      const otherUserIds = Array.from(convMap.keys());
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, avatar_url, role')
-        .in('id', otherUserIds);
-
-      const profileMap = new Map<string, any>();
-      (profiles || []).forEach((p: any) => profileMap.set(p.id, p));
-
-      const convList: Conversation[] = otherUserIds.map(otherId => {
-        const conv = convMap.get(otherId)!;
-        const profile = profileMap.get(otherId);
-        const lastMsg = conv.lastMsg;
-
-        let preview = lastMsg.text || '';
-        if (lastMsg.message_type === 'image') preview = '📷 Photo';
-        if (lastMsg.message_type === 'video') preview = '🎥 Video';
-        if (lastMsg.message_type === 'audio') preview = '🎤 Voice message';
-        if (lastMsg.message_type === 'file') preview = '📎 File';
+      setConversations((data || []).map((row: any) => {
+        let preview = row.last_message || '';
+        if (row.last_message_type === 'image') preview = '📷 Photo';
+        if (row.last_message_type === 'video') preview = '🎥 Video';
+        if (row.last_message_type === 'audio') preview = '🎤 Voice message';
+        if (row.last_message_type === 'file') preview = '📎 File';
 
         return {
-          otherUserId: otherId,
-          otherUserName: profile?.full_name || 'User',
-          otherUserAvatar: profile?.avatar_url || null,
-          otherUserRole: profile?.role || null,
+          otherUserId: row.other_user_id,
+          otherUserName: row.other_user_name || 'User',
+          otherUserAvatar: row.other_user_avatar || null,
+          otherUserRole: row.other_user_role || null,
           lastMessage: preview,
-          lastMessageTime: lastMsg.created_at,
-          lastMessageType: lastMsg.message_type || 'text',
-          unreadCount: conv.unread,
-          isLastMessageMine: lastMsg.sender_id === user.id,
+          lastMessageTime: row.last_message_at,
+          lastMessageType: row.last_message_type || 'text',
+          unreadCount: Number(row.unread_count) || 0,
+          isLastMessageMine: row.last_sender_id === user.id,
         };
-      });
-
-      convList.sort((a, b) =>
-        new Date(b.lastMessageTime).getTime() - new Date(a.lastMessageTime).getTime()
-      );
-
-      setConversations(convList);
+      }));
     } catch (err) {
       console.error('Fetch conversations error:', err);
     } finally {

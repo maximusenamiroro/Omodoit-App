@@ -30,25 +30,21 @@ export default function AnalyticsScreen({ navigation }: any) {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [bookingsRes, reelsRes, reviewsRes] = await Promise.all([
-        supabase.from('hire_requests').select('status').eq('worker_id', user.id),
-        supabase.from('reels').select('likes').eq('user_id', user.id),
-        supabase.from('reviews').select('rating').eq('worker_id', user.id),
-      ]);
+      // Counted in Postgres. This used to download every booking, reel
+      // and review the worker owned in order to call .length on them.
+      const { data, error } = await supabase.rpc('worker_stats');
+      if (error) throw error;
 
-      const bookings = bookingsRes.data || [];
-      const reels = reelsRes.data || [];
-      const reviews = reviewsRes.data || [];
-
+      const row = (data || [])[0] || {};
       setStats({
-        totalBookings: bookings.length,
-        accepted: bookings.filter((b: any) => b.status === 'accepted' || b.status === 'in_progress' || b.status === 'completed').length,
-        declined: bookings.filter((b: any) => b.status === 'declined').length,
-        completed: bookings.filter((b: any) => b.status === 'completed').length,
-        totalReels: reels.length,
-        totalLikes: reels.reduce((s: number, r: any) => s + (r.likes || 0), 0),
-        avgRating: reviews.length > 0 ? reviews.reduce((s: number, r: any) => s + r.rating, 0) / reviews.length : 0,
-        reviewCount: reviews.length,
+        totalBookings: Number(row.total_bookings) || 0,
+        accepted: Number(row.accepted) || 0,
+        declined: Number(row.declined) || 0,
+        completed: Number(row.completed) || 0,
+        totalReels: Number(row.reel_count) || 0,
+        totalLikes: Number(row.total_likes) || 0,
+        avgRating: Number(row.rating_avg) || 0,
+        reviewCount: Number(row.review_count) || 0,
       });
     } catch (err) {
       console.error('Failed to load analytics:', err);

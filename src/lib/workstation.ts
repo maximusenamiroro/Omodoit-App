@@ -99,39 +99,28 @@ export async function fetchWorkerBookings(
 /**
  * Product orders placed against anything this worker posted.
  *
- * `orders` has no worker_id column — it points at a product — so this
- * is two queries: the worker's product ids, then the orders for them.
- * Returns [] rather than every order in the table when the worker has
- * posted nothing, because `.in('product_id', [])` would match nothing
- * but an unguarded query would not.
+ * One RPC call. It used to be two queries: fetch every product id this
+ * worker owns, then send them all back as an IN (...) clause — which
+ * grows with the catalogue and eventually exceeds what a URL can carry.
+ * The function filters by auth.uid() server-side and returns the buyer's
+ * name with the order, so there is no follow-up profile lookup either.
  */
 export async function fetchWorkerOrders(
-  workerId: string,
+  _workerId: string,
   opts: { limit?: number; offset?: number } = {}
 ): Promise<ProductOrderRow[]> {
-  const { limit = 50, offset = 0 } = opts;
+  const { limit = 20, offset = 0 } = opts;
 
-  const { data: products, error: pErr } = await supabase
-    .from('products')
-    .select('id')
-    .eq('worker_id', workerId);
-  if (pErr) throw pErr;
-  if (!products || products.length === 0) return [];
-
-  const { data: rows, error } = await supabase
-    .from('orders')
-    .select('id, user_id, product_name, product_image_url, quantity, total_amount, status, created_at')
-    .in('product_id', products.map((p: any) => p.id))
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+  const { data, error } = await supabase.rpc('get_worker_orders', {
+    p_limit: limit,
+    p_offset: offset,
+  });
   if (error) throw error;
 
-  const nameMap = await namesFor((rows || []).map((r: any) => r.user_id));
-
-  return (rows || []).map((r: any) => ({
+  return (data || []).map((r: any) => ({
     id: r.id,
-    buyerId: r.user_id,
-    buyerName: nameMap[r.user_id] || 'Customer',
+    buyerId: r.buyer_id,
+    buyerName: r.buyer_name || 'Customer',
     productName: r.product_name || 'Product',
     productImageUrl: r.product_image_url || null,
     quantity: r.quantity ?? 1,

@@ -38,6 +38,10 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 
 const ACTIVE_STATUSES = ['pending', 'accepted', 'in_progress'];
 
+// Recent activity, newest first. Anything older than this is history a
+// user reaches for far less often than the query cost of always sending it.
+const ORDER_HISTORY_LIMIT = 100;
+
 export default function OrdersScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { user, role } = useAuth();
@@ -65,7 +69,8 @@ export default function OrdersScreen({ navigation }: any) {
         .from('hire_requests')
         .select('id, client_id, worker_id, job_description, location, status, created_at')
         .eq(column, user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(ORDER_HISTORY_LIMIT);
 
       // A single Flash Job creates one request per matching worker, so
       // a client would otherwise see a pile of near-duplicate 'expired'

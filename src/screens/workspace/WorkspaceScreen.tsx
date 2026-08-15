@@ -8,8 +8,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
 import { supabase } from '../../api/supabase';
 import { CATEGORIES } from '../../lib/categories';
-import { useOnlinePresence } from '../../lib/presence';
-import { searchWorkspace, matchOnlineWorkers, type SearchResults } from '../../lib/search';
+import { useLiveCategories } from '../../lib/presence';
+import { searchWorkspace, searchLiveWorkers, type SearchResults, type LiveWorkerHit } from '../../lib/search';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 const CAT_CARD_W = (SCREEN_W - spacing.screenPadding * 2 - 24) / 3;
@@ -80,6 +80,7 @@ export default function WorkspaceScreen({ navigation }: any) {
   const [newArrivals, setNewArrivals] = useState<any[]>([]);
   const [arrivalsLoading, setArrivalsLoading] = useState(true);
   const [results, setResults] = useState<SearchResults>({ products: [], reels: [] });
+  const [liveMatches, setLiveMatches] = useState<LiveWorkerHit[]>([]);
   const [searching, setSearching] = useState(false);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
@@ -153,7 +154,9 @@ export default function WorkspaceScreen({ navigation }: any) {
   // 60 seconds. Updates instantly the moment a worker opens/closes
   // their app, and costs nothing per update since it rides the
   // existing websocket connection rather than a database query.
-  const { onlineCategories, workers } = useOnlinePresence();
+  // Counts only. The grid needs to know which categories have somebody
+  // in them, not who — so it never downloads a member list.
+  const { onlineCategories } = useLiveCategories();
 
   const trimmedQuery = searchQuery.trim();
   const isSearching = trimmedQuery.length >= MIN_QUERY_LENGTH;
@@ -165,6 +168,7 @@ export default function WorkspaceScreen({ navigation }: any) {
   useEffect(() => {
     if (!isSearching) {
       setResults({ products: [], reels: [] });
+      setLiveMatches([]);
       setSearching(false);
       return;
     }
@@ -173,11 +177,14 @@ export default function WorkspaceScreen({ navigation }: any) {
     setSearching(true);
     const handle = setTimeout(async () => {
       try {
-        const found = await searchWorkspace(trimmedQuery);
-        if (!cancelled) setResults(found);
+        const [found, live] = await Promise.all([
+          searchWorkspace(trimmedQuery),
+          searchLiveWorkers(trimmedQuery),
+        ]);
+        if (!cancelled) { setResults(found); setLiveMatches(live); }
       } catch (err) {
         console.error('Search failed:', err);
-        if (!cancelled) setResults({ products: [], reels: [] });
+        if (!cancelled) { setResults({ products: [], reels: [] }); setLiveMatches([]); }
       } finally {
         if (!cancelled) setSearching(false);
       }
@@ -185,11 +192,6 @@ export default function WorkspaceScreen({ navigation }: any) {
 
     return () => { cancelled = true; clearTimeout(handle); };
   }, [trimmedQuery, isSearching]);
-
-  const liveMatches = useMemo(
-    () => matchOnlineWorkers(workers, trimmedQuery),
-    [workers, trimmedQuery]
-  );
 
   const openProductHit = (hit: SearchResults['products'][number]) => {
     navigation.navigate('ProductDetail', {

@@ -36,6 +36,9 @@ interface BookingItem {
   location: string;
 }
 
+// The profile shows recent activity, not a lifetime archive.
+const HISTORY_LIMIT = 50;
+
 export default function ClientProfileScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
@@ -65,12 +68,14 @@ export default function ClientProfileScreen({ navigation }: any) {
           .from('orders')
           .select('id, product_name, price, status, created_at')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(HISTORY_LIMIT),
         supabase
           .from('hire_requests')
           .select('id, job_description, location, status, created_at, worker_id')
           .eq('client_id', user.id)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(HISTORY_LIMIT),
       ]);
 
       const orderRows = ordersRes.data || [];
