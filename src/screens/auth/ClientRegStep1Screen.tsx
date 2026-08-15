@@ -7,9 +7,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
 
-export default function ClientRegStep1Screen({ navigation, route }: any) {
+export default function ClientRegStep1Screen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { phoneNumber } = route.params;
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -63,7 +62,6 @@ export default function ClientRegStep1Screen({ navigation, route }: any) {
     }
 
     navigation.navigate('ClientRegStep3', {
-      phoneNumber,
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
       location: location.trim(),
@@ -108,12 +106,6 @@ export default function ClientRegStep1Screen({ navigation, route }: any) {
           <Text style={styles.subtitle}>
             This information helps workers and clients connect with you
           </Text>
-        </Animated.View>
-
-        {/* Phone verified badge */}
-        <Animated.View style={[styles.verifiedBadge, { opacity: verifiedOpacity }]}>
-          <Text style={styles.verifiedIcon}>✓</Text>
-          <Text style={styles.verifiedText}>Phone verified: {phoneNumber}</Text>
         </Animated.View>
 
         {/* Form */}

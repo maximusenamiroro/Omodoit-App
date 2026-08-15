@@ -11,7 +11,7 @@ const EXPERIENCE = ['Less than 1 year', '1-3 years', '3-5 years', '5-10 years', 
 
 export default function WorkerRegStep2Screen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { phoneNumber, fullName, email, businessName } = route.params;
+  const { fullName, email, businessName } = route.params;
 
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedSub, setSelectedSub] = useState<string | null>(null);
@@ -49,7 +49,6 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
     }
 
     navigation.navigate('WorkerRegStep3', {
-      phoneNumber,
       fullName,
       email,
       businessName,

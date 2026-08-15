@@ -11,7 +11,9 @@ import { supabase } from '../../api/supabase';
 export default function LoginScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
 
-  const [emailOrPhone, setEmailOrPhone] = useState('');
+  // Email is the account identifier. It always was — the phone branch
+  // here only ever ended in "please use your email instead".
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -46,22 +48,8 @@ export default function LoginScreen({ navigation }: any) {
     ]).start();
   }, [buttonOpacity, formOpacity, formSlide, logoOpacity, logoScale, registerOpacity, titleOpacity, titleSlide]);
 
-  // Detect if input is phone or email
-  const isPhoneInput = () => {
-    const cleaned = emailOrPhone.replace(/\s/g, '');
-    return /^[0-9+]/.test(cleaned) && cleaned.length >= 4;
-  };
-
-  // Convert phone to international format
-  const formatPhoneToInternational = (phone: string) => {
-    let cleaned = phone.replace(/[^0-9+]/g, '');
-    if (cleaned.startsWith('0')) cleaned = '+234' + cleaned.slice(1);
-    if (!cleaned.startsWith('+')) cleaned = '+234' + cleaned;
-    return cleaned;
-  };
-
   const isFormValid = () => {
-    return emailOrPhone.trim().length >= 4 && password.length >= 6;
+    return email.trim().length >= 4 && password.length >= 6;
   };
 
   const handleLogin = async () => {
@@ -70,59 +58,7 @@ export default function LoginScreen({ navigation }: any) {
     setLoading(true);
 
     try {
-      let loginEmail = emailOrPhone.trim().toLowerCase();
-
-      // If user entered a phone number, look up their email first
-      if (isPhoneInput()) {
-        const phone = formatPhoneToInternational(emailOrPhone);
-
-        const { data: profileData, error: lookupError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('phone', phone)
-          .maybeSingle();
-
-        if (lookupError) throw lookupError;
-
-        if (!profileData) {
-          // Security: do not reveal that the phone does not exist
-          // Use the same generic error message
-          Alert.alert(
-            'Login Failed',
-            'The email/phone or password you entered is incorrect. Please check and try again.'
-          );
-          setLoading(false);
-          return;
-        }
-
-        // Get the email from auth.users via the profile id
-        const { data: userData, error: userError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', profileData.id)
-          .maybeSingle();
-
-        if (userError || !userData) {
-          Alert.alert(
-            'Login Failed',
-            'The email/phone or password you entered is incorrect. Please check and try again.'
-          );
-          setLoading(false);
-          return;
-        }
-
-        // We need the email to sign in — get it from Supabase auth
-        // Since we cannot query auth.users directly from the client,
-        // we try signing in with the phone as email (won't work)
-        // Instead, ask user to use their email
-        Alert.alert(
-          'Use Email to Login',
-          'For security, please log in with your email address and password. Phone login will be available in a future update.',
-          [{ text: 'OK' }]
-        );
-        setLoading(false);
-        return;
-      }
+      const loginEmail = email.trim().toLowerCase();
 
       // Login with email + password
       const { error } = await supabase.auth.signInWithPassword({
@@ -157,7 +93,7 @@ export default function LoginScreen({ navigation }: any) {
   };
 
   const handleForgotPassword = async () => {
-    if (!emailOrPhone.trim() || isPhoneInput()) {
+    if (!email.trim()) {
       Alert.alert(
         'Enter Email',
         'Please enter your email address above, then tap Forgot Password to receive a reset link.'
@@ -167,7 +103,7 @@ export default function LoginScreen({ navigation }: any) {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(
-        emailOrPhone.trim().toLowerCase()
+        email.trim().toLowerCase()
       );
 
       if (error) throw error;
@@ -234,7 +170,7 @@ export default function LoginScreen({ navigation }: any) {
           opacity: formOpacity,
           transform: [{ translateY: formSlide }],
         }}>
-          {/* Email / Phone field */}
+          {/* Email field */}
           <View style={styles.fieldContainer}>
             <Text style={styles.fieldLabel}>Email Address</Text>
             <TextInput
@@ -242,8 +178,8 @@ export default function LoginScreen({ navigation }: any) {
                 styles.input,
                 focused === 'email' && styles.inputFocused,
               ]}
-              value={emailOrPhone}
-              onChangeText={setEmailOrPhone}
+              value={email}
+              onChangeText={setEmail}
               placeholder="Enter your email"
               placeholderTextColor={colors.textMuted}
               keyboardType="email-address"

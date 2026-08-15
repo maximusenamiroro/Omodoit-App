@@ -43,7 +43,6 @@ interface Profile {
   full_name: string | null;
   avatar_url: string | null;
   role: 'client' | 'worker' | null;
-  phone: string | null;
   location: string | null;
   verification_level: number;
   verification_status: string | null;
@@ -131,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'id, full_name, avatar_url, role, phone, location, ' +
+          'id, full_name, avatar_url, role, location, ' +
           'verification_level, verification_status, last_seen, created_at, ' +
           'business_name, category, subcategory, experience, service_area'
         )
@@ -175,7 +174,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { error: healError } = await supabase.from('profiles').insert({
           id: userId,
           full_name: fallbackName,
-          phone: meta.phone ?? null,
           location: meta.location ?? null,
           role: healedRole,
           business_name: isWorker ? meta.business_name ?? null : null,

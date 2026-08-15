@@ -89,7 +89,6 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
           data: {
             role: 'worker',
             full_name: params.fullName,
-            phone: params.phoneNumber,
             location: params.location,
             business_name: params.businessName,
             category: params.category,
@@ -100,12 +99,26 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
 
       if (authError) throw authError;
 
+      // With email confirmation enabled, signUp() returns a user but no
+      // session. Nothing signed in means auth.uid() is null, so the
+      // profile insert below would be refused by RLS — and every field
+      // needed to build it is already stored as user_metadata, which
+      // AuthContext writes out on first successful sign-in. So stop
+      // here and send them to their inbox.
+      if (!authData.session) {
+        setLoading(false);
+        Alert.alert(
+          'Check Your Email',
+          `We sent a confirmation link to ${params.email}. Open it to activate your account, then log in.`,
+          [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        );
+        return;
+      }
+
       if (authData.user) {
         const profileData = {
           id: authData.user.id,
           full_name: params.fullName,
-          phone: params.phoneNumber,
-          phone_verified: true,
           location: params.location,
           role: 'worker' as const,
           business_name: params.businessName,
@@ -137,7 +150,6 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
           full_name: params.fullName,
           avatar_url: null,
           role: 'worker',
-          phone: params.phoneNumber,
           location: params.location,
           verification_level: 1,
           verification_status: 'basic',

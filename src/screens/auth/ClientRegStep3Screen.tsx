@@ -12,7 +12,7 @@ import { upsertWithRetry } from '../../lib/db';
 
 export default function ClientRegStep3Screen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { phoneNumber, fullName, email, location } = route.params;
+  const { fullName, email, location } = route.params;
   const { setDirectAuth, beginRegistration, endRegistration } = useAuth();
 
   const [password, setPassword] = useState('');
@@ -95,7 +95,6 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
           data: {
             role: 'client',
             full_name: fullName,
-            phone: phoneNumber,
             location: location,
           },
         },
@@ -103,13 +102,27 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
 
       if (authError) throw authError;
 
+      // With email confirmation enabled, signUp() returns a user but no
+      // session. Nothing signed in means auth.uid() is null, so the
+      // profile insert below would be refused by RLS — and every field
+      // needed to build it is already stored as user_metadata, which
+      // AuthContext writes out on first successful sign-in. So stop
+      // here and send them to their inbox.
+      if (!authData.session) {
+        setLoading(false);
+        Alert.alert(
+          'Check Your Email',
+          `We sent a confirmation link to ${email}. Open it to activate your account, then log in.`,
+          [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        );
+        return;
+      }
+
       if (authData.user) {
         // Step 2: Create the profile in the profiles table
         const profileData = {
           id: authData.user.id,
           full_name: fullName,
-          phone: phoneNumber,
-          phone_verified: true,
           location: location,
           role: 'client' as const,
           verification_level: 1,
@@ -146,7 +159,6 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
           full_name: fullName,
           avatar_url: null,
           role: 'client',
-          phone: phoneNumber,
           location: location,
           verification_level: 1,
           verification_status: 'basic',
@@ -218,11 +230,6 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
 
         {/* Summary */}
         <Animated.View style={[styles.summaryCard, { opacity: headerOpacity }]}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Phone</Text>
-            <Text style={styles.summaryValue}>✓ {phoneNumber}</Text>
-          </View>
-          <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Name</Text>
             <Text style={styles.summaryValue}>{fullName}</Text>
