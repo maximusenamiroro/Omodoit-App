@@ -7,6 +7,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
 import { supabase } from '../../api/supabase';
+import { PASSWORD_RESET_URL } from '../../config/site';
 
 export default function LoginScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -102,8 +103,13 @@ export default function LoginScreen({ navigation }: any) {
     }
 
     try {
+      // Without redirectTo, the link lands on the site's homepage, which
+      // has no form to set a new password — the reset token arrives and
+      // nothing can be done with it. The website's own reset flow passes
+      // this same path.
       const { error } = await supabase.auth.resetPasswordForEmail(
-        email.trim().toLowerCase()
+        email.trim().toLowerCase(),
+        { redirectTo: PASSWORD_RESET_URL }
       );
 
       if (error) throw error;

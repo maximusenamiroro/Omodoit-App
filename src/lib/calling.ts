@@ -136,8 +136,8 @@ export async function logCallOutcome(
 }
 
 // ── Agora voice engine ──────────────────────────────────────────────
-// Uses "App ID only" auth (no token) — fine for development/testing,
-// see src/config/agora.ts for what's needed before a real launch.
+// Joins are authenticated with a short-lived token from the agora-token
+// Edge Function, signed with the App Certificate. See src/config/agora.ts.
 
 // The engine currently holding a channel, if any. Module-level rather
 // than per-hook because two call screens can be mounted at once (the
@@ -158,11 +158,16 @@ function releaseActiveEngine() {
   activeEngine = null;
 }
 
-// Returns '' when no token could be obtained, which is a valid join
-// argument while the Agora project is in App-ID-only mode. A failure
-// here must never block a call outright — a user who can't reach the
-// token endpoint should still be able to talk, right up until the
-// certificate is enforced.
+// Returns '' when no token could be obtained. That was a valid join
+// argument while the project ran in App-ID-only mode, and the fallback
+// exists so a user who briefly can't reach the token endpoint could
+// still talk.
+//
+// With the App Certificate enabled that reasoning no longer holds:
+// Agora rejects an empty token, so this fallback converts one failure
+// into another — and the user sees "Connecting…" rather than an error
+// naming the cause. Worth replacing with an explicit failure once the
+// console-side enforcement is confirmed.
 const TOKEN_FETCH_TIMEOUT_MS = 6000;
 
 async function fetchAgoraToken(channelName: string): Promise<string> {
