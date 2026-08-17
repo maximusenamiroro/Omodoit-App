@@ -6,7 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { useWatchLocation } from '../../lib/tracking';
 import { supabase } from '../../api/supabase';
@@ -39,7 +39,7 @@ export default function TrackingScreen({ navigation, route }: any) {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(cardOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(cardOpacity, { toValue: 1, duration: 500, easing: EASING.OUT, useNativeDriver: true }),
       Animated.spring(cardSlide, { toValue: 0, damping: 14, stiffness: 100, useNativeDriver: true }),
     ]).start();
 

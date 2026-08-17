@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { EASING } from '../theme';
 import {
   View, Text, StyleSheet, Animated, StatusBar, Image,
 } from 'react-native';
@@ -15,14 +16,14 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     Animated.sequence([
       Animated.parallel([
         Animated.spring(logoScale, { toValue: 1, damping: 12, stiffness: 100, useNativeDriver: true }),
-        Animated.timing(logoOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: 600, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.delay(200),
       Animated.parallel([
-        Animated.timing(textOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(textOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(textSlide, { toValue: 0, damping: 14, stiffness: 100, useNativeDriver: true }),
       ]),
-      Animated.timing(tagOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(tagOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       Animated.delay(800),
     ]).start(() => {
       if (onFinish) onFinish();

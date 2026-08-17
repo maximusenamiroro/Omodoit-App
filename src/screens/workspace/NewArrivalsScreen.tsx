@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { CATEGORIES } from '../../lib/categories';
@@ -72,9 +72,9 @@ export default function NewArrivalsScreen({ navigation }: any) {
 
   useEffect(() => {
     Animated.stagger(150, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(listOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(listOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(listSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();

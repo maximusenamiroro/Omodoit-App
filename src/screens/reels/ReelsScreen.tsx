@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
-import { colors } from '../../theme';
+import { colors, EASING } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -465,7 +465,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
     setLiked(!wasLiked);
     setLikeCount(prev => wasLiked ? prev - 1 : prev + 1);
     Animated.sequence([
-      Animated.timing(likeScale, { toValue: 1.4, duration: 100, useNativeDriver: true }),
+      Animated.timing(likeScale, { toValue: 1.4, duration: 100, easing: EASING.OUT, useNativeDriver: true }),
       Animated.spring(likeScale, { toValue: 1, damping: 8, stiffness: 200, useNativeDriver: true }),
     ]).start();
     try {

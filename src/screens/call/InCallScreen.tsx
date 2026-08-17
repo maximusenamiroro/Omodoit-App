@@ -4,7 +4,7 @@ import {
   StatusBar, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../../theme';
+import { EASING, colors } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { useAgoraCall, logCallOutcome } from '../../lib/calling';
 import { useAuth } from '../../context/AuthContext';
@@ -51,7 +51,7 @@ export default function InCallScreen({ navigation, route }: any) {
   }, [permissionDenied, navigation]);
 
   useEffect(() => {
-    Animated.timing(contentOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    Animated.timing(contentOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }).start();
 
     // Duration only counts once the other person has actually joined
     // the channel — before that there's nothing to time.

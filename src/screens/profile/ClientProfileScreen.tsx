@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { uploadImageToStorage, clearOldUploads } from '../../lib/uploadImage';
@@ -55,8 +55,8 @@ export default function ClientProfileScreen({ navigation }: any) {
 
   useEffect(() => {
     Animated.stagger(200, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(contentOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [contentOpacity, headerOpacity]);
 

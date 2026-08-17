@@ -4,7 +4,7 @@ import {
   StatusBar, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 
 
@@ -33,33 +33,33 @@ export default function AccountTypeScreen({ navigation }: any) {
     const animations = [
       // Logo
       Animated.parallel([
-        Animated.timing(logoOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(logoScale, { toValue: 1, damping: 15, stiffness: 120, useNativeDriver: true }),
       ]),
       // Title
       Animated.parallel([
-        Animated.timing(titleOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(titleSlide, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(titleOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(titleSlide, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       // Subtitle
-      Animated.timing(subtitleOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(subtitleOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       // Client card
       Animated.parallel([
-        Animated.timing(clientOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(clientOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(clientSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
       // Worker card
       Animated.parallel([
-        Animated.timing(workerOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(workerOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(workerSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
       // Button
       Animated.parallel([
-        Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(buttonSlide, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(buttonOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(buttonSlide, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       // Login link
-      Animated.timing(loginOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(loginOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
     ];
 
     Animated.stagger(120, animations).start();
