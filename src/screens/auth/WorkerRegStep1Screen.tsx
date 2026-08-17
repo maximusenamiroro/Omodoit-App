@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TextInput,
   Animated, KeyboardAvoidingView, Platform, StatusBar,
   ScrollView, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 
 export default function WorkerRegStep1Screen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -68,13 +69,12 @@ export default function WorkerRegStep1Screen({ navigation }: any) {
     >
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      <TouchableOpacity
+      <PressableScale
         style={styles.backButton}
         onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
       >
         <Text style={styles.backText}>←</Text>
-      </TouchableOpacity>
+      </PressableScale>
 
       {/* Progress */}
       <View style={styles.progressContainer}>
@@ -185,17 +185,16 @@ export default function WorkerRegStep1Screen({ navigation }: any) {
       {/* Bottom */}
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: buttonOpacity }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.continueButton,
               !isFormValid() && styles.continueButtonDisabled,
             ]}
             onPress={handleContinue}
             disabled={!isFormValid()}
-            activeOpacity={0.85}
           >
             <Text style={styles.continueText}>Continue</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </View>
     </KeyboardAvoidingView>

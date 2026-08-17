@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, FlatList,
   Animated, StatusBar, Platform, ActivityIndicator, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { parseFlashJob, formatNaira } from '../../lib/flashJob';
@@ -227,9 +228,8 @@ export default function NotificationsScreen({ navigation }: any) {
   const renderNotification = ({ item }: { item: Notification }) => {
     const icon = NOTIF_ICONS[item.type] || NOTIF_ICONS.system;
     return (
-      <TouchableOpacity
+      <PressableScale
         style={[styles.notifRow, !item.isRead && styles.notifRowUnread]}
-        activeOpacity={0.7}
         onPress={() => openNotification(item)}
       >
         {/* The client's own photo when they have one — a real face
@@ -287,7 +287,7 @@ export default function NotificationsScreen({ navigation }: any) {
           )}
         </View>
         {!item.isRead && <View style={[styles.unreadDot, { backgroundColor: accentColor }]} />}
-      </TouchableOpacity>
+      </PressableScale>
     );
   };
 
@@ -296,9 +296,9 @@ export default function NotificationsScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Notifications</Text>
           {unreadCount > 0 && (
@@ -308,9 +308,9 @@ export default function NotificationsScreen({ navigation }: any) {
           )}
         </View>
         {unreadCount > 0 ? (
-          <TouchableOpacity onPress={markAllRead} activeOpacity={0.7}>
+          <PressableScale onPress={markAllRead}>
             <Text style={[styles.markAllText, { color: accentColor }]}>Read all</Text>
-          </TouchableOpacity>
+          </PressableScale>
         ) : (
           <View style={{ width: 60 }} />
         )}

@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated,
+  View, Text, StyleSheet, Animated,
   StatusBar, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 
 
 type AccountType = 'client' | 'worker' | null;
@@ -106,8 +107,7 @@ export default function AccountTypeScreen({ navigation }: any) {
           opacity: clientOpacity,
           transform: [{ translateY: clientSlide }],
         }}>
-          <TouchableOpacity
-            activeOpacity={0.85}
+          <PressableScale
             onPress={() => setSelected('client')}
             style={[
               styles.card,
@@ -156,7 +156,7 @@ export default function AccountTypeScreen({ navigation }: any) {
                 </View>
               ))}
             </View>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         {/* Worker Card */}
@@ -164,8 +164,7 @@ export default function AccountTypeScreen({ navigation }: any) {
           opacity: workerOpacity,
           transform: [{ translateY: workerSlide }],
         }}>
-          <TouchableOpacity
-            activeOpacity={0.85}
+          <PressableScale
             onPress={() => setSelected('worker')}
             style={[
               styles.card,
@@ -215,7 +214,7 @@ export default function AccountTypeScreen({ navigation }: any) {
                 </View>
               ))}
             </View>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </ScrollView>
 
@@ -226,7 +225,7 @@ export default function AccountTypeScreen({ navigation }: any) {
           opacity: buttonOpacity,
           transform: [{ translateY: buttonSlide }],
         }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.continueBtn,
               !selected && styles.continueBtnDisabled,
@@ -235,7 +234,6 @@ export default function AccountTypeScreen({ navigation }: any) {
             ]}
             onPress={handleContinue}
             disabled={!selected}
-            activeOpacity={0.85}
           >
             <Text style={styles.continueText}>
               {selected === 'client'
@@ -244,15 +242,15 @@ export default function AccountTypeScreen({ navigation }: any) {
                 ? 'Continue as Worker'
                 : 'Select an account type'}
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         {/* Login link */}
         <Animated.View style={[styles.loginRow, { opacity: loginOpacity }]}>
           <Text style={styles.loginText}>Already have an account? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Login')}>
+          <PressableScale onPress={() => navigation.navigate('Login')}>
             <Text style={styles.loginLink}>Login</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </View>
     </View>

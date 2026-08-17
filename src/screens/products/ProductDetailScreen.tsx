@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Platform, Alert, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 
@@ -144,20 +145,20 @@ export default function ProductDetailScreen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[st.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={st.headerTitle}>{isService ? 'Service Details' : 'Product Details'}</Text>
-        <TouchableOpacity style={st.shareBtn} activeOpacity={0.7}>
+        <PressableScale style={st.shareBtn}>
           <Text style={st.shareIcon}>↗️</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </Animated.View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}>
         {/* Product image */}
         <View style={[st.imageContainer, { backgroundColor: (product.color || colors.primary) + '15' }]}>
           {product.videoUrl ? (
-            <TouchableOpacity activeOpacity={1} onPress={() => setMuted(m => !m)} style={st.heroImage}>
+            <PressableScale onPress={() => setMuted(m => !m)} style={st.heroImage}>
               <Video
                 source={{ uri: product.videoUrl, type: 'mp4' }}
                 style={st.heroImage}
@@ -171,7 +172,7 @@ export default function ProductDetailScreen({ navigation, route }: any) {
               <View style={st.muteBadge}>
                 <Text style={st.muteBadgeText}>{muted ? '🔇 Tap for sound' : '🔊'}</Text>
               </View>
-            </TouchableOpacity>
+            </PressableScale>
           ) : product.imageUrl ? (
             <Image source={{ uri: product.imageUrl }} style={st.heroImage} />
           ) : (
@@ -193,9 +194,9 @@ export default function ProductDetailScreen({ navigation, route }: any) {
               <Text style={st.sellerName}>@{product.sellerName}</Text>
               <Text style={st.sellerLabel}>{isService ? 'Service provider' : 'Seller'}</Text>
             </View>
-            <TouchableOpacity style={st.viewProfileBtn} onPress={viewSellerProfile} activeOpacity={0.85}>
+            <PressableScale style={st.viewProfileBtn} onPress={viewSellerProfile}>
               <Text style={st.viewProfileText}>View Profile</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
 
           <View style={st.section}>
@@ -225,19 +226,18 @@ export default function ProductDetailScreen({ navigation, route }: any) {
       </ScrollView>
 
       <View style={[st.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={st.msgBtn} onPress={goToChat} activeOpacity={0.85}>
+        <PressableScale style={st.msgBtn} onPress={goToChat}>
           <Text style={st.msgIcon}>💬</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </PressableScale>
+        <PressableScale
           style={[st.orderBtn, { backgroundColor: product.color || colors.primary }, ordering && { opacity: 0.6 }]}
           onPress={isService ? handleBook : handleOrder}
           disabled={ordering}
-          activeOpacity={0.85}
         >
           <Text style={st.orderBtnText}>
             {isService ? '📅 Book Now' : ordering ? 'Placing Order…' : '🛒 Order Now'}
           </Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );

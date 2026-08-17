@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated,
+  View, Text, StyleSheet, Animated,
   StatusBar, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAgoraCall, logCallOutcome } from '../../lib/calling';
 import { useAuth } from '../../context/AuthContext';
 
@@ -139,34 +140,33 @@ export default function InCallScreen({ navigation, route }: any) {
 
       <View style={[s.bottom, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 30 }]}>
         <View style={s.actionsRow}>
-          <TouchableOpacity style={s.actionBtn} onPress={toggleMute} activeOpacity={0.85}>
+          <PressableScale style={s.actionBtn} onPress={toggleMute}>
             <View style={[s.actionCircle, muted && s.actionCircleActive]}>
               <Text style={s.actionEmoji}>{muted ? '🔇' : '🎤'}</Text>
             </View>
             <Text style={[s.actionLabel, muted && s.actionLabelActive]}>{muted ? 'Unmute' : 'Mute'}</Text>
-          </TouchableOpacity>
+          </PressableScale>
 
-          <TouchableOpacity style={s.actionBtn} onPress={toggleSpeaker} activeOpacity={0.85}>
+          <PressableScale style={s.actionBtn} onPress={toggleSpeaker}>
             <View style={[s.actionCircle, speaker && s.actionCircleActive]}>
               <Text style={s.actionEmoji}>{speaker ? '🔊' : '🔈'}</Text>
             </View>
             <Text style={[s.actionLabel, speaker && s.actionLabelActive]}>Speaker</Text>
-          </TouchableOpacity>
+          </PressableScale>
 
-          <TouchableOpacity
+          <PressableScale
             style={s.actionBtn}
             onPress={() => { if (otherUserId) navigation.navigate('Chat', { otherUserId, otherUserName: workerName, otherUserAvatar: null }); }}
-            activeOpacity={0.85}
           >
             <View style={s.actionCircle}><Text style={s.actionEmoji}>💬</Text></View>
             <Text style={s.actionLabel}>Message</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
 
-        <TouchableOpacity style={s.endBtn} onPress={handleEndCall} activeOpacity={0.85}>
+        <PressableScale style={s.endBtn} onPress={handleEndCall}>
           <View style={s.endInner}><Text style={s.endIcon}>📞</Text></View>
           <Text style={s.endLabel}>End Call</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );

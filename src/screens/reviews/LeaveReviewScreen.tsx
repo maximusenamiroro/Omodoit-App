@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TextInput,
   StatusBar, Platform, KeyboardAvoidingView, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 
@@ -55,9 +56,9 @@ export default function LeaveReviewScreen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={styles.headerTitle}>Leave a Review</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -68,9 +69,9 @@ export default function LeaveReviewScreen({ navigation, route }: any) {
 
         <View style={styles.starsRow}>
           {[1, 2, 3, 4, 5].map(n => (
-            <TouchableOpacity key={n} onPress={() => setRating(n)} activeOpacity={0.7}>
+            <PressableScale key={n} onPress={() => setRating(n)}>
               <Text style={[styles.star, n <= rating && styles.starFilled]}>⭐</Text>
-            </TouchableOpacity>
+            </PressableScale>
           ))}
         </View>
 
@@ -86,14 +87,13 @@ export default function LeaveReviewScreen({ navigation, route }: any) {
           maxLength={300}
         />
 
-        <TouchableOpacity
+        <PressableScale
           style={[styles.submitBtn, rating === 0 && styles.submitBtnDisabled]}
           onPress={handleSubmit}
           disabled={rating === 0 || submitting}
-          activeOpacity={0.85}
         >
           <Text style={styles.submitText}>{submitting ? 'Posting…' : 'Post Review'}</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </KeyboardAvoidingView>
   );

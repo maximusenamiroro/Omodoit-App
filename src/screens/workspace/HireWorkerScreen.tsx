@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   TextInput, Animated, StatusBar, Platform, Alert,
   KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 
@@ -109,9 +110,9 @@ export default function HireWorkerScreen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={styles.headerTitle}>Book Worker</Text>
         <View style={{ width: 36 }} />
       </Animated.View>
@@ -233,14 +234,13 @@ export default function HireWorkerScreen({ navigation, route }: any) {
 
       {/* Bottom */}
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity
+        <PressableScale
           style={[styles.submitBtn, (!isFormValid() || submitting) && styles.submitBtnDisabled]}
           onPress={handleBooking}
           disabled={!isFormValid() || submitting}
-          activeOpacity={0.85}
         >
           <Text style={styles.submitText}>{submitting ? 'Sending…' : 'Send Booking Request'}</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </KeyboardAvoidingView>
   );

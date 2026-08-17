@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity,
-  Animated, StatusBar, ScrollView, Alert,
+  View, Text, StyleSheet, Animated, StatusBar, ScrollView, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { CATEGORIES } from '../../lib/categories';
 
 const EXPERIENCE = ['Less than 1 year', '1-3 years', '3-5 years', '5-10 years', '10+ years'];
@@ -62,13 +62,12 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      <TouchableOpacity
+      <PressableScale
         style={styles.backButton}
         onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
       >
         <Text style={styles.backText}>←</Text>
-      </TouchableOpacity>
+      </PressableScale>
 
       <View style={styles.progressContainer}>
         <Text style={styles.stepText}>Step 3 of 4</Text>
@@ -107,7 +106,7 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
 
           <View style={styles.categoryGrid}>
             {CATEGORIES.map((cat, i) => (
-              <TouchableOpacity
+              <PressableScale
                 key={i}
                 style={[
                   styles.categoryCard,
@@ -117,7 +116,6 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
                   setSelectedCategory(i);
                   setSelectedSub(null);
                 }}
-                activeOpacity={0.85}
               >
                 <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
                 <Text style={[
@@ -131,7 +129,7 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
                     <Text style={styles.checkText}>✓</Text>
                   </View>
                 )}
-              </TouchableOpacity>
+              </PressableScale>
             ))}
           </View>
 
@@ -141,21 +139,20 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
               <Text style={styles.sectionLabel}>Your Specific Skill *</Text>
               <View style={styles.subsGrid}>
                 {CATEGORIES[selectedCategory].subs.map((sub, i) => (
-                  <TouchableOpacity
+                  <PressableScale
                     key={i}
                     style={[
                       styles.subChip,
                       selectedSub === sub && styles.subChipSelected,
                     ]}
                     onPress={() => setSelectedSub(sub)}
-                    activeOpacity={0.85}
                   >
                     {selectedSub === sub && <Text style={styles.subCheck}>✓ </Text>}
                     <Text style={[
                       styles.subText,
                       selectedSub === sub && styles.subTextSelected,
                     ]}>{sub}</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 ))}
               </View>
             </>
@@ -167,21 +164,20 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
               <Text style={styles.sectionLabel}>Years of Experience *</Text>
               <View style={styles.expGrid}>
                 {EXPERIENCE.map((exp, i) => (
-                  <TouchableOpacity
+                  <PressableScale
                     key={i}
                     style={[
                       styles.expChip,
                       selectedExperience === exp && styles.expChipSelected,
                     ]}
                     onPress={() => setSelectedExperience(exp)}
-                    activeOpacity={0.85}
                   >
                     {selectedExperience === exp && <Text style={styles.expCheck}>✓ </Text>}
                     <Text style={[
                       styles.expText,
                       selectedExperience === exp && styles.expTextSelected,
                     ]}>{exp}</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 ))}
               </View>
             </>
@@ -191,17 +187,16 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
 
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: buttonOpacity }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.continueButton,
               !isFormValid() && styles.continueButtonDisabled,
             ]}
             onPress={handleContinue}
             disabled={!isFormValid()}
-            activeOpacity={0.85}
           >
             <Text style={styles.continueText}>Continue</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </View>
     </View>

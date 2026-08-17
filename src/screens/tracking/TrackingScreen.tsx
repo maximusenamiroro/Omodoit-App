@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated,
+  View, Text, StyleSheet, Animated,
   StatusBar, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useWatchLocation } from '../../lib/tracking';
 import { supabase } from '../../api/supabase';
 
@@ -142,9 +143,9 @@ export default function TrackingScreen({ navigation, route }: any) {
         )}
       </MapView>
 
-      <TouchableOpacity style={[st.backBtn, { top: insets.top + 10 }]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+      <PressableScale style={[st.backBtn, { top: insets.top + 10 }]} onPress={() => navigation.goBack()}>
         <Text style={st.backText}>←</Text>
-      </TouchableOpacity>
+      </PressableScale>
 
       <Animated.View style={[st.bottomCard, { opacity: cardOpacity, transform: [{ translateY: cardSlide }], paddingBottom: Platform.OS === 'ios' ? insets.bottom + 10 : 20 }]}>
         <View style={st.etaBanner}>
@@ -171,18 +172,18 @@ export default function TrackingScreen({ navigation, route }: any) {
         </View>
 
         <View style={st.actionsRow}>
-          <TouchableOpacity style={st.actionBtn} onPress={handleCall} activeOpacity={0.85}>
+          <PressableScale style={st.actionBtn} onPress={handleCall}>
             <Text style={st.actionIcon}>📞</Text>
             <Text style={st.actionLabel}>Call</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={st.actionBtn} onPress={handleMessage} activeOpacity={0.85}>
+          </PressableScale>
+          <PressableScale style={st.actionBtn} onPress={handleMessage}>
             <Text style={st.actionIcon}>💬</Text>
             <Text style={st.actionLabel}>Message</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[st.actionBtn, st.actionBtnDanger]} onPress={handleCancel} activeOpacity={0.85}>
+          </PressableScale>
+          <PressableScale style={[st.actionBtn, st.actionBtnDanger]} onPress={handleCancel}>
             <Text style={st.actionIcon}>✕</Text>
             <Text style={[st.actionLabel, { color: '#EF4444' }]}>Cancel</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </Animated.View>
     </View>

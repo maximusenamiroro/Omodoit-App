@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, FlatList,
   TextInput, Image, StatusBar, KeyboardAvoidingView,
   Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -277,9 +278,9 @@ export default function ChatScreen({ navigation, route }: any) {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         <View style={styles.chatHeader}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+          <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Text style={styles.backText}>←</Text>
-          </TouchableOpacity>
+          </PressableScale>
           <Text style={styles.chatHeaderName}>{otherUserName}</Text>
         </View>
         <View style={styles.loadingCenter}>
@@ -295,9 +296,9 @@ export default function ChatScreen({ navigation, route }: any) {
 
       {/* Chat header */}
       <View style={styles.chatHeader}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
 
         {otherUserAvatar ? (
           <Image source={{ uri: otherUserAvatar }} style={styles.chatAvatar} />
@@ -312,15 +313,14 @@ export default function ChatScreen({ navigation, route }: any) {
           <Text style={styles.chatHeaderStatus}>Tap for profile</Text>
         </View>
 
-        <TouchableOpacity
+        <PressableScale
           style={styles.headerAction}
           onPress={() => navigation.navigate('OutgoingCall', {
             workerName: otherUserName, workerCategory: '', workerId: otherUserId,
           })}
-          activeOpacity={0.7}
         >
           <Text style={styles.headerActionIcon}>📞</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
 
       {/* Messages */}
@@ -379,17 +379,16 @@ export default function ChatScreen({ navigation, route }: any) {
               multiline
               maxLength={2000}
             />
-            <TouchableOpacity
+            <PressableScale
               style={[
                 styles.sendBtn,
                 { backgroundColor: newMessage.trim() ? accentColor : colors.bgCard },
               ]}
               onPress={handleSend}
               disabled={!newMessage.trim() || sending}
-              activeOpacity={0.85}
             >
               <Text style={styles.sendText}>{sending ? '...' : '↑'}</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         </View>
       </KeyboardAvoidingView>

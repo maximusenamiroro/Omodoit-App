@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, FlatList,
   Image, StatusBar, Animated, Platform, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -222,10 +223,9 @@ export default function InboxScreen({ navigation }: any) {
   const accentColor = role === 'client' ? colors.client : colors.primary;
 
   const renderConversation = ({ item }: { item: Conversation }) => (
-    <TouchableOpacity
+    <PressableScale
       style={styles.convRow}
       onPress={() => openChat(item)}
-      activeOpacity={0.7}
     >
       {item.otherUserAvatar ? (
         <Image source={{ uri: item.otherUserAvatar }} style={styles.avatar} />
@@ -273,7 +273,7 @@ export default function InboxScreen({ navigation }: any) {
           </Text>
         )}
       </View>
-    </TouchableOpacity>
+    </PressableScale>
   );
 
   if (loading) {
@@ -323,17 +323,16 @@ export default function InboxScreen({ navigation }: any) {
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
         <Text style={styles.headerTitle}>Messages</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity
+          <PressableScale
             style={styles.headerBtn}
             onPress={() => {
               // Closing clears the query, so reopening never shows a
               // filtered list with an empty-looking box above it.
               setSearchOpen(open => { if (open) setSearchQuery(''); return !open; });
             }}
-            activeOpacity={0.7}
           >
             <Text style={styles.headerBtnIcon}>{searchOpen ? '✕' : '🔍'}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </Animated.View>
 
@@ -350,9 +349,9 @@ export default function InboxScreen({ navigation }: any) {
             returnKeyType="search"
           />
           {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} activeOpacity={0.7}>
+            <PressableScale onPress={() => setSearchQuery('')}>
               <Text style={styles.searchClear}>✕</Text>
-            </TouchableOpacity>
+            </PressableScale>
           )}
         </View>
       )}
@@ -376,10 +375,9 @@ export default function InboxScreen({ navigation }: any) {
                 : 'Cancelled';
 
               return (
-                <TouchableOpacity
+                <PressableScale
                   style={styles.callLogCard}
                   onPress={() => navigation.navigate('OutgoingCall', { workerName: item.otherUserName, workerCategory: '', workerId: item.otherUserId })}
-                  activeOpacity={0.85}
                 >
                   <View style={[styles.callLogAvatar, missedOrDeclined && !item.wasOutgoing && styles.callLogAvatarMissed]}>
                     <Text style={styles.callLogAvatarText}>{getInitials(item.otherUserName)}</Text>
@@ -392,7 +390,7 @@ export default function InboxScreen({ navigation }: any) {
                     </Text>
                   </View>
                   <Text style={styles.callLogTime}>{item.time}</Text>
-                </TouchableOpacity>
+                </PressableScale>
               );
             }}
           />

@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Platform, ActivityIndicator, Dimensions, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -199,13 +200,13 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
 
       {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={styles.headerTitle}>Worker Profile</Text>
-        <TouchableOpacity style={styles.shareBtn} activeOpacity={0.7}>
+        <PressableScale style={styles.shareBtn}>
           <Text style={styles.shareIcon}>↗️</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </Animated.View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}>
@@ -259,7 +260,7 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
             ) : (
               <>
                 {posts.slice(0, POST_PREVIEW_COUNT).map(post => (
-                  <TouchableOpacity key={post.id} style={styles.postCard} onPress={() => openPost(post)} activeOpacity={0.85}>
+                  <PressableScale key={post.id} style={styles.postCard} onPress={() => openPost(post)}>
                     {post.imageUrl ? (
                       <Image source={{ uri: post.imageUrl }} style={styles.postThumb} />
                     ) : (
@@ -278,16 +279,15 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
                         {post.type === 'service' ? 'Book' : 'Order'}
                       </Text>
                     </View>
-                  </TouchableOpacity>
+                  </PressableScale>
                 ))}
                 {posts.length > POST_PREVIEW_COUNT && (
-                  <TouchableOpacity
+                  <PressableScale
                     style={styles.showMoreBtn}
                     onPress={() => navigation.navigate('MyProducts', { workerId: worker.id, workerName: worker.name })}
-                    activeOpacity={0.85}
                   >
                     <Text style={[styles.showMoreText, { color: accentColor }]}>Show more →</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 )}
               </>
             )}
@@ -306,7 +306,7 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
             ) : (
               <View style={styles.reelsGrid}>
                 {reels.map(reel => (
-                  <TouchableOpacity key={reel.id} style={styles.reelCard} activeOpacity={0.85}>
+                  <PressableScale key={reel.id} style={styles.reelCard}>
                     <View style={styles.reelThumb}>
                       <Text style={styles.reelPlayIcon}>▶</Text>
                     </View>
@@ -314,7 +314,7 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
                       <Text style={styles.reelStatIcon}>❤</Text>
                       <Text style={styles.reelStatText}>{reel.likes}</Text>
                     </View>
-                  </TouchableOpacity>
+                  </PressableScale>
                 ))}
               </View>
             )}
@@ -377,23 +377,21 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
 
       {/* Bottom action bar */}
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={styles.msgActionBtn} onPress={goToChat} activeOpacity={0.85}>
+        <PressableScale style={styles.msgActionBtn} onPress={goToChat}>
           <Text style={styles.msgActionIcon}>💬</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </PressableScale>
+        <PressableScale
           style={styles.callActionBtn}
           onPress={() => navigation.navigate('OutgoingCall', { workerName: worker.name, workerCategory: subcategoryName, workerId: worker.id })}
-          activeOpacity={0.85}
         >
           <Text style={styles.callActionIcon}>📞</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </PressableScale>
+        <PressableScale
           style={[styles.bookActionBtn, { backgroundColor: accentColor }]}
           onPress={() => navigation.navigate('HireWorker', { worker, subcategoryName })}
-          activeOpacity={0.85}
         >
           <Text style={styles.bookActionText}>📋 Book Now</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );

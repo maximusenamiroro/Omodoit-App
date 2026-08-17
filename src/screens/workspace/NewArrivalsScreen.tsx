@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Platform, ActivityIndicator, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { CATEGORIES } from '../../lib/categories';
 
@@ -142,9 +143,9 @@ export default function NewArrivalsScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>New Arrivals</Text>
           <Text style={styles.headerSub}>Posted in the last 48 hours</Text>
@@ -192,7 +193,7 @@ export default function NewArrivalsScreen({ navigation }: any) {
 export function ArrivalRow({ item, onPress }: { item: Arrival; onPress: () => void }) {
   const actionLabel = item.type === 'service' ? 'Book' : 'Order';
   return (
-    <TouchableOpacity style={styles.arrivalRow} onPress={onPress} activeOpacity={0.85}>
+    <PressableScale style={styles.arrivalRow} onPress={onPress}>
       <View style={[styles.rowRing, { borderColor: item.color }]}>
         {item.imageUrl ? (
           <Image source={{ uri: item.imageUrl }} style={styles.rowImage} />
@@ -217,7 +218,7 @@ export function ArrivalRow({ item, onPress }: { item: Arrival; onPress: () => vo
       <View style={[styles.viewBtn, { backgroundColor: item.color + '15', borderColor: item.color + '30' }]}>
         <Text style={[styles.viewBtnText, { color: item.color }]}>{actionLabel}</Text>
       </View>
-    </TouchableOpacity>
+    </PressableScale>
   );
 }
 

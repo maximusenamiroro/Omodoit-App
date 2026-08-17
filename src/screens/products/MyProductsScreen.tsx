@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList, Image,
+  View, Text, StyleSheet, FlatList, Image,
   StatusBar, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -153,9 +154,9 @@ export default function MyProductsScreen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={st.headerTitle} numberOfLines={1}>
           {isOwner ? 'My Posts' : `${workerName}'s Posts`}
         </Text>
@@ -182,7 +183,7 @@ export default function MyProductsScreen({ navigation, route }: any) {
           }
           ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} /> : null}
           renderItem={({ item }) => (
-            <TouchableOpacity style={st.row} onPress={() => open(item)} activeOpacity={0.85}>
+            <PressableScale style={st.row} onPress={() => open(item)}>
               {item.imageUrl ? (
                 <Image source={{ uri: item.imageUrl }} style={st.thumb} />
               ) : (
@@ -198,16 +199,15 @@ export default function MyProductsScreen({ navigation, route }: any) {
                 </Text>
               </View>
               {isOwner && (
-                <TouchableOpacity
+                <PressableScale
                   style={st.deleteBtn}
                   onPress={() => remove(item)}
                   disabled={deletingId === item.id}
-                  activeOpacity={0.7}
                 >
                   <Text style={st.deleteText}>{deletingId === item.id ? '…' : '🗑'}</Text>
-                </TouchableOpacity>
+                </PressableScale>
               )}
-            </TouchableOpacity>
+            </PressableScale>
           )}
         />
       )}

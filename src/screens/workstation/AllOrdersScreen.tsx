@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, FlatList,
   StatusBar, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import OrderCard from '../../components/common/OrderCard';
 import { fetchWorkerOrders, setOrderStatus, type ProductOrderRow } from '../../lib/workstation';
@@ -82,9 +83,9 @@ export default function AllOrdersScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={st.headerTitle}>All Orders</Text>
         <View style={{ width: 36 }} />
       </View>

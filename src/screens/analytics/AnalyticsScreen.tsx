@@ -1,11 +1,12 @@
 import React, { useCallback, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -64,9 +65,9 @@ export default function AnalyticsScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={st.headerTitle}>📊 Analytics</Text>
         <View style={{ width: 36 }} />
       </View>

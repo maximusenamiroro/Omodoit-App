@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { launchImageLibrary, launchCamera } from 'react-native-image-picker';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView,
   ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { createThumbnail } from 'react-native-create-thumbnail';
@@ -322,9 +323,9 @@ export default function CreateReelScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={st.headerTitle}>Create Reel</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -363,20 +364,18 @@ export default function CreateReelScreen({ navigation }: any) {
               {/* Re-openable: the trimmer runs automatically on
                   selection, but a first pass is rarely the final cut. */}
               <View style={st.videoPreviewActions}>
-                <TouchableOpacity
+                <PressableScale
                   style={st.trimBtn}
                   onPress={() => openTrimmer(videoUri)}
-                  activeOpacity={0.85}
                 >
                   <Text style={st.trimBtnText}>✂️ {trimmed ? 'Re-trim' : 'Trim'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
+                </PressableScale>
+                <PressableScale
                   style={st.changeBtn}
                   onPress={() => { setVideoUri(null); setTrimmed(false); }}
-                  activeOpacity={0.85}
                 >
                   <Text style={st.videoPreviewChange}>Change</Text>
-                </TouchableOpacity>
+                </PressableScale>
               </View>
             </View>
           </View>
@@ -388,14 +387,14 @@ export default function CreateReelScreen({ navigation }: any) {
             <Text style={st.videoUploadTitle}>Record or Upload Video</Text>
             <Text style={st.videoUploadSub}>Max 60 seconds · Portrait mode recommended</Text>
             <View style={st.videoUploadBtns}>
-              <TouchableOpacity style={st.videoOptionBtn} onPress={handleRecord} activeOpacity={0.85}>
+              <PressableScale style={st.videoOptionBtn} onPress={handleRecord}>
                 <Text style={st.videoOptionIcon}>📷</Text>
                 <Text style={st.videoOptionText}>Record</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={st.videoOptionBtn} onPress={handleUpload} activeOpacity={0.85}>
+              </PressableScale>
+              <PressableScale style={st.videoOptionBtn} onPress={handleUpload}>
                 <Text style={st.videoOptionIcon}>📁</Text>
                 <Text style={st.videoOptionText}>Upload</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
           </View>
         )}
@@ -404,13 +403,13 @@ export default function CreateReelScreen({ navigation }: any) {
           <Text style={st.sectionTitle}>Reel Type</Text>
           <View style={st.typeGrid}>
             {REEL_TYPES.map(type => (
-              <TouchableOpacity key={type.key}
+              <PressableScale key={type.key}
                 style={[st.typeCard, reelType === type.key && st.typeCardActive]}
-                onPress={() => setReelType(type.key)} activeOpacity={0.85}>
+                onPress={() => setReelType(type.key)}>
                 <Text style={st.typeIcon}>{type.icon}</Text>
                 <Text style={[st.typeLabel, reelType === type.key && st.typeLabelActive]}>{type.label}</Text>
                 <Text style={st.typeDesc}>{type.desc}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             ))}
           </View>
 
@@ -435,7 +434,7 @@ export default function CreateReelScreen({ navigation }: any) {
       </ScrollView>
 
       <View style={[st.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={[st.publishBtn, publishing && { opacity: 0.6 }]} onPress={handlePublish} disabled={publishing} activeOpacity={0.85}>
+        <PressableScale style={[st.publishBtn, publishing && { opacity: 0.6 }]} onPress={handlePublish} disabled={publishing}>
           {/* Compression on a long clip takes real time. A spinner
               beside the current stage makes a slow publish read as
               working rather than frozen. */}
@@ -447,7 +446,7 @@ export default function CreateReelScreen({ navigation }: any) {
           ) : (
             <Text style={st.publishBtnText}>🚀 Publish Reel</Text>
           )}
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </KeyboardAvoidingView>
   );

@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { ensureMediaPermission } from '../../lib/permissions';
+import PressableScale from '../../components/common/PressableScale';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Alert, Platform, Image, Dimensions, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -199,12 +200,12 @@ export default function WorkerProfileScreen({ navigation }: any) {
         <View style={{ width: 32 }} />
         <Text style={st.headerBarTitle}>My Profile</Text>
         <View style={st.headerBarRight}>
-          <TouchableOpacity style={st.headerBarBtn} onPress={() => Alert.alert('Bank Details', 'This feature is coming soon.')} activeOpacity={0.7}>
+          <PressableScale style={st.headerBarBtn} onPress={() => Alert.alert('Bank Details', 'This feature is coming soon.')}>
             <Text style={st.headerBarIcon}>🏦</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
+          </PressableScale>
+          <PressableScale style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')}>
             <Text style={st.headerBarIcon}>⚙️</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </Animated.View>
 
@@ -225,9 +226,9 @@ export default function WorkerProfileScreen({ navigation }: any) {
                 </View>
               )}
             </View>
-            <TouchableOpacity style={[st.avatarPlus, { backgroundColor: colors.primary }]} onPress={handleAvatarPick} disabled={uploading} activeOpacity={0.85}>
+            <PressableScale style={[st.avatarPlus, { backgroundColor: colors.primary }]} onPress={handleAvatarPick} disabled={uploading}>
               <Text style={st.avatarPlusIcon}>+</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
 
           <Text style={st.profileName}>{profile?.full_name || 'Your Name'}</Text>
@@ -253,9 +254,9 @@ export default function WorkerProfileScreen({ navigation }: any) {
             ))}
           </View>
 
-          <TouchableOpacity style={[st.editBtn, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('EditProfile')} activeOpacity={0.85}>
+          <PressableScale style={[st.editBtn, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('EditProfile')}>
             <Text style={st.editBtnText}>✏️ Edit Profile</Text>
-          </TouchableOpacity>
+          </PressableScale>
 
           <View style={st.commBanner}>
             <Text style={st.commIcon}>💰</Text>
@@ -269,16 +270,15 @@ export default function WorkerProfileScreen({ navigation }: any) {
             { key: 'products' as const, icon: '📦', label: 'Products' },
             { key: 'reviews' as const, icon: '⭐', label: 'Reviews' },
           ].map(tab => (
-            <TouchableOpacity
+            <PressableScale
               key={tab.key}
               style={[st.tab, activeTab === tab.key && st.tabActive]}
               onPress={() => setActiveTab(tab.key)}
-              activeOpacity={0.7}
             >
               <Text style={st.tabIcon}>{tab.icon}</Text>
               <Text style={[st.tabText, activeTab === tab.key && st.tabTextActive]}>{tab.label}</Text>
               {activeTab === tab.key && <View style={[st.tabLine, { backgroundColor: colors.primary }]} />}
-            </TouchableOpacity>
+            </PressableScale>
           ))}
         </View>
 
@@ -290,7 +290,7 @@ export default function WorkerProfileScreen({ navigation }: any) {
               {activeTab === 'reels' && (
                 <View style={st.reelsGrid}>
                   {reels.map(reel => (
-                    <TouchableOpacity key={reel.id} style={st.reelCard} activeOpacity={0.85}>
+                    <PressableScale key={reel.id} style={st.reelCard}>
                       <View style={st.reelThumb}>
                         {/* Poster frame when the reel has one; older
                             reels predate thumbnails and still show the
@@ -306,14 +306,13 @@ export default function WorkerProfileScreen({ navigation }: any) {
                         )}
                       </View>
 
-                      <TouchableOpacity
+                      <PressableScale
                         style={st.reelDeleteBtn}
                         onPress={() => deleteReel(reel)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        activeOpacity={0.8}
                       >
                         <Text style={st.reelDeleteIcon}>✕</Text>
-                      </TouchableOpacity>
+                      </PressableScale>
 
                       <View style={st.reelOverlay}>
                         <View style={st.reelStat}>
@@ -321,12 +320,12 @@ export default function WorkerProfileScreen({ navigation }: any) {
                           <Text style={st.reelStatText}>{reel.likes}</Text>
                         </View>
                       </View>
-                    </TouchableOpacity>
+                    </PressableScale>
                   ))}
-                  <TouchableOpacity style={st.addReelCard} onPress={() => navigation.navigate('CreateReel')} activeOpacity={0.85}>
+                  <PressableScale style={st.addReelCard} onPress={() => navigation.navigate('CreateReel')}>
                     <Text style={st.addReelIcon}>+</Text>
                     <Text style={st.addReelText}>New Reel</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 </View>
               )}
 
@@ -336,10 +335,9 @@ export default function WorkerProfileScreen({ navigation }: any) {
                     <Text style={st.emptyText}>No products yet</Text>
                   )}
                   {products.slice(0, PRODUCT_PREVIEW_COUNT).map(product => (
-                    <TouchableOpacity
+                    <PressableScale
                       key={product.id}
                       style={st.productCard}
-                      activeOpacity={0.85}
                       onPress={() => navigation.navigate('MyProducts')}
                     >
                       <View style={st.productThumb}>
@@ -353,18 +351,18 @@ export default function WorkerProfileScreen({ navigation }: any) {
                         </Text>
                       </View>
                       <Text style={st.productArrow}>→</Text>
-                    </TouchableOpacity>
+                    </PressableScale>
                   ))}
                   {products.length > PRODUCT_PREVIEW_COUNT && (
-                    <TouchableOpacity style={st.showMoreBtn} onPress={() => navigation.navigate('MyProducts')} activeOpacity={0.85}>
+                    <PressableScale style={st.showMoreBtn} onPress={() => navigation.navigate('MyProducts')}>
                       <Text style={st.showMoreText}>
                         Show all {products.length} posts →
                       </Text>
-                    </TouchableOpacity>
+                    </PressableScale>
                   )}
-                  <TouchableOpacity style={st.addProductBtn} onPress={() => navigation.navigate('AddProduct')} activeOpacity={0.85}>
+                  <PressableScale style={st.addProductBtn} onPress={() => navigation.navigate('AddProduct')}>
                     <Text style={[st.addProductText, { color: colors.primary }]}>+ Add Product</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 </View>
               )}
 

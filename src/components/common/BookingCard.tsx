@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import type { BookingRow } from '../../lib/workstation';
 
 // One booking row, shared by the Workstation dashboard (which shows the
@@ -48,37 +49,36 @@ export default function BookingCard({
 
       {booking.status === 'pending' && onRespond && (
         <View style={st.actions}>
-          <TouchableOpacity style={st.declineBtn} onPress={() => onRespond(booking.id, 'declined')} disabled={busy} activeOpacity={0.85}>
+          <PressableScale style={st.declineBtn} onPress={() => onRespond(booking.id, 'declined')} disabled={busy}>
             <Text style={st.declineText}>{busy ? '…' : 'Decline'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[st.actionBtn, { backgroundColor: colors.primary }]} onPress={() => onRespond(booking.id, 'accepted')} disabled={busy} activeOpacity={0.85}>
+          </PressableScale>
+          <PressableScale style={[st.actionBtn, { backgroundColor: colors.primary }]} onPress={() => onRespond(booking.id, 'accepted')} disabled={busy}>
             <Text style={st.actionText}>{busy ? '…' : 'Accept'}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       )}
 
       {isOpen && (
         <View style={st.actions}>
           {onMessage && (
-            <TouchableOpacity style={[st.actionBtn, st.ghostBtn]} onPress={() => onMessage(booking)} activeOpacity={0.85}>
+            <PressableScale style={[st.actionBtn, st.ghostBtn]} onPress={() => onMessage(booking)}>
               <Text style={[st.actionText, { color: colors.textPrimary }]}>💬 Message</Text>
-            </TouchableOpacity>
+            </PressableScale>
           )}
           {onToggleShare && (
-            <TouchableOpacity
+            <PressableScale
               style={[st.actionBtn, st.ghostBtn, sharing && { borderColor: colors.primary + '50' }]}
               onPress={() => onToggleShare(booking.id)}
-              activeOpacity={0.85}
             >
               <Text style={[st.actionText, { color: sharing ? colors.primary : colors.textPrimary }]}>
                 {sharing ? '📍 Sharing…' : '📍 Share Location'}
               </Text>
-            </TouchableOpacity>
+            </PressableScale>
           )}
           {onComplete && (
-            <TouchableOpacity style={[st.actionBtn, { backgroundColor: colors.primary }]} onPress={() => onComplete(booking)} disabled={busy} activeOpacity={0.85}>
+            <PressableScale style={[st.actionBtn, { backgroundColor: colors.primary }]} onPress={() => onComplete(booking)} disabled={busy}>
               <Text style={st.actionText}>{busy ? '…' : '✓ Complete'}</Text>
-            </TouchableOpacity>
+            </PressableScale>
           )}
         </View>
       )}

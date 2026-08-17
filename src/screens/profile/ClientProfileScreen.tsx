@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { ensureMediaPermission } from '../../lib/permissions';
+import PressableScale from '../../components/common/PressableScale';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Alert, Platform, Image, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -154,12 +155,12 @@ export default function ClientProfileScreen({ navigation }: any) {
         <View style={{ width: 32 }} />
         <Text style={st.headerBarTitle}>My Profile</Text>
         <View style={st.headerBarRight}>
-          <TouchableOpacity style={st.headerBarBtn} onPress={() => Alert.alert('Bank Details', 'This feature is coming soon.')} activeOpacity={0.7}>
+          <PressableScale style={st.headerBarBtn} onPress={() => Alert.alert('Bank Details', 'This feature is coming soon.')}>
             <Text style={st.headerBarIcon}>🏦</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
+          </PressableScale>
+          <PressableScale style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')}>
             <Text style={st.headerBarIcon}>⚙️</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </Animated.View>
 
@@ -180,9 +181,9 @@ export default function ClientProfileScreen({ navigation }: any) {
                 </View>
               )}
             </View>
-            <TouchableOpacity style={[st.avatarPlus, { backgroundColor: colors.client }]} onPress={handleAvatarPick} disabled={uploading} activeOpacity={0.85}>
+            <PressableScale style={[st.avatarPlus, { backgroundColor: colors.client }]} onPress={handleAvatarPick} disabled={uploading}>
               <Text style={st.avatarPlusIcon}>+</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
 
           <Text style={st.profileName}>{profile?.full_name || 'Your Name'}</Text>
@@ -202,9 +203,9 @@ export default function ClientProfileScreen({ navigation }: any) {
             ))}
           </View>
 
-          <TouchableOpacity style={[st.editBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('EditProfile')} activeOpacity={0.85}>
+          <PressableScale style={[st.editBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('EditProfile')}>
             <Text style={st.editBtnText}>✏️ Edit Profile</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         <View style={st.tabBar}>
@@ -213,16 +214,15 @@ export default function ClientProfileScreen({ navigation }: any) {
             { key: 'bookings' as const, icon: '📋', label: 'Bookings' },
             { key: 'saved' as const, icon: '🔖', label: 'Saved' },
           ].map(tab => (
-            <TouchableOpacity
+            <PressableScale
               key={tab.key}
               style={[st.tab, activeTab === tab.key && st.tabActive]}
               onPress={() => setActiveTab(tab.key)}
-              activeOpacity={0.7}
             >
               <Text style={st.tabIcon}>{tab.icon}</Text>
               <Text style={[st.tabText, activeTab === tab.key && st.tabTextActive]}>{tab.label}</Text>
               {activeTab === tab.key && <View style={[st.tabLine, { backgroundColor: colors.client }]} />}
-            </TouchableOpacity>
+            </PressableScale>
           ))}
         </View>
 
@@ -236,9 +236,9 @@ export default function ClientProfileScreen({ navigation }: any) {
                   <View style={st.emptyState}>
                     <Text style={st.emptyEmoji}>📦</Text>
                     <Text style={st.emptyTitle}>No orders yet</Text>
-                    <TouchableOpacity style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('ProductCatalogue')} activeOpacity={0.85}>
+                    <PressableScale style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('ProductCatalogue')}>
                       <Text style={st.emptyBtnText}>Browse Products</Text>
-                    </TouchableOpacity>
+                    </PressableScale>
                   </View>
                 ) : (
                   orders.map(order => {
@@ -267,9 +267,9 @@ export default function ClientProfileScreen({ navigation }: any) {
                   <View style={st.emptyState}>
                     <Text style={st.emptyEmoji}>📋</Text>
                     <Text style={st.emptyTitle}>No bookings yet</Text>
-                    <TouchableOpacity style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('Workspace')} activeOpacity={0.85}>
+                    <PressableScale style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('Workspace')}>
                       <Text style={st.emptyBtnText}>Hire a Worker</Text>
-                    </TouchableOpacity>
+                    </PressableScale>
                   </View>
                 ) : (
                   bookings.map(booking => {
@@ -297,9 +297,9 @@ export default function ClientProfileScreen({ navigation }: any) {
                 <View style={st.emptyState}>
                   <Text style={st.emptyEmoji}>🔖</Text>
                   <Text style={st.emptyTitle}>No saved reels</Text>
-                  <TouchableOpacity style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('Reels')} activeOpacity={0.85}>
+                  <PressableScale style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('Reels')}>
                     <Text style={st.emptyBtnText}>Browse Reels</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 </View>
               )}
             </>
