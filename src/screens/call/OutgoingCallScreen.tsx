@@ -4,7 +4,7 @@ import {
   StatusBar, Platform, Vibration,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../../theme';
+import { EASING, colors } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { generateCallId, sendCallInvite, useCallResponseListener, logCallOutcome } from '../../lib/calling';
@@ -103,7 +103,7 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(contentOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: 1, duration: 500, easing: EASING.OUT, useNativeDriver: true }),
       Animated.spring(avatarScale, { toValue: 1, damping: 12, stiffness: 100, useNativeDriver: true }),
     ]).start();
 
@@ -126,16 +126,16 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
 
     Animated.loop(Animated.stagger(200, [
       Animated.sequence([
-        Animated.timing(dot1, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(dot1, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(dot1, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(dot1, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.sequence([
-        Animated.timing(dot2, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(dot2, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(dot2, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(dot2, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.sequence([
-        Animated.timing(dot3, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(dot3, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(dot3, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(dot3, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       ]),
     ])).start();
 

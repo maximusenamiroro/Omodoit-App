@@ -5,7 +5,7 @@ import {
   ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { PASSWORD_RESET_URL } from '../../config/site';
@@ -34,19 +34,19 @@ export default function LoginScreen({ navigation }: any) {
   useEffect(() => {
     Animated.stagger(120, [
       Animated.parallel([
-        Animated.timing(logoOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(logoScale, { toValue: 1, damping: 15, stiffness: 120, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(titleOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(titleSlide, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(titleOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(titleSlide, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.timing(registerOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(registerOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [buttonOpacity, formOpacity, formSlide, logoOpacity, logoScale, registerOpacity, titleOpacity, titleSlide]);
 

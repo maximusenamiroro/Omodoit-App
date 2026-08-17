@@ -5,7 +5,7 @@ import {
   ScrollView, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 
 export default function ClientRegStep1Screen({ navigation }: any) {
@@ -29,15 +29,15 @@ export default function ClientRegStep1Screen({ navigation }: any) {
   useEffect(() => {
     Animated.stagger(150, [
       Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(headerSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(headerSlide, { toValue: 0, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
       ]),
-      Animated.timing(verifiedOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(verifiedOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [buttonOpacity, formOpacity, formSlide, headerOpacity, headerSlide, verifiedOpacity]);
 

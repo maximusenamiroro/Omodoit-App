@@ -5,7 +5,7 @@ import {
   Dimensions, LayoutAnimation, PanResponder, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { CATEGORIES } from '../../lib/categories';
@@ -94,15 +94,15 @@ export default function WorkspaceScreen({ navigation }: any) {
   useEffect(() => {
     Animated.stagger(100, [
       Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(searchSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(searchSlide, { toValue: 0, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
       ]),
-      Animated.timing(arrivalsOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(arrivalsOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(liveOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(liveOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(liveSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(generalOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(generalOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [arrivalsOpacity, generalOpacity, headerOpacity, liveOpacity, liveSlide, searchSlide]);
 

@@ -4,7 +4,7 @@ import {
   StatusBar, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../../theme';
+import { EASING, colors } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { sendCallResponse } from '../../lib/calling';
 
@@ -25,18 +25,18 @@ export default function IncomingCallScreen({ navigation, route }: any) {
   const declineSlide = useRef(new Animated.Value(50)).current;
 
   useEffect(() => {
-    Animated.timing(contentOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+    Animated.timing(contentOpacity, { toValue: 1, duration: 500, easing: EASING.OUT, useNativeDriver: true }).start();
     Animated.stagger(150, [
       Animated.spring(acceptSlide, { toValue: 0, damping: 12, stiffness: 100, useNativeDriver: true }),
       Animated.spring(declineSlide, { toValue: 0, damping: 12, stiffness: 100, useNativeDriver: true }),
     ]).start();
 
     Animated.loop(Animated.sequence([
-      Animated.timing(bounce, { toValue: -8, duration: 150, useNativeDriver: true }),
-      Animated.timing(bounce, { toValue: 8, duration: 150, useNativeDriver: true }),
-      Animated.timing(bounce, { toValue: -5, duration: 100, useNativeDriver: true }),
-      Animated.timing(bounce, { toValue: 5, duration: 100, useNativeDriver: true }),
-      Animated.timing(bounce, { toValue: 0, duration: 100, useNativeDriver: true }),
+      Animated.timing(bounce, { toValue: -8, duration: 150, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(bounce, { toValue: 8, duration: 150, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(bounce, { toValue: -5, duration: 100, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(bounce, { toValue: 5, duration: 100, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(bounce, { toValue: 0, duration: 100, easing: EASING.OUT, useNativeDriver: true }),
       Animated.delay(1500),
     ])).start();
   }, [acceptSlide, bounce, contentOpacity, declineSlide]);

@@ -4,7 +4,7 @@ import {
   Image, StatusBar, Animated, Platform, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -83,8 +83,8 @@ export default function InboxScreen({ navigation }: any) {
 
   useEffect(() => {
     Animated.stagger(200, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(listOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(listOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [headerOpacity, listOpacity]);
 
