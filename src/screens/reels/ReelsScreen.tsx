@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, FlatList,
   Dimensions, StatusBar, Animated, Image, ActivityIndicator,
   TextInput, Modal, Share, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
 import { colors } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { useIsFocused } from '@react-navigation/native';
@@ -140,16 +141,16 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
-      <TouchableOpacity style={cs.overlay} activeOpacity={1} onPress={onClose}>
+      <PressableScale style={cs.overlay} onPress={onClose}>
         <View style={cs.dismissArea} />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={cs.sheet}>
-          <TouchableOpacity activeOpacity={1} onPress={(e: any) => e.stopPropagation()} style={cs.sheetInner}>
+          <PressableScale onPress={(e: any) => e.stopPropagation()} style={cs.sheetInner}>
             <View style={cs.handle}><View style={cs.handleBar} /></View>
             <View style={cs.header}>
               <Text style={cs.headerTitle}>Comments ({totalComments})</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <PressableScale onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Text style={cs.closeBtn}>\u2715</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
 
             {loading ? (
@@ -181,15 +182,15 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
                         </View>
                         <Text style={cs.commentText}>{item.comment}</Text>
                         <View style={cs.actionRow}>
-                          <TouchableOpacity onPress={() => handleReply(item.id, item.profiles?.full_name || 'User')}>
+                          <PressableScale onPress={() => handleReply(item.id, item.profiles?.full_name || 'User')}>
                             <Text style={cs.replyBtn}>Reply</Text>
-                          </TouchableOpacity>
+                          </PressableScale>
                           {item.replies && item.replies.length > 0 && (
-                            <TouchableOpacity onPress={() => toggleReplies(item.id)}>
+                            <PressableScale onPress={() => toggleReplies(item.id)}>
                               <Text style={cs.viewRepliesBtn}>
                                 {expandedReplies.has(item.id) ? 'Hide replies' : 'View ' + item.replies.length + (item.replies.length === 1 ? ' reply' : ' replies')}
                               </Text>
-                            </TouchableOpacity>
+                            </PressableScale>
                           )}
                         </View>
                       </View>
@@ -218,9 +219,9 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
             {replyTo && (
               <View style={cs.replyIndicator}>
                 <Text style={cs.replyIndicatorText}>Replying to {replyTo.name}</Text>
-                <TouchableOpacity onPress={() => setReplyTo(null)}>
+                <PressableScale onPress={() => setReplyTo(null)}>
                   <Text style={cs.replyCancel}>\u2715</Text>
-                </TouchableOpacity>
+                </PressableScale>
               </View>
             )}
 
@@ -235,18 +236,17 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
                 multiline
                 maxLength={500}
               />
-              <TouchableOpacity
+              <PressableScale
                 style={[cs.sendBtn, !newComment.trim() && cs.sendBtnOff]}
                 onPress={handlePost}
                 disabled={!newComment.trim() || posting}
-                activeOpacity={0.85}
               >
                 <Text style={cs.sendText}>{posting ? '...' : '\u2191'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
-          </TouchableOpacity>
+          </PressableScale>
         </KeyboardAvoidingView>
-      </TouchableOpacity>
+      </PressableScale>
     </Modal>
   );
 }
@@ -326,16 +326,16 @@ function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
-      <TouchableOpacity style={cs.overlay} activeOpacity={1} onPress={onClose}>
+      <PressableScale style={cs.overlay} onPress={onClose}>
         <View style={cs.dismissArea} />
         <View style={[cs.sheet, { maxHeight: SCREEN_H * 0.6 }]}>
-          <TouchableOpacity activeOpacity={1} onPress={(e: any) => e.stopPropagation()} style={cs.sheetInner}>
+          <PressableScale onPress={(e: any) => e.stopPropagation()} style={cs.sheetInner}>
             <View style={cs.handle}><View style={cs.handleBar} /></View>
             <View style={cs.header}>
               <Text style={cs.headerTitle}>@{workerName} — Products</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <PressableScale onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Text style={cs.closeBtn}>✕</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
 
             {loading ? (
@@ -344,7 +344,7 @@ function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
               <View style={cs.center}>
                 <Text style={cs.emptyEmoji}>📦</Text>
                 <Text style={cs.emptyText}>No products listed yet</Text>
-                <TouchableOpacity onPress={() => {
+                <PressableScale onPress={() => {
                   onClose();
                   navigation.navigate('WorkerPublicProfile', {
                     worker: { id: workerId, name: workerName, rating: 0, reviews: 0, location: '', experience: '', verified: false, bio: '' },
@@ -352,15 +352,14 @@ function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
                   });
                 }}>
                   <Text style={[cs.emptyDesc, { color: colors.primary, marginTop: 10 }]}>View Profile →</Text>
-                </TouchableOpacity>
+                </PressableScale>
               </View>
             ) : (
               <ScrollView style={ps.list} showsVerticalScrollIndicator={false}>
                 {products.map(product => (
-                  <TouchableOpacity
+                  <PressableScale
                     key={product.id}
                     style={ps.productRow}
-                    activeOpacity={0.85}
                     onPress={() => {
                       onClose();
                       navigation.navigate('ProductDetail', {
@@ -391,13 +390,13 @@ function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
                       </Text>
                     </View>
                     <Text style={ps.productArrow}>→</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 ))}
               </ScrollView>
             )}
-          </TouchableOpacity>
+          </PressableScale>
         </View>
-      </TouchableOpacity>
+      </PressableScale>
     </Modal>
   );
 }
@@ -547,7 +546,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
 
   return (
     <View style={[styles.reelContainer, { height: SCREEN_H }]}>
-      <TouchableOpacity activeOpacity={1} onPress={() => setPaused(!paused)} style={styles.videoContainer}>
+      <PressableScale onPress={() => setPaused(!paused)} style={styles.videoContainer}>
         {!videoError ? (
          <Video
             source={{ uri: reel.video_url, type: 'mp4' }}
@@ -573,13 +572,12 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
           <View style={styles.errorContainer}>
             <Text style={styles.errorEmoji}>📹</Text>
             <Text style={styles.errorText}>Video unavailable</Text>
-            <TouchableOpacity
+            <PressableScale
               style={styles.retryVideoBtn}
               onPress={() => { setVideoError(false); setVideoLoaded(false); }}
-              activeOpacity={0.85}
             >
               <Text style={styles.retryVideoText}>Tap to retry</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         )}
         {/* Poster frame, sitting under the spinner until the first
@@ -595,43 +593,43 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
         )}
         {!videoLoaded && !videoError && (<View style={styles.loadingOverlay}><ActivityIndicator size="large" color={colors.white} /></View>)}
         {paused && (<View style={styles.pauseOverlay}><View style={styles.pauseIcon}><Text style={styles.pauseText}>▶</Text></View></View>)}
-      </TouchableOpacity>
+      </PressableScale>
 
       <Animated.View style={[styles.actionsColumn, { bottom: Platform.OS === 'ios' ? (isClient ? 190 : 170) : (isClient ? 150 : 130), opacity: contentOpacity, transform: [{ translateX: actionsSlide }] }]}>
-        <TouchableOpacity style={styles.actionAvatarContainer} onPress={isClient ? handleFollow : undefined} activeOpacity={0.8}>
+        <PressableScale style={styles.actionAvatarContainer} onPress={isClient ? handleFollow : undefined}>
           {reel.profiles?.avatar_url ? (
             <Image source={{ uri: reel.profiles.avatar_url }} style={styles.actionAvatar} />
           ) : (
             <View style={[styles.actionAvatarFallback, { backgroundColor: colors.primary }]}><Text style={styles.actionAvatarText}>{getInitials(workerName)}</Text></View>
           )}
           {isClient && (<View style={[styles.actionAvatarPlus, following && { backgroundColor: '#22c55e' }]}><Text style={styles.plusText}>{following ? '✓' : '+'}</Text></View>)}
-        </TouchableOpacity>
+        </PressableScale>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={handleLike} activeOpacity={0.8}>
+        <PressableScale style={styles.actionBtn} onPress={handleLike}>
           <Animated.View style={[styles.actionCircle, { transform: [{ scale: likeScale }] }]}><Text style={styles.actionIcon}>{liked ? '❤️' : '🤍'}</Text></Animated.View>
           <Text style={styles.actionCount}>{formatCount(likeCount)}</Text>
-        </TouchableOpacity>
+        </PressableScale>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(true)} activeOpacity={0.8}>
+        <PressableScale style={styles.actionBtn} onPress={() => setShowComments(true)}>
           <View style={styles.actionCircle}><Text style={styles.actionIcon}>💬</Text></View>
           <Text style={styles.actionCount}>{formatCount(commentCount)}</Text>
-        </TouchableOpacity>
+        </PressableScale>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={handleShare} activeOpacity={0.8}>
+        <PressableScale style={styles.actionBtn} onPress={handleShare}>
           <View style={styles.actionCircle}><Text style={styles.actionIcon}>↗️</Text></View>
           <Text style={styles.actionCount}>Share</Text>
-        </TouchableOpacity>
+        </PressableScale>
 
         {isClient ? (
-          <TouchableOpacity style={styles.actionBtn} onPress={handleSave} activeOpacity={0.8}>
+          <PressableScale style={styles.actionBtn} onPress={handleSave}>
             <View style={styles.actionCircle}><Text style={[styles.actionIcon, { color: saved ? colors.flash : colors.white }]}>★</Text></View>
             <Text style={[styles.actionCount, saved && { color: colors.flash }]}>{saved ? 'Saved' : 'Save'}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         ) : (
-          <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
+          <PressableScale style={styles.actionBtn}>
             <View style={styles.actionCircle}><Text style={styles.actionIcon}>📊</Text></View>
             <Text style={styles.actionCount}>Stats</Text>
-          </TouchableOpacity>
+          </PressableScale>
         )}
       </Animated.View>
 
@@ -659,17 +657,17 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
         {isClient && !isOwnReel && (
           <View style={styles.reelActionsRow}>
             {reel.type === 'product' ? (
-              <TouchableOpacity style={styles.bookNowBtn} onPress={handleOrderNow} activeOpacity={0.85}>
+              <PressableScale style={styles.bookNowBtn} onPress={handleOrderNow}>
                 <Text style={styles.bookNowText}>🛍️  Order Now</Text>
-              </TouchableOpacity>
+              </PressableScale>
             ) : (
-              <TouchableOpacity style={styles.bookNowBtn} onPress={handleBookNow} activeOpacity={0.85}>
+              <PressableScale style={styles.bookNowBtn} onPress={handleBookNow}>
                 <Text style={styles.bookNowText}>📋  Book Now</Text>
-              </TouchableOpacity>
+              </PressableScale>
             )}
-            <TouchableOpacity style={styles.messageNowBtn} onPress={handleMessage} activeOpacity={0.85}>
+            <PressableScale style={styles.messageNowBtn} onPress={handleMessage}>
               <Text style={styles.messageNowText}>💬</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         )}
         {!isClient && (<View style={styles.reelStatsRow}><View style={styles.reelStatChip}><Text style={styles.reelStatText}>❤ {formatCount(likeCount)} likes</Text></View><View style={styles.reelStatChip}><Text style={styles.reelStatText}>{timeAgo(reel.created_at)}</Text></View></View>)}
@@ -802,13 +800,13 @@ export default function ReelsScreen({ navigation, route }: any) {
       {/* Top tabs still visible during loading */}
       <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.tabRow}>
-          <TouchableOpacity activeOpacity={0.7}>
+          <PressableScale>
             <Text style={[styles.tabText, styles.tabTextActive]}>For You</Text>
             <View style={styles.tabUnderline} />
-          </TouchableOpacity>
-          <TouchableOpacity activeOpacity={0.7}>
+          </PressableScale>
+          <PressableScale>
             <Text style={styles.tabText}>Following</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </View>
     </View>
@@ -823,9 +821,9 @@ export default function ReelsScreen({ navigation, route }: any) {
         </View>
         <Text style={styles.errorTitle}>Could not load reels</Text>
         <Text style={styles.errorDesc}>{error}</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={fetchReels} activeOpacity={0.85}>
+        <PressableScale style={styles.retryBtn} onPress={fetchReels}>
           <Text style={styles.retryText}>Try Again</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );
@@ -846,21 +844,21 @@ export default function ReelsScreen({ navigation, route }: any) {
             : 'Create your first reel!'}
         </Text>
         {activeTab === 'following' && (
-          <TouchableOpacity style={styles.retryBtn} onPress={() => setActiveTab('foryou')} activeOpacity={0.85}>
+          <PressableScale style={styles.retryBtn} onPress={() => setActiveTab('foryou')}>
             <Text style={styles.retryText}>Browse For You</Text>
-          </TouchableOpacity>
+          </PressableScale>
         )}
       </View>
       <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.tabRow}>
-          <TouchableOpacity onPress={() => setActiveTab('foryou')} activeOpacity={0.7}>
+          <PressableScale onPress={() => setActiveTab('foryou')}>
             <Text style={[styles.tabText, activeTab === 'foryou' && styles.tabTextActive]}>For You</Text>
             {activeTab === 'foryou' && <View style={styles.tabUnderline} />}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setActiveTab('following')} activeOpacity={0.7}>
+          </PressableScale>
+          <PressableScale onPress={() => setActiveTab('following')}>
             <Text style={[styles.tabText, activeTab === 'following' && styles.tabTextActive]}>Following</Text>
             {activeTab === 'following' && <View style={styles.tabUnderline} />}
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </View>
     </View>
@@ -888,17 +886,17 @@ export default function ReelsScreen({ navigation, route }: any) {
       />
       <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.tabRow}>
-          <TouchableOpacity onPress={() => setActiveTab('foryou')} activeOpacity={0.7}>
+          <PressableScale onPress={() => setActiveTab('foryou')}>
             <Text style={[styles.tabText, activeTab === 'foryou' && styles.tabTextActive]}>For You</Text>
             {activeTab === 'foryou' && <View style={styles.tabUnderline} />}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setActiveTab('following')} activeOpacity={0.7}>
+          </PressableScale>
+          <PressableScale onPress={() => setActiveTab('following')}>
             <Text style={[styles.tabText, activeTab === 'following' && styles.tabTextActive]}>Following</Text>
             {activeTab === 'following' && <View style={styles.tabUnderline} />}
-          </TouchableOpacity>
+          </PressableScale>
         </View>
-        {!isClient && (<TouchableOpacity style={styles.createBtn} activeOpacity={0.85}><Text style={styles.createBtnText}>+ Create</Text></TouchableOpacity>)}
-        {isClient && (<TouchableOpacity style={styles.searchBtn} activeOpacity={0.7}><Text style={styles.searchIcon}>🔍</Text></TouchableOpacity>)}
+        {!isClient && (<PressableScale style={styles.createBtn}><Text style={styles.createBtnText}>+ Create</Text></PressableScale>)}
+        {isClient && (<PressableScale style={styles.searchBtn}><Text style={styles.searchIcon}>🔍</Text></PressableScale>)}
       </View>
     </View>
   );
