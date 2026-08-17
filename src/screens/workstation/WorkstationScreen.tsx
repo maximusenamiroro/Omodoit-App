@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { useBroadcastPresence } from '../../lib/presence';
@@ -226,9 +227,9 @@ export default function WorkstationScreen({ navigation }: any) {
             <Text style={st.greeting}>{greeting}, {firstName} 👋</Text>
             <Text style={st.headerSub}>Your workstation dashboard</Text>
           </View>
-          <TouchableOpacity style={st.notifBtn} onPress={() => navigation.navigate('Notifications')} activeOpacity={0.7}>
+          <PressableScale style={st.notifBtn} onPress={() => navigation.navigate('Notifications')}>
             <Text style={st.notifIcon}>🔔</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         <Animated.View style={{ opacity: contentOpacity, transform: [{ translateY: contentSlide }] }}>
@@ -252,7 +253,7 @@ export default function WorkstationScreen({ navigation }: any) {
 
           {/* Online toggle — now actually controls presence broadcast,
               not just local UI state */}
-          <TouchableOpacity style={st.onlineCard} onPress={() => setIsOnline(!isOnline)} activeOpacity={0.85}>
+          <PressableScale style={st.onlineCard} onPress={() => setIsOnline(!isOnline)}>
             <View style={st.onlineLeft}>
               <View style={[st.onlineDot, !isOnline && { backgroundColor: colors.textMuted }]} />
               <View>
@@ -263,15 +264,15 @@ export default function WorkstationScreen({ navigation }: any) {
             <View style={[st.toggleTrack, !isOnline && { backgroundColor: colors.bgCard }]}>
               <View style={[st.toggleThumb, !isOnline && { alignSelf: 'flex-start' }]} />
             </View>
-          </TouchableOpacity>
+          </PressableScale>
 
           {/* Booking requests — first two only, full list one tap away */}
           <View style={st.sectionHead}>
             <Text style={st.sectionTitle}>📋 Booking Requests</Text>
             {orderedBookings.length > 0 && (
-              <TouchableOpacity onPress={() => navigation.navigate('AllBookings')} activeOpacity={0.7}>
+              <PressableScale onPress={() => navigation.navigate('AllBookings')}>
                 <Text style={st.seeAll}>See all ({orderedBookings.length})</Text>
-              </TouchableOpacity>
+              </PressableScale>
             )}
           </View>
 
@@ -307,11 +308,11 @@ export default function WorkstationScreen({ navigation }: any) {
                 />
               ))}
               {orderedBookings.length > PREVIEW_COUNT && (
-                <TouchableOpacity style={st.seeMoreBtn} onPress={() => navigation.navigate('AllBookings')} activeOpacity={0.85}>
+                <PressableScale style={st.seeMoreBtn} onPress={() => navigation.navigate('AllBookings')}>
                   <Text style={st.seeMoreText}>
                     See {orderedBookings.length - PREVIEW_COUNT} more booking{orderedBookings.length - PREVIEW_COUNT === 1 ? '' : 's'} →
                   </Text>
-                </TouchableOpacity>
+                </PressableScale>
               )}
             </>
           )}
@@ -320,9 +321,9 @@ export default function WorkstationScreen({ navigation }: any) {
           <View style={[st.sectionHead, { marginTop: 8 }]}>
             <Text style={st.sectionTitle}>🛒 Product Orders</Text>
             {orders.length > 0 && (
-              <TouchableOpacity onPress={() => navigation.navigate('AllOrders')} activeOpacity={0.7}>
+              <PressableScale onPress={() => navigation.navigate('AllOrders')}>
                 <Text style={st.seeAll}>See all ({orders.length})</Text>
-              </TouchableOpacity>
+              </PressableScale>
             )}
           </View>
 
@@ -348,11 +349,11 @@ export default function WorkstationScreen({ navigation }: any) {
                 />
               ))}
               {orders.length > PREVIEW_COUNT && (
-                <TouchableOpacity style={st.seeMoreBtn} onPress={() => navigation.navigate('AllOrders')} activeOpacity={0.85}>
+                <PressableScale style={st.seeMoreBtn} onPress={() => navigation.navigate('AllOrders')}>
                   <Text style={st.seeMoreText}>
                     See {orders.length - PREVIEW_COUNT} more order{orders.length - PREVIEW_COUNT === 1 ? '' : 's'} →
                   </Text>
-                </TouchableOpacity>
+                </PressableScale>
               )}
             </>
           )}
@@ -368,12 +369,12 @@ export default function WorkstationScreen({ navigation }: any) {
               { icon: '📊', label: 'Analytics', color: '#8B5CF6', route: 'Analytics' },
               { icon: '💰', label: 'Earnings', color: '#06B6D4', route: 'Earnings' },
             ].map((action, i) => (
-              <TouchableOpacity key={i} style={st.quickCardGrid} onPress={() => navigation.navigate(action.route)} activeOpacity={0.85}>
+              <PressableScale key={i} style={st.quickCardGrid} onPress={() => navigation.navigate(action.route)}>
                 <View style={[st.quickIconBg, { backgroundColor: action.color + '15' }]}>
                   <Text style={st.quickIcon}>{action.icon}</Text>
                 </View>
                 <Text style={st.quickLabel}>{action.label}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             ))}
           </View>
 

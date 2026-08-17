@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   TextInput, Animated, StatusBar, Platform, Image,
   Dimensions, LayoutAnimation, PanResponder, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { CATEGORIES } from '../../lib/categories';
 import { useLiveCategories } from '../../lib/presence';
@@ -236,17 +237,17 @@ export default function WorkspaceScreen({ navigation }: any) {
 
         {/* HEADER */}
         <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-          <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.navigate('Orders')} activeOpacity={0.7}>
+          <PressableScale style={styles.headerIconBtn} onPress={() => navigation.navigate('Orders')}>
             <Text style={styles.headerIconText}>📋</Text>
             <Text style={styles.headerIconLabel}>Orders</Text>
-          </TouchableOpacity>
+          </PressableScale>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>Workspace</Text>
           </View>
-          <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.navigate('Notifications')} activeOpacity={0.7}>
+          <PressableScale style={styles.headerIconBtn} onPress={() => navigation.navigate('Notifications')}>
             <Text style={styles.headerIconText}>🔔</Text>
             <View style={styles.notifDot} />
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         {/* SEARCH */}
@@ -263,9 +264,9 @@ export default function WorkspaceScreen({ navigation }: any) {
               onBlur={() => setSearchFocused(false)}
             />
             {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <PressableScale onPress={() => setSearchQuery('')}>
                 <Text style={styles.clearIcon}>✕</Text>
-              </TouchableOpacity>
+              </PressableScale>
             )}
           </View>
         </Animated.View>
@@ -290,7 +291,7 @@ export default function WorkspaceScreen({ navigation }: any) {
                   <>
                     <Text style={styles.resultSection}>🆕 New arrivals ({results.products.length})</Text>
                     {results.products.map(hit => (
-                      <TouchableOpacity key={hit.id} style={styles.resultRow} onPress={() => openProductHit(hit)} activeOpacity={0.85}>
+                      <PressableScale key={hit.id} style={styles.resultRow} onPress={() => openProductHit(hit)}>
                         {hit.imageUrl ? (
                           <Image source={{ uri: hit.imageUrl }} style={styles.resultThumb} />
                         ) : (
@@ -307,7 +308,7 @@ export default function WorkspaceScreen({ navigation }: any) {
                         <View style={styles.resultAction}>
                           <Text style={styles.resultActionText}>{hit.type === 'service' ? 'Book' : 'Order'}</Text>
                         </View>
-                      </TouchableOpacity>
+                      </PressableScale>
                     ))}
                   </>
                 )}
@@ -316,7 +317,7 @@ export default function WorkspaceScreen({ navigation }: any) {
                   <>
                     <Text style={styles.resultSection}>🎬 Reels ({results.reels.length})</Text>
                     {results.reels.map(hit => (
-                      <TouchableOpacity key={hit.id} style={styles.resultRow} onPress={() => navigation.navigate('Reels', { focusReelId: hit.id })} activeOpacity={0.85}>
+                      <PressableScale key={hit.id} style={styles.resultRow} onPress={() => navigation.navigate('Reels', { focusReelId: hit.id })}>
                         {hit.thumbnailUrl ? (
                           <Image source={{ uri: hit.thumbnailUrl }} style={styles.resultThumb} />
                         ) : (
@@ -331,7 +332,7 @@ export default function WorkspaceScreen({ navigation }: any) {
                         <View style={styles.resultAction}>
                           <Text style={styles.resultActionText}>Watch</Text>
                         </View>
-                      </TouchableOpacity>
+                      </PressableScale>
                     ))}
                   </>
                 )}
@@ -340,7 +341,7 @@ export default function WorkspaceScreen({ navigation }: any) {
                   <>
                     <Text style={styles.resultSection}>🟢 Live workers ({liveMatches.length})</Text>
                     {liveMatches.map(w => (
-                      <TouchableOpacity
+                      <PressableScale
                         key={w.id}
                         style={styles.resultRow}
                         onPress={() => navigation.navigate('WorkerList', {
@@ -348,7 +349,6 @@ export default function WorkspaceScreen({ navigation }: any) {
                           subcategoryName: w.subcategory || w.category,
                           color: colors.primary,
                         })}
-                        activeOpacity={0.85}
                       >
                         <View style={[styles.resultThumb, styles.resultThumbFallback]}>
                           <Text style={styles.resultEmoji}>👷</Text>
@@ -360,7 +360,7 @@ export default function WorkspaceScreen({ navigation }: any) {
                         <View style={[styles.resultAction, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '30' }]}>
                           <Text style={[styles.resultActionText, { color: colors.primary }]}>View</Text>
                         </View>
-                      </TouchableOpacity>
+                      </PressableScale>
                     ))}
                   </>
                 )}
@@ -377,9 +377,9 @@ export default function WorkspaceScreen({ navigation }: any) {
                 <Text style={styles.sectionTitle}>🆕 New Arrivals</Text>
                 <View style={styles.badge48h}><Text style={styles.badge48hText}>48h only</Text></View>
               </View>
-              <TouchableOpacity onPress={() => navigation.navigate('NewArrivals')} activeOpacity={0.7}>
+              <PressableScale onPress={() => navigation.navigate('NewArrivals')}>
                 <Text style={styles.seeAll}>See All →</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
 
             {arrivalsLoading ? (
@@ -395,7 +395,7 @@ export default function WorkspaceScreen({ navigation }: any) {
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.arrivalsScroll}>
                 {newArrivals.slice(0, VISIBLE_ARRIVALS).map(item => (
-                  <TouchableOpacity key={item.id} style={styles.arrivalItem} activeOpacity={0.85}>
+                  <PressableScale key={item.id} style={styles.arrivalItem}>
                     <View style={styles.storyRing}>
                       <View style={styles.storyInner}>
                         <View style={[styles.storyAvatar, { backgroundColor: item.color + '20' }]}>
@@ -406,17 +406,17 @@ export default function WorkspaceScreen({ navigation }: any) {
                     </View>
                     <Text style={styles.arrivalCategory} numberOfLines={1}>{item.category}</Text>
                     <Text style={styles.arrivalPoster} numberOfLines={1}>@{item.posterName.split(' ')[0]}</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 ))}
                 {newArrivals.length > VISIBLE_ARRIVALS && (
-                  <TouchableOpacity style={styles.seeMoreCircle} onPress={() => navigation.navigate('NewArrivals')} activeOpacity={0.85}>
+                  <PressableScale style={styles.seeMoreCircle} onPress={() => navigation.navigate('NewArrivals')}>
                     <View style={styles.seeMoreRing}>
                       <View style={styles.seeMoreInner}>
                         <Text style={styles.seeMoreCount}>+{newArrivals.length - VISIBLE_ARRIVALS}</Text>
                       </View>
                     </View>
                     <Text style={styles.seeMoreLabel}>See more</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 )}
               </ScrollView>
             )}
@@ -437,21 +437,21 @@ export default function WorkspaceScreen({ navigation }: any) {
             {visibleCategories.map((cat, i) => {
               const hasLive = onlineCategories.has(cat.name);
               return (
-                <TouchableOpacity key={i} style={[styles.categoryCard, hasLive && styles.categoryCardLive]}
-                  onPress={() => navigation.navigate('SubCategories', { categoryName: cat.name })} activeOpacity={0.85}>
+                <PressableScale key={i} style={[styles.categoryCard, hasLive && styles.categoryCardLive]}
+                  onPress={() => navigation.navigate('SubCategories', { categoryName: cat.name })}>
                   {hasLive && <View style={styles.liveDot} />}
                   <Text style={styles.categoryEmoji}>{cat.emoji}</Text>
                   <Text style={styles.categoryName} numberOfLines={2}>{cat.name}</Text>
                   {hasLive && <Text style={styles.liveNowText}>Live Now</Text>}
-                </TouchableOpacity>
+                </PressableScale>
               );
             })}
           </View>
 
           {hasMoreCategories && !searchQuery.trim() && (
-            <TouchableOpacity style={styles.seeAllCatsBtn} onPress={toggleCategories} activeOpacity={0.85}>
+            <PressableScale style={styles.seeAllCatsBtn} onPress={toggleCategories}>
               <Text style={styles.seeAllCatsText}>{showAllCategories ? 'Show Less ↑' : 'See All Categories ↓'}</Text>
-            </TouchableOpacity>
+            </PressableScale>
           )}
         </Animated.View>
         )}
@@ -460,8 +460,8 @@ export default function WorkspaceScreen({ navigation }: any) {
         {!isSearching && (
         <Animated.View style={{ opacity: generalOpacity }}>
           <Text style={[styles.sectionTitle, { paddingHorizontal: spacing.screenPadding, marginBottom: 10, marginTop: 4 }]}>General Workers</Text>
-          <TouchableOpacity style={styles.actionRowBtn}
-            onPress={() => navigation.navigate('WorkerList', { categoryName: 'All', subcategoryName: 'General Workers', color: colors.primary })} activeOpacity={0.85}>
+          <PressableScale style={styles.actionRowBtn}
+            onPress={() => navigation.navigate('WorkerList', { categoryName: 'All', subcategoryName: 'General Workers', color: colors.primary })}>
             <View style={styles.actionRowLeft}>
               <View style={[styles.actionRowIcon, { backgroundColor: colors.flash + '15' }]}>
                 <Text style={styles.actionRowEmoji}>👷</Text>
@@ -472,7 +472,7 @@ export default function WorkspaceScreen({ navigation }: any) {
               </View>
             </View>
             <Text style={styles.actionRowArrow}>→</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
         )}
 
