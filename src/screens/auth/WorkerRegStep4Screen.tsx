@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TextInput,
   Animated, KeyboardAvoidingView, Platform, StatusBar,
   ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { upsertWithRetry } from '../../lib/db';
@@ -182,13 +183,12 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
     >
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      <TouchableOpacity
+      <PressableScale
         style={styles.backButton}
         onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
       >
         <Text style={styles.backText}>←</Text>
-      </TouchableOpacity>
+      </PressableScale>
 
       <View style={styles.progressContainer}>
         <Text style={styles.stepText}>Step 4 of 4</Text>
@@ -254,9 +254,9 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
                 onFocus={() => setFocused('password')}
                 onBlur={() => setFocused('')}
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+              <PressableScale onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                 <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
             {password.length > 0 && (
               <View style={styles.strengthContainer}>
@@ -287,9 +287,9 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
                 onFocus={() => setFocused('confirm')}
                 onBlur={() => setFocused('')}
               />
-              <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeButton}>
+              <PressableScale onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeButton}>
                 <Text style={styles.eyeText}>{showConfirm ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
             {confirmPassword.length > 0 && password !== confirmPassword && (
               <Text style={styles.errorHint}>Passwords do not match</Text>
@@ -300,10 +300,9 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
           </View>
 
           {/* Terms */}
-          <TouchableOpacity
+          <PressableScale
             style={styles.termsRow}
             onPress={() => setAgreedToTerms(!agreedToTerms)}
-            activeOpacity={0.7}
           >
             <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
               {agreedToTerms && <Text style={styles.checkmark}>✓</Text>}
@@ -311,12 +310,11 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
             <Text style={styles.termsText}>
               I agree to the <Text style={styles.termsLink}>Terms of Use</Text> and <Text style={styles.termsLink}>Privacy Policy</Text>
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
 
-          <TouchableOpacity
+          <PressableScale
             style={styles.termsRow}
             onPress={() => setAgreedToConduct(!agreedToConduct)}
-            activeOpacity={0.7}
           >
             <View style={[styles.checkbox, agreedToConduct && styles.checkboxChecked]}>
               {agreedToConduct && <Text style={styles.checkmark}>✓</Text>}
@@ -324,7 +322,7 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
             <Text style={styles.termsText}>
               I will provide honest and quality services to all clients
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         {/* Commission card — the hook */}
@@ -341,21 +339,20 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
 
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: buttonOpacity }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.createButton,
               !isFormValid() && styles.createButtonDisabled,
             ]}
             onPress={handleCreateAccount}
             disabled={!isFormValid() || loading}
-            activeOpacity={0.85}
           >
             {loading ? (
               <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.createText}>Create My Worker Account</Text>
             )}
-          </TouchableOpacity>
+          </PressableScale>
 
           <Text style={styles.securityNote}>
             🔒 Your password is encrypted and never stored in plain text

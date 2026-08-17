@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { ensureMediaPermission } from '../../lib/permissions';
+import PressableScale from '../../components/common/PressableScale';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, Image, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
@@ -138,9 +139,9 @@ export default function AddProductScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={st.headerTitle}>Add {activeType.label}</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -154,13 +155,13 @@ export default function AddProductScreen({ navigation }: any) {
             {photos.map((uri, i) => (
               <View key={i} style={st.photoThumb}>
                 <Image source={{ uri }} style={st.photoImg} />
-                <TouchableOpacity style={st.photoRemove} onPress={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>
+                <PressableScale style={st.photoRemove} onPress={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>
                   <Text style={st.photoRemoveText}>✕</Text>
-                </TouchableOpacity>
+                </PressableScale>
               </View>
             ))}
             {photos.length < 5 && (
-              <TouchableOpacity style={st.photoAdd} onPress={async () => {
+              <PressableScale style={st.photoAdd} onPress={async () => {
                 if (!(await ensureMediaPermission('photo'))) return;
                 launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 1200, maxHeight: 1200 }, (res) => {
                   if (res.assets && res.assets[0]?.uri) {
@@ -168,22 +169,22 @@ export default function AddProductScreen({ navigation }: any) {
                     setPhotos(prev => [...prev, uri].slice(0, 5));
                   }
                 });
-              }} activeOpacity={0.85}>
+              }}>
                 <Text style={st.photoAddIcon}>📷</Text>
                 <Text style={st.photoAddText}>{photos.length}/5</Text>
-              </TouchableOpacity>
+              </PressableScale>
             )}
           </ScrollView>
 
           {videoUri ? (
             <View style={st.videoPicked}>
               <Text style={st.videoPickedText}>🎬 Video attached</Text>
-              <TouchableOpacity onPress={() => setVideoUri(null)} activeOpacity={0.7}>
+              <PressableScale onPress={() => setVideoUri(null)}>
                 <Text style={st.videoRemoveText}>Remove</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
           ) : (
-            <TouchableOpacity style={st.videoAdd} activeOpacity={0.85} onPress={async () => {
+            <PressableScale style={st.videoAdd} onPress={async () => {
               if (!(await ensureMediaPermission('video'))) return;
               launchImageLibrary({ mediaType: 'video', selectionLimit: 1 }, (res) => {
                 if (res.assets && res.assets[0]?.uri) setVideoUri(res.assets[0].uri);
@@ -191,7 +192,7 @@ export default function AddProductScreen({ navigation }: any) {
             }}>
               <Text style={st.videoAddIcon}>🎬</Text>
               <Text style={st.videoAddText}>Add a video (optional)</Text>
-            </TouchableOpacity>
+            </PressableScale>
           )}
         </View>
 
@@ -202,18 +203,17 @@ export default function AddProductScreen({ navigation }: any) {
             <Text style={st.label}>What are you posting?</Text>
             <View style={st.typeRow}>
               {POST_TYPES.map(t => (
-                <TouchableOpacity
+                <PressableScale
                   key={t.key}
                   style={[st.typeCard, postType === t.key && st.typeCardActive]}
                   onPress={() => setPostType(t.key)}
-                  activeOpacity={0.85}
                 >
                   <Text style={st.typeIcon}>{t.icon}</Text>
                   <Text style={[st.typeLabel, postType === t.key && st.typeLabelActive]}>
                     {t.label}
                   </Text>
                   <Text style={st.typeDesc}>{t.desc}</Text>
-                </TouchableOpacity>
+                </PressableScale>
               ))}
             </View>
             <Text style={st.typeHint}>
@@ -268,12 +268,12 @@ export default function AddProductScreen({ navigation }: any) {
       </ScrollView>
 
       <View style={[st.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={[st.publishBtn, !isValid && st.publishBtnDisabled, publishing && { opacity: 0.6 }]}
-          onPress={handlePublish} disabled={!isValid || publishing} activeOpacity={0.85}>
+        <PressableScale style={[st.publishBtn, !isValid && st.publishBtnDisabled, publishing && { opacity: 0.6 }]}
+          onPress={handlePublish} disabled={!isValid || publishing}>
           <Text style={st.publishBtnText}>
             {publishing ? (publishStage || 'Publishing…') : `🚀 Publish ${activeType.label}`}
           </Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </KeyboardAvoidingView>
   );

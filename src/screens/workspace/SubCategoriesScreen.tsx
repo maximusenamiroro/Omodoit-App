@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { findCategoryLoose } from '../../lib/categories';
 
@@ -70,9 +71,9 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
 
       {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>{category.emoji}</Text>
           <Text style={styles.headerTitle}>{categoryName}</Text>
@@ -96,11 +97,10 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
         ) : (
           <Animated.View style={{ opacity: listOpacity, transform: [{ translateY: listSlide }], paddingHorizontal: spacing.screenPadding }}>
             {category.subs.map((subName, i) => (
-              <TouchableOpacity
+              <PressableScale
                 key={i}
                 style={styles.subRow}
                 onPress={() => navigation.navigate('WorkerList', { categoryName: category.name, subcategoryName: subName, color: category.color })}
-                activeOpacity={0.7}
               >
                 <View style={[styles.subIconBg, { backgroundColor: category.color + '12' }]}>
                   <Text style={styles.subIcon}>{category.emoji}</Text>
@@ -112,7 +112,7 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
                   </Text>
                 </View>
                 <Text style={[styles.subArrow, { color: category.color }]}>→</Text>
-              </TouchableOpacity>
+              </PressableScale>
             ))}
           </Animated.View>
         )}

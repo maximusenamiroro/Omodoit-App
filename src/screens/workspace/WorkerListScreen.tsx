@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 
 const getInitials = (name: string): string => {
@@ -133,9 +134,9 @@ export default function WorkerListScreen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{subcategoryName}</Text>
           <Text style={styles.headerSub}>{categoryName}</Text>
@@ -146,14 +147,13 @@ export default function WorkerListScreen({ navigation, route }: any) {
       {/* Sort options */}
       <Animated.View style={[styles.sortRow, { opacity: headerOpacity }]}>
         {([['rating', '⭐ Rating'], ['reviews', '💬 Reviews'], ['nearest', '📍 Nearest']] as [SortOption, string][]).map(([key, label]) => (
-          <TouchableOpacity
+          <PressableScale
             key={key}
             style={[styles.sortChip, sortBy === key && { backgroundColor: accentColor + '15', borderColor: accentColor + '40' }]}
             onPress={() => setSortBy(key)}
-            activeOpacity={0.85}
           >
             <Text style={[styles.sortText, sortBy === key && { color: accentColor, fontWeight: '700' }]}>{label}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         ))}
       </Animated.View>
 
@@ -184,11 +184,10 @@ export default function WorkerListScreen({ navigation, route }: any) {
                 </View>
               )}
               {sortedWorkers.map((worker) => (
-                <TouchableOpacity
+                <PressableScale
                   key={worker.id}
                   style={styles.workerCard}
                   onPress={() => navigation.navigate('WorkerPublicProfile', { worker, color: accentColor, subcategoryName })}
-                  activeOpacity={0.85}
                 >
                   <View style={styles.workerTop}>
                     <View style={[styles.workerAvatar, { backgroundColor: accentColor }]}>
@@ -212,22 +211,20 @@ export default function WorkerListScreen({ navigation, route }: any) {
                   </View>
                   <Text style={styles.workerBio} numberOfLines={2}>{worker.bio}</Text>
                   <View style={styles.workerActions}>
-                    <TouchableOpacity
+                    <PressableScale
                       style={[styles.bookBtn, { backgroundColor: accentColor }]}
                       onPress={() => navigation.navigate('HireWorker', { worker, subcategoryName })}
-                      activeOpacity={0.85}
                     >
                       <Text style={styles.bookBtnText}>📋 Book Now</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
+                    </PressableScale>
+                    <PressableScale
                       style={styles.messageBtn}
                       onPress={() => navigation.navigate('Chat', { otherUserId: worker.id, otherUserName: worker.name, otherUserAvatar: null })}
-                      activeOpacity={0.85}
                     >
                       <Text style={styles.messageBtnText}>💬 Message</Text>
-                    </TouchableOpacity>
+                    </PressableScale>
                   </View>
-                </TouchableOpacity>
+                </PressableScale>
               ))}
               {loadingMore && <ActivityIndicator color={colors.primary} style={styles.moreLoader} />}
               {reachedEnd && workers.length >= WORKER_PAGE_SIZE && (

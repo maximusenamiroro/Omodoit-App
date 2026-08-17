@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TextInput,
   Animated, KeyboardAvoidingView, Platform, StatusBar,
   ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { PASSWORD_RESET_URL } from '../../config/site';
 
@@ -137,13 +138,12 @@ export default function LoginScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Back button */}
-      <TouchableOpacity
+      <PressableScale
         style={styles.backButton}
         onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
       >
         <Text style={styles.backText}>←</Text>
-      </TouchableOpacity>
+      </PressableScale>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -214,23 +214,22 @@ export default function LoginScreen({ navigation }: any) {
                 onFocus={() => setFocused('password')}
                 onBlur={() => setFocused('')}
               />
-              <TouchableOpacity
+              <PressableScale
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
               >
                 <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
           </View>
 
           {/* Forgot password */}
-          <TouchableOpacity
+          <PressableScale
             style={styles.forgotContainer}
             onPress={handleForgotPassword}
-            activeOpacity={0.7}
           >
             <Text style={styles.forgotText}>Forgot password?</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </ScrollView>
 
@@ -238,29 +237,28 @@ export default function LoginScreen({ navigation }: any) {
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         {/* Login button */}
         <Animated.View style={{ opacity: buttonOpacity }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.loginButton,
               !isFormValid() && styles.loginButtonDisabled,
             ]}
             onPress={handleLogin}
             disabled={!isFormValid() || loading}
-            activeOpacity={0.85}
           >
             {loading ? (
               <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.loginButtonText}>Sign In</Text>
             )}
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         {/* Register link */}
         <Animated.View style={[styles.registerRow, { opacity: registerOpacity }]}>
           <Text style={styles.registerText}>Don't have an account? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('AccountType')}>
+          <PressableScale onPress={() => navigation.navigate('AccountType')}>
             <Text style={styles.registerLink}>Sign Up</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </View>
     </KeyboardAvoidingView>

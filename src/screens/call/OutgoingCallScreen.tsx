@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated,
+  View, Text, StyleSheet, Animated,
   StatusBar, Platform, Vibration,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { generateCallId, sendCallInvite, useCallResponseListener, logCallOutcome } from '../../lib/calling';
 
@@ -174,7 +175,7 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
       </Animated.View>
 
       <View style={[s.bottom, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 30 }]}>
-        <TouchableOpacity
+        <PressableScale
           style={s.cancelBtn}
           onPress={() => {
             if (status === 'ringing' || status === 'sending') {
@@ -182,11 +183,10 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
             }
             navigation.goBack();
           }}
-          activeOpacity={0.85}
         >
           <View style={s.cancelInner}><Text style={s.cancelIcon}>📞</Text></View>
           <Text style={s.cancelLabel}>Cancel</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );

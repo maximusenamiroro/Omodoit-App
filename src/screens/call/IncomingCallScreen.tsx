@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated,
+  View, Text, StyleSheet, Animated,
   StatusBar, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { sendCallResponse } from '../../lib/calling';
 
 const getInitials = (name: string): string => {
@@ -84,16 +85,16 @@ export default function IncomingCallScreen({ navigation, route }: any) {
 
       <View style={[s.bottom, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 30 }]}>
         <Animated.View style={{ transform: [{ translateY: declineSlide }] }}>
-          <TouchableOpacity style={s.declineBtn} onPress={handleDecline} disabled={responding} activeOpacity={0.85}>
+          <PressableScale style={s.declineBtn} onPress={handleDecline} disabled={responding}>
             <View style={s.declineInner}><Text style={s.phoneIcon}>📞</Text></View>
             <Text style={s.actionLabel}>Decline</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
         <Animated.View style={{ transform: [{ translateY: acceptSlide }] }}>
-          <TouchableOpacity style={s.acceptBtn} onPress={handleAccept} disabled={responding} activeOpacity={0.85}>
+          <PressableScale style={s.acceptBtn} onPress={handleAccept} disabled={responding}>
             <View style={s.acceptInner}><Text style={s.phoneIcon}>📞</Text></View>
             <Text style={s.actionLabel}>Accept</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </View>
     </View>

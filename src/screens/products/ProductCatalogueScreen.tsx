@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Platform, Dimensions, Image, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -131,18 +132,18 @@ export default function ProductCatalogueScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[st.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={st.headerTitle}>Products</Text>
         <View style={{ width: 36 }} />
       </Animated.View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.filterScroll}>
         {FILTERS.map(f => (
-          <TouchableOpacity key={f.key} style={[st.filterChip, activeFilter === f.key && st.filterChipActive]} onPress={() => setActiveFilter(f.key)} activeOpacity={0.85}>
+          <PressableScale key={f.key} style={[st.filterChip, activeFilter === f.key && st.filterChipActive]} onPress={() => setActiveFilter(f.key)}>
             <Text style={[st.filterText, activeFilter === f.key && st.filterTextActive]}>{f.label}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         ))}
       </ScrollView>
 
@@ -174,8 +175,8 @@ export default function ProductCatalogueScreen({ navigation }: any) {
               {products.map(product => {
                 const accent = colorForId(product.id);
                 return (
-                  <TouchableOpacity key={product.id} style={st.productCard}
-                    onPress={() => navigation.navigate('ProductDetail', { product: { ...product, color: accent } })} activeOpacity={0.85}>
+                  <PressableScale key={product.id} style={st.productCard}
+                    onPress={() => navigation.navigate('ProductDetail', { product: { ...product, color: accent } })}>
                     <View style={[st.productThumb, { backgroundColor: accent + '15' }]}>
                       {product.imageUrl ? (
                         <Image source={{ uri: product.imageUrl }} style={st.productImg} />
@@ -192,7 +193,7 @@ export default function ProductCatalogueScreen({ navigation }: any) {
                         {product.price != null ? `₦${product.price.toLocaleString()}` : 'Contact for price'}
                       </Text>
                     </View>
-                  </TouchableOpacity>
+                  </PressableScale>
                 );
               })}
               {loadingMore && <ActivityIndicator color={colors.primary} style={st.moreLoader} />}

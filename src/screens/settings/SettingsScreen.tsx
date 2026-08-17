@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Alert, Platform, Linking, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -122,11 +123,10 @@ export default function SettingsScreen({ navigation }: any) {
       <Text style={styles.sectionTitle}>{title}</Text>
       <View style={styles.settingsCard}>
         {items.map((item, i) => (
-          <TouchableOpacity
+          <PressableScale
             key={i}
             style={styles.settingsRow}
             onPress={item.action}
-            activeOpacity={0.7}
           >
             <Text style={styles.settingsIcon}>{item.icon}</Text>
             <View style={styles.settingsInfo}>
@@ -135,7 +135,7 @@ export default function SettingsScreen({ navigation }: any) {
             </View>
             <Text style={styles.settingsArrow}>→</Text>
             {i < items.length - 1 && <View style={styles.settingsDivider} />}
-          </TouchableOpacity>
+          </PressableScale>
         ))}
       </View>
     </View>
@@ -147,9 +147,9 @@ export default function SettingsScreen({ navigation }: any) {
 
       {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={{ width: 36 }} />
       </Animated.View>
@@ -181,23 +181,23 @@ export default function SettingsScreen({ navigation }: any) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Danger Zone</Text>
             <View style={styles.settingsCard}>
-              <TouchableOpacity style={styles.settingsRow} onPress={handleLogout} activeOpacity={0.7}>
+              <PressableScale style={styles.settingsRow} onPress={handleLogout}>
                 <Text style={styles.settingsIcon}>🚪</Text>
                 <View style={styles.settingsInfo}>
                   <Text style={[styles.settingsLabel, { color: colors.error }]}>Sign Out</Text>
                   <Text style={styles.settingsDesc}>Log out of your account</Text>
                 </View>
                 <Text style={[styles.settingsArrow, { color: colors.error }]}>→</Text>
-              </TouchableOpacity>
+              </PressableScale>
               <View style={styles.settingsDivider} />
-              <TouchableOpacity style={styles.settingsRow} onPress={handleDeleteAccount} activeOpacity={0.7}>
+              <PressableScale style={styles.settingsRow} onPress={handleDeleteAccount}>
                 <Text style={styles.settingsIcon}>⚠️</Text>
                 <View style={styles.settingsInfo}>
                   <Text style={[styles.settingsLabel, { color: colors.error }]}>Delete Account</Text>
                   <Text style={styles.settingsDesc}>Permanently delete your account</Text>
                 </View>
                 <Text style={[styles.settingsArrow, { color: colors.error }]}>→</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
           </View>
 

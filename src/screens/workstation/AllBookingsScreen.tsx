@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, FlatList,
   StatusBar, Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { respondToBookingRequest } from '../../lib/db';
@@ -135,23 +136,22 @@ export default function AllBookingsScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={st.headerTitle}>All Bookings</Text>
         <View style={{ width: 36 }} />
       </View>
 
       <View style={st.filterRow}>
         {FILTERS.map(f => (
-          <TouchableOpacity
+          <PressableScale
             key={f.key}
             style={[st.filterChip, filter === f.key && st.filterChipActive]}
             onPress={() => setFilter(f.key)}
-            activeOpacity={0.85}
           >
             <Text style={[st.filterText, filter === f.key && st.filterTextActive]}>{f.label}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         ))}
       </View>
 

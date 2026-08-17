@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import type { ProductOrderRow } from '../../lib/workstation';
 import { statusStyle } from './BookingCard';
 
@@ -41,24 +42,24 @@ export default function OrderCard({ order, busy, onAdvance, onMessage }: Props) 
 
       <View style={st.actions}>
         {onMessage && (
-          <TouchableOpacity style={[st.actionBtn, st.ghostBtn]} onPress={() => onMessage(order)} activeOpacity={0.85}>
+          <PressableScale style={[st.actionBtn, st.ghostBtn]} onPress={() => onMessage(order)}>
             <Text style={[st.actionText, { color: colors.textPrimary }]}>💬 Message</Text>
-          </TouchableOpacity>
+          </PressableScale>
         )}
         {onAdvance && order.status === 'pending' && (
           <>
-            <TouchableOpacity style={[st.actionBtn, st.declineBtn]} onPress={() => onAdvance(order, 'cancelled')} disabled={busy} activeOpacity={0.85}>
+            <PressableScale style={[st.actionBtn, st.declineBtn]} onPress={() => onAdvance(order, 'cancelled')} disabled={busy}>
               <Text style={[st.actionText, { color: '#EF4444' }]}>{busy ? '…' : 'Decline'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[st.actionBtn, { backgroundColor: colors.primary }]} onPress={() => onAdvance(order, 'accepted')} disabled={busy} activeOpacity={0.85}>
+            </PressableScale>
+            <PressableScale style={[st.actionBtn, { backgroundColor: colors.primary }]} onPress={() => onAdvance(order, 'accepted')} disabled={busy}>
               <Text style={st.actionText}>{busy ? '…' : 'Accept'}</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </>
         )}
         {onAdvance && order.status === 'accepted' && (
-          <TouchableOpacity style={[st.actionBtn, { backgroundColor: colors.primary }]} onPress={() => onAdvance(order, 'completed')} disabled={busy} activeOpacity={0.85}>
+          <PressableScale style={[st.actionBtn, { backgroundColor: colors.primary }]} onPress={() => onAdvance(order, 'completed')} disabled={busy}>
             <Text style={st.actionText}>{busy ? '…' : '✓ Mark Delivered'}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         )}
       </View>
     </View>

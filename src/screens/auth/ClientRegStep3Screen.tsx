@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TextInput,
   Animated, KeyboardAvoidingView, Platform, StatusBar,
   ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { upsertWithRetry } from '../../lib/db';
@@ -196,13 +197,12 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Back */}
-      <TouchableOpacity
+      <PressableScale
         style={styles.backButton}
         onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
       >
         <Text style={styles.backText}>←</Text>
-      </TouchableOpacity>
+      </PressableScale>
 
       {/* Progress */}
       <View style={styles.progressContainer}>
@@ -269,12 +269,12 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
                 onFocus={() => setFocused('password')}
                 onBlur={() => setFocused('')}
               />
-              <TouchableOpacity
+              <PressableScale
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
               >
                 <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
 
             {password.length > 0 && (
@@ -312,12 +312,12 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
                 onFocus={() => setFocused('confirm')}
                 onBlur={() => setFocused('')}
               />
-              <TouchableOpacity
+              <PressableScale
                 onPress={() => setShowConfirm(!showConfirm)}
                 style={styles.eyeButton}
               >
                 <Text style={styles.eyeText}>{showConfirm ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
             {confirmPassword.length > 0 && password !== confirmPassword && (
               <Text style={styles.errorHint}>Passwords do not match</Text>
@@ -328,10 +328,9 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
           </View>
 
           {/* Terms */}
-          <TouchableOpacity
+          <PressableScale
             style={styles.termsRow}
             onPress={() => setAgreedToTerms(!agreedToTerms)}
-            activeOpacity={0.7}
           >
             <View style={[
               styles.checkbox,
@@ -345,7 +344,7 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
               {' '}and{' '}
               <Text style={styles.termsLink}>Privacy Policy</Text>
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         {/* Benefits */}
@@ -370,7 +369,7 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
       {/* Bottom */}
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: buttonOpacity }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.createButton,
               { backgroundColor: isFormValid() ? colors.client : colors.bgCard },
@@ -378,14 +377,13 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
             ]}
             onPress={handleCreateAccount}
             disabled={!isFormValid() || loading}
-            activeOpacity={0.85}
           >
             {loading ? (
               <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.createText}>Create My Account</Text>
             )}
-          </TouchableOpacity>
+          </PressableScale>
 
           <Text style={styles.securityNote}>
             🔒 Your password is encrypted and never stored in plain text

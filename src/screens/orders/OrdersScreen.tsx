@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, FlatList,
   Animated, StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -182,22 +183,20 @@ export default function OrdersScreen({ navigation }: any) {
         </View>
 
         {(item.status === 'accepted' || item.status === 'in_progress') && role === 'client' && (
-          <TouchableOpacity
+          <PressableScale
             style={[styles.trackBtn, { backgroundColor: accentColor }]}
             onPress={() => navigation.navigate('Tracking', { bookingId: item.id, workerId: item.otherPartyId, workerName: item.otherPartyName, service: item.service })}
-            activeOpacity={0.85}
           >
             <Text style={styles.trackBtnText}>📍 Track Worker</Text>
-          </TouchableOpacity>
+          </PressableScale>
         )}
         {item.status === 'completed' && role === 'client' && (
-          <TouchableOpacity
+          <PressableScale
             style={styles.reviewBtn}
             onPress={() => navigation.navigate('LeaveReview', { workerId: item.otherPartyId, workerName: item.otherPartyName })}
-            activeOpacity={0.85}
           >
             <Text style={styles.reviewBtnText}>⭐ Leave Review</Text>
-          </TouchableOpacity>
+          </PressableScale>
         )}
       </View>
     );
@@ -208,20 +207,19 @@ export default function OrdersScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
           <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={styles.headerTitle}>Orders & Bookings</Text>
         <View style={{ width: 36 }} />
       </Animated.View>
 
       <Animated.View style={[styles.tabRow, { opacity: headerOpacity }]}>
         {tabs.map(tab => (
-          <TouchableOpacity
+          <PressableScale
             key={tab.key}
             style={[styles.tab, activeTab === tab.key && { backgroundColor: accentColor + '15', borderColor: accentColor + '40' }]}
             onPress={() => setActiveTab(tab.key)}
-            activeOpacity={0.85}
           >
             <Text style={[styles.tabText, activeTab === tab.key && { color: accentColor, fontWeight: '700' }]}>
               {tab.label}
@@ -229,7 +227,7 @@ export default function OrdersScreen({ navigation }: any) {
             <View style={[styles.tabCount, activeTab === tab.key && { backgroundColor: accentColor }]}>
               <Text style={styles.tabCountText}>{tab.count}</Text>
             </View>
-          </TouchableOpacity>
+          </PressableScale>
         ))}
       </Animated.View>
 

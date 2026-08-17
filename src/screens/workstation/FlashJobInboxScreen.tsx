@@ -1,11 +1,12 @@
 import React, { useCallback, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { respondToBookingRequest } from '../../lib/db';
@@ -167,22 +168,20 @@ export default function FlashJobInboxScreen() {
                 )}
 
                 <View style={st.actions}>
-                  <TouchableOpacity
+                  <PressableScale
                     style={st.declineBtn}
                     onPress={() => handleRespond(req.id, req.clientId, 'declined')}
                     disabled={actioningId === req.id}
-                    activeOpacity={0.85}
                   >
                     <Text style={st.declineText}>{actioningId === req.id ? '…' : 'Decline'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
+                  </PressableScale>
+                  <PressableScale
                     style={st.acceptBtn}
                     onPress={() => handleRespond(req.id, req.clientId, 'accepted')}
                     disabled={actioningId === req.id}
-                    activeOpacity={0.85}
                   >
                     <Text style={st.acceptText}>{actioningId === req.id ? '…' : '⚡ Accept Now'}</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 </View>
               </View>
             ))

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -99,9 +100,9 @@ export default function BankDetailsScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
           <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        </PressableScale>
         <Text style={st.headerTitle}>Bank Details</Text>
         <View style={{ width: 36 }} />
       </View>
@@ -168,11 +169,11 @@ export default function BankDetailsScreen({ navigation }: any) {
       </ScrollView>
 
       <View style={[st.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity
+        <PressableScale
           style={[st.saveBtn, { backgroundColor: accentColor }, (!isValid || saving) && { opacity: 0.6 }]}
-          onPress={handleSave} disabled={!isValid || saving} activeOpacity={0.85}>
+          onPress={handleSave} disabled={!isValid || saving}>
           <Text style={st.saveBtnText}>{saving ? 'Saving...' : hasExisting ? '✓ Update Bank Details' : '✓ Save Bank Details'}</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </KeyboardAvoidingView>
   );
