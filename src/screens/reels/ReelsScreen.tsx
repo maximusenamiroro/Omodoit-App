@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, FlatList,
+  View, Text, Pressable, StyleSheet, FlatList,
   Dimensions, StatusBar, Animated, Image, ActivityIndicator,
   TextInput, Modal, Share, KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
@@ -548,7 +548,12 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
 
   return (
     <View style={[styles.reelContainer, { height: SCREEN_H }]}>
-      <PressableScale onPress={() => setPaused(!paused)} style={styles.videoContainer}>
+      {/* A plain Pressable, deliberately not PressableScale. Tapping
+          here toggles pause, and the video should not shrink when you
+          do that. Beyond the design point, an animated transform on an
+          ancestor of a video surface is a reliable way to break
+          rendering on Android. */}
+      <Pressable onPress={() => setPaused(!paused)} style={styles.videoContainer}>
         {!videoError ? (
          <Video
             source={{ uri: reel.video_url, type: 'mp4' }}
@@ -607,7 +612,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
           </View>
         )}
         {paused && (<View style={styles.pauseOverlay}><View style={styles.pauseIcon}><Text style={styles.pauseText}>▶</Text></View></View>)}
-      </PressableScale>
+      </Pressable>
 
       {/* Deliberately a sibling of the video container rather than a
           child of it. Anything inside that container competes with the
