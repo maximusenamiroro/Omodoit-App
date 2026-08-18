@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  Animated, StatusBar, Platform, ActivityIndicator, Image,
+  Animated, StatusBar, Platform, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { EASING, colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import { supabase } from '../../api/supabase';
 import { CATEGORIES } from '../../lib/categories';
 
@@ -161,7 +162,7 @@ export default function NewArrivalsScreen({ navigation }: any) {
 
       {loading ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator color={colors.primary} />
+          <CardRowSkeleton actions={false} count={5} />
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}>

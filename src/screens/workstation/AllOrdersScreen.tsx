@@ -6,6 +6,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
+import StaggerIn from '../../components/common/StaggerIn';
 import { useAuth } from '../../context/AuthContext';
 import OrderCard from '../../components/common/OrderCard';
 import { fetchWorkerOrders, setOrderStatus, type ProductOrderRow } from '../../lib/workstation';
@@ -91,7 +93,7 @@ export default function AllOrdersScreen({ navigation }: any) {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 30 }} />
+        <CardRowSkeleton />
       ) : (
         <FlatList
           data={orders}
@@ -107,18 +109,20 @@ export default function AllOrdersScreen({ navigation }: any) {
             </View>
           }
           ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} /> : null}
-          renderItem={({ item }) => (
-            <OrderCard
-              order={item}
-              busy={actioningId === item.id}
-              onAdvance={advance}
-              onMessage={o => navigation.navigate('Chat', {
-                otherUserId: o.buyerId, otherUserName: o.buyerName, otherUserAvatar: null,
-              })}
-            />
+          renderItem={({ item, index }) => (
+            <StaggerIn index={index}>
+              <OrderCard
+                order={item}
+                busy={actioningId === item.id}
+                onAdvance={advance}
+                onMessage={o => navigation.navigate('Chat', {
+                  otherUserId: o.buyerId, otherUserName: o.buyerName, otherUserAvatar: null,
+                })}
+              />
+            </StaggerIn>
           )}
-        />
-      )}
+      />
+    )}
     </View>
   );
 }

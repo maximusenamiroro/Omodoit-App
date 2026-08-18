@@ -6,6 +6,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
+import StaggerIn from '../../components/common/StaggerIn';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { respondToBookingRequest } from '../../lib/db';
@@ -156,7 +158,7 @@ export default function AllBookingsScreen({ navigation }: any) {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 30 }} />
+        <CardRowSkeleton />
       ) : (
         <FlatList
           data={bookings}
@@ -172,19 +174,21 @@ export default function AllBookingsScreen({ navigation }: any) {
             </View>
           }
           ListFooterComponent={loadingMore ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 16 }} /> : null}
-          renderItem={({ item }) => (
-            <BookingCard
-              booking={item}
-              busy={actioningId === item.id}
-              onRespond={respond}
-              onComplete={complete}
-              onMessage={b => navigation.navigate('Chat', {
-                otherUserId: b.clientId, otherUserName: b.clientName, otherUserAvatar: null,
-              })}
-            />
+          renderItem={({ item, index }) => (
+            <StaggerIn index={index}>
+              <BookingCard
+                booking={item}
+                busy={actioningId === item.id}
+                onRespond={respond}
+                onComplete={complete}
+                onMessage={b => navigation.navigate('Chat', {
+                  otherUserId: b.clientId, otherUserName: b.clientName, otherUserAvatar: null,
+                })}
+              />
+            </StaggerIn>
           )}
-        />
-      )}
+      />
+    )}
     </View>
   );
 }
