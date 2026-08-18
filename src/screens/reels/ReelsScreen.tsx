@@ -413,9 +413,9 @@ const ps = StyleSheet.create({
   productArrow: { fontSize: 14, color: colors.textMuted },
 });
 
-interface ReelCardProps { reel: Reel; isClient: boolean; isActive: boolean; userId: string | undefined; navigation: any; }
+interface ReelCardProps { reel: Reel; isClient: boolean; isActive: boolean; userId: string | undefined; navigation: any; cardHeight: number; }
 
-function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProps) {
+function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight }: ReelCardProps) {
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(reel.likes);
   const [saved, setSaved] = useState(false);
@@ -547,7 +547,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
   const isVerified = (reel.profiles?.verification_level ?? 0) >= 1;
 
   return (
-    <View style={[styles.reelContainer, { height: SCREEN_H }]}>
+    <View style={[styles.reelContainer, { height: cardHeight }]}>
       {/* A plain Pressable, deliberately not PressableScale. Tapping
           here toggles pause, and the video should not shrink when you
           do that. Beyond the design point, an animated transform on an
@@ -733,6 +733,7 @@ export default function ReelsScreen({ navigation, route }: any) {
   const isFocused = useIsFocused();
   const [activeTab, setActiveTab] = useState<'foryou' | 'following'>('foryou');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [listHeight, setListHeight] = useState(SCREEN_H);
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -796,12 +797,12 @@ export default function ReelsScreen({ navigation, route }: any) {
     // preserves scroll-snap positions.
     const withinWindow = Math.abs(index - activeIndex) <= 1;
     if (!withinWindow) {
-      return <View style={{ height: SCREEN_H, backgroundColor: '#000' }} />;
+      return <View style={{ height: listHeight, backgroundColor: '#000' }} />;
     }
     return (
-      <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} navigation={navigation} />
+      <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} navigation={navigation} cardHeight={listHeight} />
     );
-  }, [isClient, activeIndex, user, isFocused, navigation]);
+  }, [isClient, activeIndex, user, isFocused, navigation, listHeight]);
 
   if (loading) return (
     <View style={styles.container}>
@@ -905,15 +906,16 @@ export default function ReelsScreen({ navigation, route }: any) {
       <FlatList
         ref={listRef}
         data={reels}
+        onLayout={e => setListHeight(e.nativeEvent.layout.height)}
         renderItem={renderReel}
         keyExtractor={item => item.id}
-        pagingEnabled
         showsVerticalScrollIndicator={false}
-        snapToInterval={SCREEN_H}
+        snapToInterval={listHeight}
+        disableIntervalMomentum
         decelerationRate="fast"
         onViewableItemsChanged={onViewRef.current}
         viewabilityConfig={viewConfigRef.current}
-        getItemLayout={(_, index) => ({ length: SCREEN_H, offset: SCREEN_H * index, index })}
+        getItemLayout={(_, index) => ({ length: listHeight, offset: listHeight * index, index })}
         windowSize={3}
         maxToRenderPerBatch={2}
         initialNumToRender={2}
