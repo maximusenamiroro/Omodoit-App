@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
 import { colors, EASING } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import PauseIndicator from '../../components/common/PauseIndicator';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { useIsFocused } from '@react-navigation/native';
@@ -548,12 +549,10 @@ function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight }: 
 
   return (
     <View style={[styles.reelContainer, { height: cardHeight }]}>
-      {/* A plain Pressable, deliberately not PressableScale. Tapping
-          here toggles pause, and the video should not shrink when you
-          do that. Beyond the design point, an animated transform on an
-          ancestor of a video surface is a reliable way to break
-          rendering on Android. */}
-      <Pressable onPress={() => setPaused(!paused)} style={styles.videoContainer}>
+      {/* Just a container. The tap target is a sibling below, not a
+          wrapper, because a Pressable wrapping the player did not
+          receive taps on Android at all. */}
+      <View style={styles.videoContainer}>
         {!videoError ? (
          <Video
             source={{ uri: reel.video_url, type: 'mp4' }}
@@ -611,8 +610,22 @@ function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight }: 
             </PressableScale>
           </View>
         )}
-        {paused && (<View style={styles.pauseOverlay}><View style={styles.pauseIcon}><Text style={styles.pauseText}>▶</Text></View></View>)}
-      </Pressable>
+      </View>
+
+      {/* Full-area tap target, drawn after the player so it actually
+          receives the touch. It sits before the action rail and the
+          caption, so those still get their own taps. */}
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={() => setPaused(p => !p)}
+        accessibilityRole="button"
+        accessibilityLabel={paused ? 'Play video' : 'Pause video'}
+      />
+
+      {/* The pause indicator used to live inside the video container,
+          where the player's surface covered it, so pausing gave no
+          feedback at all. Out here it is visible. */}
+      <PauseIndicator visible={paused} />
 
       {/* Deliberately a sibling of the video container rather than a
           child of it. Anything inside that container competes with the
