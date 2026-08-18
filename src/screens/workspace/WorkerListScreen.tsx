@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EASING, colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import { supabase } from '../../api/supabase';
 
 const getInitials = (name: string): string => {
@@ -159,7 +160,7 @@ export default function WorkerListScreen({ navigation, route }: any) {
 
       {loading ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator color={accentColor} />
+          <CardRowSkeleton actions={false} count={5} />
         </View>
       ) : (
         <>

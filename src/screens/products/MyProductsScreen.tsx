@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -164,7 +165,7 @@ export default function MyProductsScreen({ navigation, route }: any) {
       </View>
 
       {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 30 }} />
+        <CardRowSkeleton actions={false} />
       ) : (
         <FlatList
           data={items}

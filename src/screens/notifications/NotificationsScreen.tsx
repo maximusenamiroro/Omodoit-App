@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
-  Animated, StatusBar, Platform, ActivityIndicator, Image,
+  Animated, StatusBar, Platform, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { EASING, colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { parseFlashJob, formatNaira } from '../../lib/flashJob';
@@ -318,7 +319,7 @@ export default function NotificationsScreen({ navigation }: any) {
 
       {loading ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator color={accentColor} />
+          <CardRowSkeleton actions={false} count={5} />
         </View>
       ) : (
         <Animated.View style={{ flex: 1, opacity: listOpacity }}>
