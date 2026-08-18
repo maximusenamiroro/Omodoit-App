@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EASING, colors } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import Icon from '../../components/common/Icon';
 import { useAgoraCall, logCallOutcome } from '../../lib/calling';
 import { useAuth } from '../../context/AuthContext';
 
@@ -142,14 +143,14 @@ export default function InCallScreen({ navigation, route }: any) {
         <View style={s.actionsRow}>
           <PressableScale style={s.actionBtn} onPress={toggleMute}>
             <View style={[s.actionCircle, muted && s.actionCircleActive]}>
-              <Text style={s.actionEmoji}>{muted ? '🔇' : '🎤'}</Text>
+              <Icon name={muted ? 'micOff' : 'mic'} size={26} color={muted ? colors.black : colors.white} />
             </View>
             <Text style={[s.actionLabel, muted && s.actionLabelActive]}>{muted ? 'Unmute' : 'Mute'}</Text>
           </PressableScale>
 
           <PressableScale style={s.actionBtn} onPress={toggleSpeaker}>
             <View style={[s.actionCircle, speaker && s.actionCircleActive]}>
-              <Text style={s.actionEmoji}>{speaker ? '🔊' : '🔈'}</Text>
+              <Icon name={speaker ? 'speaker' : 'speakerOff'} size={26} color={speaker ? colors.black : colors.white} />
             </View>
             <Text style={[s.actionLabel, speaker && s.actionLabelActive]}>Speaker</Text>
           </PressableScale>
@@ -158,13 +159,17 @@ export default function InCallScreen({ navigation, route }: any) {
             style={s.actionBtn}
             onPress={() => { if (otherUserId) navigation.navigate('Chat', { otherUserId, otherUserName: workerName, otherUserAvatar: null }); }}
           >
-            <View style={s.actionCircle}><Text style={s.actionEmoji}>💬</Text></View>
+            <View style={s.actionCircle}><Icon name="inbox" size={26} color={colors.white} /></View>
             <Text style={s.actionLabel}>Message</Text>
           </PressableScale>
         </View>
 
         <PressableScale style={s.endBtn} onPress={handleEndCall}>
-          <View style={s.endInner}><Text style={s.endIcon}>📞</Text></View>
+          <View style={s.endInner}>
+            <View style={s.endIconRotate}>
+              <Icon name="callEnd" size={30} color={colors.white} filled />
+            </View>
+          </View>
           <Text style={s.endLabel}>End Call</Text>
         </PressableScale>
       </View>
@@ -197,6 +202,7 @@ const s = StyleSheet.create({
   actionLabel: { fontSize: 11, color: colors.white, opacity: 0.5 },
   actionLabelActive: { color: colors.primary, opacity: 1 },
   endBtn: { alignItems: 'center' },
+  endIconRotate: { transform: [{ rotate: '135deg' }] },
   endInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '135deg' }], shadowColor: '#EF4444', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 },
   endIcon: { fontSize: 28 },
   endLabel: { fontSize: 12, color: colors.white, opacity: 0.6, marginTop: 10 },
