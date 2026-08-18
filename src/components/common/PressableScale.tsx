@@ -3,6 +3,17 @@ import {
   Animated, Pressable, StyleProp, ViewStyle,
   type PressableProps, type GestureResponderEvent,
 } from 'react-native';
+
+// One view carries both the caller's style and the press animation.
+//
+// The first version wrapped children in a separate Animated.View and put
+// the style on that, leaving the Pressable itself unstyled. Layout props
+// then applied to the wrong node: a `flex: 1` container ended up inside
+// a parent with no height and collapsed to zero size. That is invisible
+// for a button, which sizes to its label, and fatal for anything that
+// fills space. The reels player kept decoding and playing audio into a
+// zero-size surface, which looks exactly like a video that will not display.
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 import { DURATION, EASING, PRESS_SCALE, useReducedMotion } from '../../theme/motion';
 
 // A pressable that physically depresses.
@@ -91,10 +102,14 @@ export default function PressableScale({
   });
 
   return (
-    <Pressable onPressIn={handleIn} onPressOut={handleOut} disabled={disabled} {...rest}>
-      <Animated.View style={[style, { opacity, transform: [{ scale }] }]}>
-        {children}
-      </Animated.View>
-    </Pressable>
+    <AnimatedPressable
+      style={[style, { opacity, transform: [{ scale }] }]}
+      onPressIn={handleIn}
+      onPressOut={handleOut}
+      disabled={disabled}
+      {...rest}
+    >
+      {children}
+    </AnimatedPressable>
   );
 }
