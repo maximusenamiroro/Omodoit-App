@@ -423,8 +423,9 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
   const [showProductSheet, setShowProductSheet] = useState(false);
   const isOwnReel = userId === reel.profiles?.id;
   const [paused, setPaused] = useState(false);
-  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [buffering, setBuffering] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
 
@@ -452,6 +453,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
   useEffect(() => {
     if (isActive) {
       setPaused(false);
+      setVideoLoaded(false);
       Animated.parallel([
         Animated.timing(contentOpacity, { toValue: 1, duration: 400, delay: 200, useNativeDriver: true }),
         Animated.spring(actionsSlide, { toValue: 0, damping: 14, stiffness: 80, delay: 300, useNativeDriver: true }),
@@ -555,13 +557,37 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
             repeat
             paused={paused || !isActive}
             muted={false}
+            // The player draws the poster itself, underneath its own
+            // surface, so it shows no matter how the video view is
+            // composited. The React <Image> that used to do this job sat
+            // inside the video container and was painted over, which is
+            // why a buffering reel was a black rectangle with nothing on
+            // it. On a slow connection that is the normal case, not the
+            // edge case.
+            poster={reel.thumbnail_url ? { source: { uri: reel.thumbnail_url }, resizeMode: 'cover' } : undefined}
+            // Fires on the first renderable frame, which is the honest
+            // moment to stop showing loading state. onLoad fires earlier,
+            // when metadata arrives but there is still nothing to look at.
+            // The ONLY signal that there is a frame on screen. onLoad
+            // fires when metadata arrives, which on a slow link is many
+            // seconds before the first frame, and onBuffer(false) only
+            // means the buffer is no longer starved. Using either to
+            // clear the loading state is what left users staring at
+            // black with no indication anything was happening.
+            onReadyForDisplay={() => setVideoLoaded(true)}
             onLoad={() => setVideoLoaded(true)}
-            onError={(e) => { console.log('Video error:', JSON.stringify(e)); setVideoError(true); }}
-            onBuffer={({ isBuffering }: { isBuffering: boolean }) => {
-              if (!isBuffering && !videoLoaded) setVideoLoaded(true);
-            }}
+            onError={() => setVideoError(true)}
+            onBuffer={({ isBuffering }: { isBuffering: boolean }) => setBuffering(isBuffering)}
+            // TextureView participates in the normal view hierarchy, so
+            // anything drawn after it actually appears on top. SurfaceView
+            // composites in its own layer and swallows the overlays.
             useTextureView={Platform.OS === 'android'}
             bufferConfig={{
+              // Back to the values this shipped with. A lower
+              // bufferForPlaybackMs starts sooner in theory, and an
+              // on-disk cache saves data in theory, but both were added
+              // speculatively and playback stopped working, so they are
+              // out until they can be tested one at a time.
               minBufferMs: 5000,
               maxBufferMs: 30000,
               bufferForPlaybackMs: 2500,
@@ -580,20 +606,24 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
             </PressableScale>
           </View>
         )}
-        {/* Poster frame, sitting under the spinner until the first
-            video frame is ready. Without it this area is pure black
-            for as long as buffering takes, which is what makes the
-            feed feel slow even when it isn't. */}
-        {!videoLoaded && !videoError && !!reel.thumbnail_url && (
-          <Image
-            source={{ uri: reel.thumbnail_url }}
-            style={styles.video}
-            resizeMode="cover"
-          />
-        )}
-        {!videoLoaded && !videoError && (<View style={styles.loadingOverlay}><ActivityIndicator size="large" color={colors.white} /></View>)}
         {paused && (<View style={styles.pauseOverlay}><View style={styles.pauseIcon}><Text style={styles.pauseText}>▶</Text></View></View>)}
       </PressableScale>
+
+      {/* Deliberately a sibling of the video container rather than a
+          child of it. Anything inside that container competes with the
+          player's own surface for the same pixels and loses, which is
+          how a buffering reel ended up showing nothing at all. Out here
+          it is just another view drawn after, so it always appears.
+
+          Shown while the first frame is still coming and again on every
+          rebuffer, because on a slow connection a reel stalls mid-play
+          and silence looks identical to a frozen app. */}
+      {!videoError && buffering && (
+        <View style={styles.bufferingBadge} pointerEvents="none">
+          <ActivityIndicator size="small" color={colors.white} />
+          <Text style={styles.bufferingText}>Buffering</Text>
+        </View>
+      )}
 
       <Animated.View style={[styles.actionsColumn, { bottom: Platform.OS === 'ios' ? (isClient ? 190 : 170) : (isClient ? 150 : 130), opacity: contentOpacity, transform: [{ translateX: actionsSlide }] }]}>
         <PressableScale style={styles.actionAvatarContainer} onPress={isClient ? handleFollow : undefined}>
@@ -912,6 +942,13 @@ const styles = StyleSheet.create({
   reelContainer: { width: SCREEN_W, position: 'relative', backgroundColor: colors.black },
   videoContainer: { flex: 1 },
   video: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  bufferingBadge: {
+    position: 'absolute', top: '46%', alignSelf: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  bufferingText: { color: colors.white, fontSize: 12, fontWeight: '600' },
   loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' },
   pauseOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   pauseIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)' },
