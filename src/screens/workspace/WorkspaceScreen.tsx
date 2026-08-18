@@ -14,7 +14,13 @@ import { useLiveCategories } from '../../lib/presence';
 import { searchWorkspace, searchLiveWorkers, type SearchResults, type LiveWorkerHit } from '../../lib/search';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const CAT_CARD_W = (SCREEN_W - spacing.screenPadding * 2 - 24) / 3;
+// Floored on purpose. Three cards plus two 12pt gaps plus the screen
+// padding came to exactly the screen width, leaving zero slack, so any
+// sub-pixel rounding pushed the third card onto the next line. iOS
+// happened to round down and showed three per row; Android rounded up
+// and dropped to two, which is why the same screen looked different on
+// the two platforms. Flooring guarantees a couple of points of slack.
+const CAT_CARD_W = Math.floor((SCREEN_W - spacing.screenPadding * 2 - 24) / 3);
 const VISIBLE_CAT_ROWS = 3;
 
 const MAIN_CATEGORIES = CATEGORIES;
