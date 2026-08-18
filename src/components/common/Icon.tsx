@@ -136,15 +136,17 @@ export default function Icon({ name, size = 24, color = colors.textPrimary, fill
 
       {name === 'settings' && (
         <>
-          <Circle cx={12} cy={12} r={3.2} {...common} />
-          <Path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1" {...common} />
+          <Path d="M4 7.5h16M4 12h16M4 16.5h16" {...common} />
+          <Circle cx={9} cy={7.5} r={2.1} {...common} fill={colors.bg} />
+          <Circle cx={15} cy={12} r={2.1} {...common} fill={colors.bg} />
+          <Circle cx={8} cy={16.5} r={2.1} {...common} fill={colors.bg} />
         </>
       )}
 
       {name === 'orders' && (
         <>
-          <Rect x={5} y={4} width={14} height={17} rx={2.5} {...common} />
-          <Path d="M9 3.5h6v3H9zM9 11h6M9 15h4" {...common} />
+          <Path d="M4 8.2l8-3.7 8 3.7v7.6l-8 3.7-8-3.7z" {...common} />
+          <Path d="M4 8.2l8 3.7 8-3.7M12 11.9v7.6" {...common} />
         </>
       )}
 
