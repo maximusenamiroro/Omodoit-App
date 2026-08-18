@@ -246,20 +246,40 @@ export default function CreateReelScreen({ navigation }: any) {
       // much of the hardware decoding a real device has. If one is
       // refused the other often isn't.
       const candidates = [...new Set([uploadUri, videoUri])];
-      for (const candidate of candidates) {
-        try {
-          const thumb = await createThumbnail({
-            url: asFileUrl(candidate),
-            timeStamp: 1000,
-            format: 'jpeg',
-          });
-          if (thumb?.path) {
-            thumbnailUrl = await uploadReelThumbnail(thumb.path, user.id);
-            break;
+
+      // Several timestamps, not one. A single unseekable frame was
+      // enough to publish a reel with no poster at all, and a reel
+      // without a poster is a black rectangle for as long as the video
+      // takes to arrive. 1s first because the opening frame of a phone
+      // clip is usually black or still focusing; 0 next because a very
+      // short clip may not have a frame at 1s; then later frames for
+      // clips that open on a fade.
+      const stamps = [1000, 0, 2000, 500];
+
+      outer: for (const candidate of candidates) {
+        for (const timeStamp of stamps) {
+          try {
+            const thumb = await createThumbnail({
+              url: asFileUrl(candidate),
+              timeStamp,
+              format: 'jpeg',
+            });
+            if (thumb?.path) {
+              thumbnailUrl = await uploadReelThumbnail(thumb.path, user.id);
+              break outer;
+            }
+          } catch (thumbErr) {
+            console.warn(`Thumbnail failed at ${timeStamp}ms for`, candidate, thumbErr);
           }
-        } catch (thumbErr) {
-          console.warn('Thumbnail generation failed (non-fatal) for', candidate, thumbErr);
         }
+      }
+
+      // Deliberately still publishes if every attempt failed. Losing a
+      // worker's reel over a missing still frame would be a far worse
+      // trade than a poster-less reel, and the backfill script can pick
+      // up whatever slips through.
+      if (!thumbnailUrl) {
+        console.warn('Publishing reel without a poster; every thumbnail attempt failed');
       }
 
       // ── 3. Upload ────────────────────────────────────────────
