@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
-  Animated, StatusBar, Platform, ActivityIndicator,
+  Animated, StatusBar, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { EASING, colors, spacing } from '../../theme';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -232,9 +233,7 @@ export default function OrdersScreen({ navigation }: any) {
       </Animated.View>
 
       {loading ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator color={accentColor} />
-        </View>
+        <CardRowSkeleton count={4} />
       ) : (
         <Animated.View style={{ flex: 1, opacity: listOpacity }}>
           {filteredOrders.length === 0 ? (

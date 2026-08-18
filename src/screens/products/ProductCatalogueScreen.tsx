@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { EASING, colors, spacing } from '../../theme';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 
@@ -148,9 +149,7 @@ export default function ProductCatalogueScreen({ navigation }: any) {
       </ScrollView>
 
       {loading ? (
-        <View style={st.loadingBox}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <CardRowSkeleton count={4} actions={false} />
       ) : (
         <ScrollView
           showsVerticalScrollIndicator={false}

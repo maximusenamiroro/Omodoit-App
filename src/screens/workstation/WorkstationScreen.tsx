@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  Animated, StatusBar, Platform, ActivityIndicator, Alert,
+  Animated, StatusBar, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { EASING, colors, spacing } from '../../theme';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -277,7 +278,7 @@ export default function WorkstationScreen({ navigation }: any) {
           </View>
 
           {loading ? (
-            <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
+            <CardRowSkeleton count={2} />
           ) : previewBookings.length === 0 ? (
             <View style={st.emptyCard}>
               <Text style={st.emptyEmoji}>📋</Text>
@@ -328,7 +329,7 @@ export default function WorkstationScreen({ navigation }: any) {
           </View>
 
           {ordersLoading ? (
-            <ActivityIndicator color={colors.primary} style={{ marginVertical: 20 }} />
+            <CardRowSkeleton count={2} />
           ) : previewOrders.length === 0 ? (
             <View style={st.emptyCard}>
               <Text style={st.emptyEmoji}>🛒</Text>
