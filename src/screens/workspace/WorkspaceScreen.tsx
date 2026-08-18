@@ -7,6 +7,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EASING, colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import SkeletonCircle from '../../components/common/SkeletonCircle';
 import { supabase } from '../../api/supabase';
 import { CATEGORIES } from '../../lib/categories';
 import { useLiveCategories } from '../../lib/presence';
@@ -106,39 +107,46 @@ export default function WorkspaceScreen({ navigation }: any) {
     ]).start();
   }, [arrivalsOpacity, generalOpacity, headerOpacity, liveOpacity, liveSlide, searchSlide]);
 
-  // "New Arrivals" — reels posted by workers in the last 48 hours,
-  // matching the "48h only" badge. Real data only; a section this
-  // visible showing named people who don't exist is exactly the kind
-  // of fake social proof that damages trust once anyone notices.
+  // "New Arrivals" — services and products posted in the last 48 hours,
+  // matching the badge and, more importantly, matching what See All
+  // opens. This used to read from reels while the New Arrivals screen
+  // read from products, so the row and the page it led to showed
+  // different things.
   useEffect(() => {
     const fetchArrivals = async () => {
       setArrivalsLoading(true);
       try {
         const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
         const { data, error } = await supabase
-          .from('reels')
-          .select('id, description, type, created_at, profiles(full_name, category)')
+          .from('products')
+          .select('id, worker_id, type, title, image_url, video_url, category, created_at')
           .gte('created_at', cutoff)
           .order('created_at', { ascending: false })
           .limit(10);
 
         if (error) throw error;
 
-        const mapped = (data || []).map((reel: any) => {
-          const posterCategory = reel.profiles?.category || reel.type || 'General';
-          const catMeta = MAIN_CATEGORIES.find(c =>
-            c.name.toLowerCase().includes((posterCategory || '').toLowerCase().split(' ')[0])
-          );
-          return {
-            id: reel.id,
-            category: posterCategory,
-            emoji: catMeta?.emoji || '✨',
-            posterName: reel.profiles?.full_name || 'A worker',
-            color: catMeta?.color || colors.primary,
-          };
-        });
+        const workerIds = [...new Set((data || []).map((p: any) => p.worker_id).filter(Boolean))];
+        const nameMap: Record<string, string> = {};
+        if (workerIds.length > 0) {
+          const { data: profileRows } = await supabase
+            .from('profiles').select('id, full_name, business_name').in('id', workerIds);
+          (profileRows || []).forEach((pr: any) => {
+            nameMap[pr.id] = pr.business_name || pr.full_name || 'A worker';
+          });
+        }
 
-        setNewArrivals(mapped);
+        setNewArrivals((data || []).map((row: any) => {
+          const catMeta = MAIN_CATEGORIES.find(c => c.name === row.category);
+          return {
+            id: row.id,
+            title: row.title || 'Untitled',
+            imageUrl: row.image_url || null,
+            emoji: catMeta?.emoji || (row.type === 'service' ? '🛠️' : '📦'),
+            color: catMeta?.color || colors.primary,
+            posterName: nameMap[row.worker_id] || 'A worker',
+          };
+        }));
       } catch (err) {
         console.error('Failed to load new arrivals:', err);
         setNewArrivals([]);
@@ -383,12 +391,11 @@ export default function WorkspaceScreen({ navigation }: any) {
             </View>
 
             {arrivalsLoading ? (
-              <View style={[styles.arrivalsScroll, { flexDirection: 'row' }]}>
-                {[1, 2, 3].map(i => (
+              <View style={[styles.arrivalsScroll, styles.skeletonRow]}>
+                {[0, 1, 2].map(i => (
                   <View key={i} style={styles.arrivalItem}>
-                    <View style={[styles.storyRing, { borderColor: colors.border, opacity: 0.4 }]}>
-                      <View style={[styles.storyInner, { backgroundColor: colors.bgCard }]} />
-                    </View>
+                    <SkeletonCircle delayMs={i * 120} />
+                    <View style={styles.skeletonLine} />
                   </View>
                 ))}
               </View>
@@ -398,13 +405,16 @@ export default function WorkspaceScreen({ navigation }: any) {
                   <PressableScale key={item.id} style={styles.arrivalItem}>
                     <View style={styles.storyRing}>
                       <View style={styles.storyInner}>
-                        <View style={[styles.storyAvatar, { backgroundColor: item.color + '20' }]}>
-                          <Text style={styles.storyEmoji}>{item.emoji}</Text>
-                        </View>
+                        {item.imageUrl ? (
+                          <Image source={{ uri: item.imageUrl }} style={styles.storyAvatar} />
+                        ) : (
+                          <View style={[styles.storyAvatar, { backgroundColor: item.color + '20' }]}>
+                            <Text style={styles.storyEmoji}>{item.emoji}</Text>
+                          </View>
+                        )}
                       </View>
-                      <View style={styles.storyBadge}><Text style={styles.storyBadgeText}>{item.emoji}</Text></View>
                     </View>
-                    <Text style={styles.arrivalCategory} numberOfLines={1}>{item.category}</Text>
+                    <Text style={styles.arrivalCategory} numberOfLines={1}>{item.title}</Text>
                     <Text style={styles.arrivalPoster} numberOfLines={1}>@{item.posterName.split(' ')[0]}</Text>
                   </PressableScale>
                 ))}
@@ -513,6 +523,8 @@ const styles = StyleSheet.create({
 
   arrivalsScroll: { paddingHorizontal: spacing.screenPadding, gap: 16, marginBottom: 24 },
   arrivalItem: { alignItems: 'center', width: 72 },
+  skeletonRow: { flexDirection: 'row' },
+  skeletonLine: { width: 44, height: 8, borderRadius: 4, backgroundColor: colors.bgCard, marginTop: 8 },
   storyRing: { width: 64, height: 64, borderRadius: 32, padding: 2.5, borderWidth: 2, borderColor: colors.primary, marginBottom: 6 },
   storyInner: { width: '100%', height: '100%', borderRadius: 30, overflow: 'hidden', borderWidth: 2, borderColor: colors.bg },
   storyAvatar: { width: '100%', height: '100%', borderRadius: 28, alignItems: 'center', justifyContent: 'center' },

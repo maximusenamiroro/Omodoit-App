@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { ensureMediaPermission } from '../../lib/permissions';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import PressableScale from '../../components/common/PressableScale';
 import {
   View, Text, StyleSheet, ScrollView,
@@ -228,7 +229,7 @@ export default function ClientProfileScreen({ navigation }: any) {
 
         <Animated.View style={[st.tabContent, { opacity: contentOpacity }]}>
           {loading ? (
-            <ActivityIndicator color={colors.client} style={{ marginVertical: 30 }} />
+            <CardRowSkeleton count={3} actions={false} />
           ) : (
             <>
               {activeTab === 'orders' && (
