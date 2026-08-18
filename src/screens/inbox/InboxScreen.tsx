@@ -1,20 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, FlatList,
-  Image, StatusBar, Animated, Platform, TextInput,
+  StatusBar, Animated, Platform, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { EASING, colors, spacing } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import Avatar from '../../components/common/Avatar';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
-
-const getInitials = (name: string | null): string => {
-  if (!name) return '?';
-  const parts = name.trim().split(' ');
-  if (parts.length >= 2) return parts[0][0] + parts[1][0];
-  return parts[0][0];
-};
 
 const formatTime = (date: string): string => {
   const now = new Date();
@@ -227,13 +221,7 @@ export default function InboxScreen({ navigation }: any) {
       style={styles.convRow}
       onPress={() => openChat(item)}
     >
-      {item.otherUserAvatar ? (
-        <Image source={{ uri: item.otherUserAvatar }} style={styles.avatar} />
-      ) : (
-        <View style={[styles.avatarFallback, { backgroundColor: accentColor }]}>
-          <Text style={styles.avatarText}>{getInitials(item.otherUserName)}</Text>
-        </View>
-      )}
+      <Avatar uri={item.otherUserAvatar} name={item.otherUserName} size={52} />
 
       <View style={styles.convInfo}>
         <View style={styles.convTopRow}>
@@ -379,9 +367,12 @@ export default function InboxScreen({ navigation }: any) {
                   style={styles.callLogCard}
                   onPress={() => navigation.navigate('OutgoingCall', { workerName: item.otherUserName, workerCategory: '', workerId: item.otherUserId })}
                 >
-                  <View style={[styles.callLogAvatar, missedOrDeclined && !item.wasOutgoing && styles.callLogAvatarMissed]}>
-                    <Text style={styles.callLogAvatarText}>{getInitials(item.otherUserName)}</Text>
-                  </View>
+                  <Avatar
+                    name={item.otherUserName}
+                    size={48}
+                    ringColor={missedOrDeclined && !item.wasOutgoing ? '#EF4444' : undefined}
+                    style={styles.callLogAvatarSpacing}
+                  />
                   <Text style={styles.callLogName} numberOfLines={1}>{item.otherUserName}</Text>
                   <View style={styles.callLogStatusRow}>
                     <Text style={styles.callLogStatusIcon}>{statusIcon}</Text>
@@ -501,6 +492,7 @@ const styles = StyleSheet.create({
     width: 76,
     alignItems: 'center',
   },
+  callLogAvatarSpacing: { marginBottom: 8 },
   callLogAvatar: {
     width: 48,
     height: 48,

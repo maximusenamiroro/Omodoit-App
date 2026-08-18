@@ -29,6 +29,7 @@
     "react-native-nitro-modules": "^0.36.5",
     "react-native-safe-area-context": "^5.8.0",
     "react-native-screens": "^4.26.2",
+    "react-native-svg": "^15.15.5",
     "react-native-url-polyfill": "^4.0.0",
     "react-native-video": "^6.19.2",
     "react-native-video-trim": "^8.2.2",

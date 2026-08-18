@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
+import Avatar from '../../components/common/Avatar';
 import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -300,13 +301,7 @@ export default function ChatScreen({ navigation, route }: any) {
           <Text style={styles.backText}>←</Text>
         </PressableScale>
 
-        {otherUserAvatar ? (
-          <Image source={{ uri: otherUserAvatar }} style={styles.chatAvatar} />
-        ) : (
-          <View style={[styles.chatAvatarFallback, { backgroundColor: accentColor }]}>
-            <Text style={styles.chatAvatarText}>{getInitials(otherUserName)}</Text>
-          </View>
-        )}
+        <Avatar uri={otherUserAvatar} name={otherUserName} size={40} />
 
         <View style={styles.chatHeaderInfo}>
           <Text style={styles.chatHeaderName} numberOfLines={1}>{otherUserName}</Text>

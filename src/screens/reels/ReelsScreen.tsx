@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
 import { colors, EASING } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import Avatar from '../../components/common/Avatar';
 import PauseIndicator from '../../components/common/PauseIndicator';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -645,11 +646,13 @@ function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight }: 
 
       <Animated.View style={[styles.actionsColumn, { bottom: Platform.OS === 'ios' ? (isClient ? 190 : 170) : (isClient ? 150 : 130), opacity: contentOpacity, transform: [{ translateX: actionsSlide }] }]}>
         <PressableScale style={styles.actionAvatarContainer} onPress={isClient ? handleFollow : undefined}>
-          {reel.profiles?.avatar_url ? (
-            <Image source={{ uri: reel.profiles.avatar_url }} style={styles.actionAvatar} />
-          ) : (
-            <View style={[styles.actionAvatarFallback, { backgroundColor: colors.primary }]}><Text style={styles.actionAvatarText}>{getInitials(workerName)}</Text></View>
-          )}
+          <Avatar
+            uri={reel.profiles?.avatar_url}
+            name={workerName}
+            size={46}
+            ringColor={colors.white}
+            style={styles.actionAvatarShadow}
+          />
           {isClient && (<View style={[styles.actionAvatarPlus, following && { backgroundColor: '#22c55e' }]}><Text style={styles.plusText}>{following ? '✓' : '+'}</Text></View>)}
         </PressableScale>
 
@@ -987,6 +990,7 @@ const styles = StyleSheet.create({
   searchIcon: { fontSize: 16 },
   actionsColumn: { position: 'absolute', right: 10, alignItems: 'center', gap: 14, zIndex: 5 },
   actionAvatarContainer: { marginBottom: 4 },
+  actionAvatarShadow: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
   actionAvatar: { width: 46, height: 46, borderRadius: 23, borderWidth: 2.5, borderColor: colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
   actionAvatarFallback: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
   actionAvatarText: { fontSize: 16, fontWeight: '700', color: colors.white },
