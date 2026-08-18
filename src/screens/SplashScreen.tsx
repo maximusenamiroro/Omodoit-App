@@ -55,7 +55,7 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
       </Animated.View>
 
       <View style={st.bottomRow}>
-        <Text style={st.madeIn}>Made in Nigeria \U0001f1f3\U0001f1ec</Text>
+        <Text style={st.madeIn}>Made in Nigeria 🇳🇬</Text>
       </View>
     </View>
   );
