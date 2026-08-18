@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { ensureMediaPermission } from '../../lib/permissions';
 import PressableScale from '../../components/common/PressableScale';
+import Icon from '../../components/common/Icon';
 import {
   View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Alert, Platform, Image, Dimensions, ActivityIndicator,
@@ -201,10 +202,10 @@ export default function WorkerProfileScreen({ navigation }: any) {
         <Text style={st.headerBarTitle}>My Profile</Text>
         <View style={st.headerBarRight}>
           <PressableScale style={st.headerBarBtn} onPress={() => Alert.alert('Bank Details', 'This feature is coming soon.')}>
-            <Text style={st.headerBarIcon}>🏦</Text>
+            <Icon name="bank" size={19} color={colors.textPrimary} />
           </PressableScale>
           <PressableScale style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')}>
-            <Text style={st.headerBarIcon}>⚙️</Text>
+            <Icon name="settings" size={19} color={colors.textPrimary} />
           </PressableScale>
         </View>
       </Animated.View>
@@ -255,7 +256,8 @@ export default function WorkerProfileScreen({ navigation }: any) {
           </View>
 
           <PressableScale style={[st.editBtn, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('EditProfile')}>
-            <Text style={st.editBtnText}>✏️ Edit Profile</Text>
+            <Icon name="edit" size={17} color="#fff" />
+            <Text style={st.editBtnText}>Edit Profile</Text>
           </PressableScale>
 
           <View style={st.commBanner}>
@@ -266,16 +268,21 @@ export default function WorkerProfileScreen({ navigation }: any) {
 
         <View style={st.tabBar}>
           {[
-            { key: 'reels' as const, icon: '🎬', label: 'Reels' },
-            { key: 'products' as const, icon: '📦', label: 'Products' },
-            { key: 'reviews' as const, icon: '⭐', label: 'Reviews' },
+            { key: 'reels' as const, icon: 'reels' as const, label: 'Reels' },
+            { key: 'products' as const, icon: 'orders' as const, label: 'Products' },
+            { key: 'reviews' as const, icon: 'star' as const, label: 'Reviews' },
           ].map(tab => (
             <PressableScale
               key={tab.key}
               style={[st.tab, activeTab === tab.key && st.tabActive]}
               onPress={() => setActiveTab(tab.key)}
             >
-              <Text style={st.tabIcon}>{tab.icon}</Text>
+              <Icon
+                name={tab.icon}
+                size={18}
+                color={activeTab === tab.key ? colors.primary : colors.textMuted}
+                filled={activeTab === tab.key}
+              />
               <Text style={[st.tabText, activeTab === tab.key && st.tabTextActive]}>{tab.label}</Text>
               {activeTab === tab.key && <View style={[st.tabLine, { backgroundColor: colors.primary }]} />}
             </PressableScale>
@@ -432,7 +439,7 @@ const st = StyleSheet.create({
   statValue: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, letterSpacing: -0.5 },
   statLabel: { fontSize: 10, color: colors.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: 1 },
 
-  editBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14, marginBottom: 14 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14, marginBottom: 14 },
   editBtnText: { fontSize: 12, fontWeight: '600', color: colors.white },
 
   commBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '10', borderRadius: 14, borderWidth: 1, borderColor: colors.primary + '25', paddingHorizontal: 14, paddingVertical: 10, gap: 10 },

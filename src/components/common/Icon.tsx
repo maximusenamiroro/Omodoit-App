@@ -27,7 +27,8 @@ import { colors } from '../../theme';
 export type IconName =
   | 'reels' | 'explore' | 'inbox' | 'profile' | 'station'
   | 'mic' | 'micOff' | 'speaker' | 'speakerOff' | 'callEnd'
-  | 'bell' | 'search' | 'settings' | 'orders' | 'bank' | 'back';
+  | 'bell' | 'search' | 'settings' | 'orders' | 'bank' | 'back'
+  | 'bookings' | 'saved' | 'edit' | 'star';
 
 interface Props {
   name: IconName;
@@ -152,6 +153,34 @@ export default function Icon({ name, size = 24, color = colors.textPrimary, fill
       )}
 
       {name === 'back' && <Path d="M15 4.5L7.5 12l7.5 7.5" {...common} />}
+
+      {/* Clipboard: a booking is a job written down and agreed. */}
+      {name === 'bookings' && (
+        <>
+          <Path d="M9 4h6v2.5H9z" {...common} fill={filled ? stroke : 'none'} />
+          <Path d="M8 4H6.5A1.5 1.5 0 005 5.5v13A1.5 1.5 0 006.5 20h11a1.5 1.5 0 001.5-1.5v-13A1.5 1.5 0 0017.5 4H16" {...common} />
+          <Path d="M8.5 11.5h7M8.5 15h4.5" {...common} />
+        </>
+      )}
+
+      {/* Bookmark rather than a tag: saved means kept for later. */}
+      {name === 'saved' && (
+        <Path d="M6.5 4.5h11v15l-5.5-4-5.5 4z" {...common} fill={filled ? stroke : 'none'} />
+      )}
+
+      {/* Reviews are stars everywhere else in the app, so the tab is a
+          star rather than something cleverer. */}
+      {name === 'star' && (
+        <Path d="M12 4.5l2.35 4.76 5.25.76-3.8 3.7.9 5.23L12 16.48l-4.7 2.47.9-5.23-3.8-3.7 5.25-.76z"
+              {...common} fill={filled ? stroke : 'none'} />
+      )}
+
+      {name === 'edit' && (
+        <>
+          <Path d="M4.5 19.5h4l9.5-9.5a2.1 2.1 0 00-3-3L5.5 16.5z" {...common} />
+          <Path d="M14 6.5l3.5 3.5" {...common} />
+        </>
+      )}
     </Svg>
   );
 }

@@ -3,6 +3,7 @@ import { launchImageLibrary } from 'react-native-image-picker';
 import { ensureMediaPermission } from '../../lib/permissions';
 import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import PressableScale from '../../components/common/PressableScale';
+import Icon from '../../components/common/Icon';
 import {
   View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Alert, Platform, Image, ActivityIndicator,
@@ -157,10 +158,10 @@ export default function ClientProfileScreen({ navigation }: any) {
         <Text style={st.headerBarTitle}>My Profile</Text>
         <View style={st.headerBarRight}>
           <PressableScale style={st.headerBarBtn} onPress={() => Alert.alert('Bank Details', 'This feature is coming soon.')}>
-            <Text style={st.headerBarIcon}>🏦</Text>
+            <Icon name="bank" size={19} color={colors.textPrimary} />
           </PressableScale>
           <PressableScale style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')}>
-            <Text style={st.headerBarIcon}>⚙️</Text>
+            <Icon name="settings" size={19} color={colors.textPrimary} />
           </PressableScale>
         </View>
       </Animated.View>
@@ -205,22 +206,28 @@ export default function ClientProfileScreen({ navigation }: any) {
           </View>
 
           <PressableScale style={[st.editBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('EditProfile')}>
-            <Text style={st.editBtnText}>✏️ Edit Profile</Text>
+            <Icon name="edit" size={17} color="#fff" />
+            <Text style={st.editBtnText}>Edit Profile</Text>
           </PressableScale>
         </Animated.View>
 
         <View style={st.tabBar}>
           {[
-            { key: 'orders' as const, icon: '📦', label: 'Orders' },
-            { key: 'bookings' as const, icon: '📋', label: 'Bookings' },
-            { key: 'saved' as const, icon: '🔖', label: 'Saved' },
+            { key: 'orders' as const, icon: 'orders' as const, label: 'Orders' },
+            { key: 'bookings' as const, icon: 'bookings' as const, label: 'Bookings' },
+            { key: 'saved' as const, icon: 'saved' as const, label: 'Saved' },
           ].map(tab => (
             <PressableScale
               key={tab.key}
               style={[st.tab, activeTab === tab.key && st.tabActive]}
               onPress={() => setActiveTab(tab.key)}
             >
-              <Text style={st.tabIcon}>{tab.icon}</Text>
+              <Icon
+                name={tab.icon}
+                size={18}
+                color={activeTab === tab.key ? colors.client : colors.textMuted}
+                filled={activeTab === tab.key}
+              />
               <Text style={[st.tabText, activeTab === tab.key && st.tabTextActive]}>{tab.label}</Text>
               {activeTab === tab.key && <View style={[st.tabLine, { backgroundColor: colors.client }]} />}
             </PressableScale>
@@ -338,7 +345,7 @@ const st = StyleSheet.create({
   statValue: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, letterSpacing: -0.5 },
   statLabel: { fontSize: 10, color: colors.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: 1 },
 
-  editBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14 },
   editBtnText: { fontSize: 12, fontWeight: '600', color: colors.white },
 
   tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
