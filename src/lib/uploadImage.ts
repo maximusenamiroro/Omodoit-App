@@ -1,4 +1,5 @@
 import { supabase } from '../api/supabase';
+import { getR2UploadTarget, putToR2 } from './r2';
 
 // Shared upload helpers for Supabase Storage from React Native.
 //
@@ -88,6 +89,28 @@ export async function uploadVideoToStorage(
 
   const response = await fetch(toFileUri(localUri));
   const arrayBuffer = await response.arrayBuffer();
+
+  // Prefer R2. Reel video is the one thing in this app whose bandwidth
+  // bill grows with every view rather than every upload, and R2 charges
+  // nothing for egress where Supabase's free plan allows 5GB a month.
+  //
+  // Falls through to Supabase Storage when R2 is not configured, so this
+  // is safe to ship before the Cloudflare side exists — and once the
+  // secrets are set, uploads move over without a new app release.
+  //
+  // Deliberately only reached for video. See src/lib/r2.ts for why the
+  // images stay where they are.
+  try {
+    const target = await getR2UploadTarget(ext, arrayBuffer.byteLength);
+    if (target) {
+      const publicUrl = await putToR2(arrayBuffer, target);
+      // null means the PUT failed. Not worth losing the user's reel
+      // over: fall through and use Supabase for this one upload.
+      if (publicUrl) return publicUrl;
+    }
+  } catch (r2Err) {
+    console.warn('R2 upload path unavailable, using Supabase Storage:', r2Err);
+  }
 
   const { error: uploadError } = await supabase.storage
     .from('reels')
