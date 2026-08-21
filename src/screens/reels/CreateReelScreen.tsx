@@ -14,6 +14,7 @@ import { createThumbnail } from 'react-native-create-thumbnail';
 import VideoTrim, { showEditor } from 'react-native-video-trim';
 import Video from 'react-native-video';
 import { uploadVideoToStorage, uploadReelThumbnail, toFileUri } from '../../lib/uploadImage';
+import { deleteFromR2, isR2Url } from '../../lib/r2';
 import { ensureMediaPermission } from '../../lib/permissions';
 
 // These MUST match the reels_type_check constraint on the database,
@@ -176,9 +177,9 @@ export default function CreateReelScreen({ navigation }: any) {
       // ── 1. Compress on-device ────────────────────────────────
       // The phone's hardware encoder is free to us, and every
       // megabyte removed here is paid for again on every single view.
-      // Raw camera clips ran 8.5MB on average and up to 45MB; 'auto'
-      // targets ~720p and typically lands 3-5x smaller with no
-      // visible difference at phone size.
+      // Raw camera clips ran 8.5MB on average and up to 45MB. The
+      // settings below target 720p30 and land roughly 3-4x smaller with
+      // no difference visible at phone size.
       //
       // Deliberately non-fatal: if compression fails on some device or
       // codec, uploading the original is far better than refusing to
@@ -199,9 +200,30 @@ export default function CreateReelScreen({ navigation }: any) {
         // simple clip stays small; a complex one gets the bits it
         // actually needs.
         //
-        // width/height/frameRate at -1 keep the original resolution and
-        // frame rate, so 1080p60 footage stays 1080p60 instead of being
-        // quietly downscaled.
+        // Targets are set for a phone feed, not for archival.
+        //
+        // This used to pass quality 'high' with width/height/frameRate
+        // all at -1, on the reasoning that 1080p60 should not be quietly
+        // downscaled. Measured against live data, that combination was
+        // doing almost nothing: 'high' is CRF 18, the point defined as
+        // visually indistinguishable from the source, so re-encoding at
+        // the source resolution returned a file about the size of the
+        // one that went in. Storage bore it out — the average published
+        // reel was 9.4MB and the largest 45MB, which is the raw camera
+        // range this step was added to fix.
+        //
+        // 720 wide is the honest ceiling. A reel is displayed full-bleed
+        // on a phone, where 1080p and 720p are not distinguishable at
+        // arm's length, and the feed's own limit is the network rather
+        // than the panel.
+        //
+        // 30fps because 60 doubles the bitrate for motion smoothness
+        // nobody registers in a short vertical clip.
+        //
+        // 'medium' is CRF 23, the usual streaming default. Together
+        // these land around 2-3MB, which matters twice over: it is 3-4x
+        // less egress per view, and it is the difference between a reel
+        // that starts on a slow connection and one that buffers.
         // Every field is passed explicitly. The TypeScript signature
         // takes a Partial, but the native function reads each key
         // directly and throws "Exception in HostFunction: bitrate" on
@@ -212,11 +234,14 @@ export default function CreateReelScreen({ navigation }: any) {
         // Setting an actual number here would override 'high' and put
         // us back on fixed-bitrate encoding.
         const result = await VideoTrim.compress(videoUri, {
-          quality: 'high',
+          quality: 'medium',
           bitrate: -1,
-          width: -1,
+          // Height is auto-calculated from this to preserve aspect
+          // ratio, so portrait clips land at 720x1280 and the odd
+          // landscape one is not stretched.
+          width: 720,
           height: -1,
-          frameRate: -1,
+          frameRate: 30,
           outputExt: 'mp4',
           removeAudio: false,
         });
@@ -300,17 +325,27 @@ export default function CreateReelScreen({ navigation }: any) {
         // a failed insert leaves an orphaned video and poster behind
         // that nothing references and nothing will ever clean up — the
         // reels_type_check failure did exactly that, twice.
-        const toRemove = [videoUrl, thumbnailUrl]
-          .filter(Boolean)
-          .map(url => (url as string).split('/reels/')[1])
+        //
+        // Video and poster can now be in different places: video goes to
+        // R2 when it is configured, posters stay on Supabase. Route each
+        // by what it is — splitting an R2 URL on '/reels/' yields
+        // undefined and quietly cleans up nothing.
+        const uploaded = [videoUrl, thumbnailUrl].filter(Boolean) as string[];
+
+        const supabasePaths = uploaded
+          .filter(u => !isR2Url(u))
+          .map(url => url.split('/reels/')[1])
           .filter(Boolean)
           .map(p => decodeURIComponent(p));
-        if (toRemove.length > 0) {
+        if (supabasePaths.length > 0) {
           try {
-            await supabase.storage.from('reels').remove(toRemove);
+            await supabase.storage.from('reels').remove(supabasePaths);
           } catch (cleanupErr) {
             console.warn('Could not clean up orphaned upload:', cleanupErr);
           }
+        }
+        for (const url of uploaded.filter(isR2Url)) {
+          await deleteFromR2(url);
         }
         throw error;
       }
