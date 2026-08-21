@@ -3,6 +3,7 @@ import {
   View, Text, Pressable, StyleSheet, FlatList,
   Dimensions, StatusBar, Animated, Image, ActivityIndicator,
   TextInput, Modal, Share, KeyboardAvoidingView, Platform, ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
@@ -10,6 +11,7 @@ import { colors, EASING } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import Avatar from '../../components/common/Avatar';
 import PauseIndicator from '../../components/common/PauseIndicator';
+import Icon from '../../components/common/Icon';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { useIsFocused } from '@react-navigation/native';
@@ -742,6 +744,31 @@ function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight }: 
 }
 
 
+// Fisher-Yates.
+//
+// Deliberately not `items.sort(() => Math.random() - 0.5)`, which is the
+// popular one-liner and is not a shuffle. It hands the sort an
+// inconsistent comparator, so the result is biased towards the original
+// order — with a feed that means the newest reels keep landing near the
+// top and a refresh looks like it did nothing.
+//
+// `avoidFirstId` is a small courtesy: a refresh that drops you back on
+// the reel you were just watching reads as broken even when everything
+// below it did change, so if the shuffle lands there, swap the head with
+// a random other card.
+function shuffled(items: Reel[], avoidFirstId?: string | null): Reel[] {
+  const out = items.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  if (avoidFirstId && out.length > 1 && out[0].id === avoidFirstId) {
+    const j = 1 + Math.floor(Math.random() * (out.length - 1));
+    [out[0], out[j]] = [out[j], out[0]];
+  }
+  return out;
+}
+
 export default function ReelsScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { role, user } = useAuth();
@@ -752,19 +779,31 @@ export default function ReelsScreen({ navigation, route }: any) {
   const [listHeight, setListHeight] = useState(SCREEN_H);
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set when arriving from workspace search: open on that reel instead
   // of the top of the feed.
   const focusReelId: string | undefined = route?.params?.focusReelId;
   const listRef = useRef<FlatList<Reel>>(null);
   const focusHandledRef = useRef<string | null>(null);
+  // Which reel the last shuffle put first, so the next one can avoid
+  // opening on it again.
+  const lastFirstReelRef = useRef<string | null>(null);
+  // Mirrors activeIndex so callbacks can read the current card without
+  // being rebuilt every time it changes.
+  const activeIndexRef = useRef(0);
 
   // Memoised and declared before the effect that runs it. Previously
   // the effect depended only on activeTab, so fetchReels kept whatever
   // `user` it closed over on first render — signing in did not refetch
   // the feed, and the "following" tab kept querying with a stale id.
-  const fetchReels = useCallback(async () => {
-    setLoading(true); setError(null);
+  const fetchReels = useCallback(async (isRefresh = false) => {
+    // A refresh leaves the current feed on screen and lets the spinner in
+    // the pull gesture carry the wait. Swapping in the full-screen
+    // skeleton would blank out a video the user is still watching, which
+    // is a worse experience than the wait itself.
+    if (isRefresh) setRefreshing(true); else setLoading(true);
+    setError(null);
     try {
       let query = supabase.from('reels')
         .select('id, video_url, thumbnail_url, description, type, likes, created_at, profiles(id, full_name, avatar_url, role, category, subcategory, location, verification_level)')
@@ -774,33 +813,125 @@ export default function ReelsScreen({ navigation, route }: any) {
           .select('following_id').eq('follower_id', user.id).limit(FOLLOWING_FETCH_LIMIT);
         const followedIds = (followData || []).map((f: any) => f.following_id);
         if (followedIds.length > 0) { query = query.in('user_id', followedIds); }
-        else { setReels([]); setLoading(false); return; }
+        // No setLoading here: the finally block below runs on this
+        // return too, and it clears whichever flag was set.
+        else { setReels([]); return; }
       }
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
-      const formatted = (data || []).map((item: any) => ({ ...item, profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles }));
-      setReels(formatted as Reel[]);
+      const formatted = (data || []).map((item: any) => ({ ...item, profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles })) as Reel[];
+
+      // The query orders by created_at, so this is the most recent 50
+      // either way. For You then shuffles that window, which is what
+      // makes a pull down feel like it fetched something rather than
+      // redrawing the same list.
+      //
+      // Following stays chronological on purpose. You chose those people,
+      // so "what did they post, newest first" is the useful order, and
+      // scrambling it would lose the one thing that feed is for.
+      const ordered = activeTab === 'foryou'
+        ? shuffled(formatted, lastFirstReelRef.current)
+        : formatted;
+      lastFirstReelRef.current = ordered[0]?.id ?? null;
+      setReels(ordered);
+
+      // Back to the top, or the new order is applied under a scroll
+      // position that belonged to the old one.
+      if (isRefresh) {
+        activeIndexRef.current = 0;
+        setActiveIndex(0);
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      }
     } catch (err: any) { console.error('Fetch reels error:', err); setError(err.message || 'Failed to load reels'); }
-    finally { setLoading(false); }
+    finally { setLoading(false); setRefreshing(false); }
   }, [activeTab, user?.id]);
 
   useEffect(() => { fetchReels(); }, [fetchReels]);
 
-  const onViewRef = useRef(({ viewableItems }: any) => { if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0); });
+  const onRefresh = useCallback(() => { fetchReels(true); }, [fetchReels]);
+
+  const onViewRef = useRef(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      const i = viewableItems[0].index ?? 0;
+      // Cleared only when the list reports the card that was asked for,
+      // so a transient report mid-scroll does not release the target.
+      if (pendingFocusIndexRef.current === i) pendingFocusIndexRef.current = null;
+      activeIndexRef.current = i;
+      setActiveIndex(i);
+    }
+  });
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
+
+  // The list's own height is doing four jobs at once: the card height,
+  // the snap interval, and both numbers in getItemLayout. Two things
+  // follow from that, and neither was handled.
+  //
+  // Rounding: onLayout reports a float. A card is laid out at whole
+  // pixels but snapToInterval and getItemLayout keep the fraction, so
+  // the snap target and the card's real top drift apart by a little
+  // more with every card. Rounding first keeps all four uses agreeing.
+  //
+  // Re-anchoring: Android can report a new height after the first
+  // layout, when the translucent status bar and the tab bar settle. The
+  // list is still resting at oldHeight * index while every card is now
+  // at newHeight * index, so the rest position falls between two reels.
+  // Re-anchoring on change puts the active card back under the viewport.
+  //
+  // This is defensive rather than the diagnosed cause of the misaligned
+  // video — that was removeClippedSubviews, see the FlatList below.
+  const listHeightRef = useRef(SCREEN_H);
+  // False until onLayout reports a real measurement. Until then
+  // listHeight is only Dimensions.get('window'), which is the whole
+  // window rather than this list inside it.
+  const listMeasuredRef = useRef(false);
+  // The card index a deep link asked for, held until the list actually
+  // settles on it. Re-anchoring after a re-measure would otherwise scroll
+  // back to whatever was on screen a frame earlier and undo the jump.
+  const pendingFocusIndexRef = useRef<number | null>(null);
+  const handleListLayout = useCallback((e: any) => {
+    const h = Math.round(e.nativeEvent.layout.height);
+    if (h <= 0) return;
+    // Set before the no-op guard: a height that happens to equal the
+    // initial guess is still a genuine measurement.
+    listMeasuredRef.current = true;
+    if (h === listHeightRef.current) return;
+    listHeightRef.current = h;
+    setListHeight(h);
+    // Deferred a frame so the offset is measured against the new item
+    // positions rather than the old ones.
+    requestAnimationFrame(() => {
+      // A pending deep-link target wins. The sequence that made this
+      // necessary: onLayout reports a new height and schedules this, the
+      // focus effect scrolls to the requested reel, onViewableItemsChanged
+      // reports the card that was visible a moment ago, and then this
+      // frame fires and scrolls back to it — landing on the wrong reel
+      // every time a reel was opened from search.
+      const target = pendingFocusIndexRef.current ?? activeIndexRef.current;
+      listRef.current?.scrollToOffset({ offset: h * target, animated: false });
+    });
+  }, []);
   // Runs once per requested id, after the feed has the reel in hand.
   // Silently does nothing when the reel isn't in this batch — it may be
   // older than the 50 the feed loads, and scrolling somewhere arbitrary
   // would be worse than staying put.
   useEffect(() => {
     if (!focusReelId || loading || focusHandledRef.current === focusReelId) return;
+    // Wait for a real measurement. getItemLayout multiplies listHeight by
+    // the index, so scrolling while listHeight is still the window-sized
+    // guess lands at an offset that belongs to a different card — the
+    // reel opened from search was consistently the wrong one.
+    if (!listMeasuredRef.current) return;
     const index = reels.findIndex(r => r.id === focusReelId);
     if (index > 0) {
+      pendingFocusIndexRef.current = index;
       listRef.current?.scrollToIndex({ index, animated: false });
+      activeIndexRef.current = index;
       setActiveIndex(index);
     }
     focusHandledRef.current = focusReelId;
-  }, [focusReelId, loading, reels]);
+    // listHeight is a dependency so that when the real measurement
+    // arrives after this first runs, the scroll is retried with it.
+  }, [focusReelId, loading, reels, listHeight]);
 
   const renderReel = useCallback(({ item, index }: { item: Reel; index: number }) => {
     // Android has a hard limit on simultaneous hardware video decoders.
@@ -873,7 +1004,9 @@ export default function ReelsScreen({ navigation, route }: any) {
         </View>
         <Text style={styles.errorTitle}>Could not load reels</Text>
         <Text style={styles.errorDesc}>{error}</Text>
-        <PressableScale style={styles.retryBtn} onPress={fetchReels}>
+        {/* Wrapped, not passed bare: onPress hands the handler a touch
+            event, which as a first argument would read as isRefresh. */}
+        <PressableScale style={styles.retryBtn} onPress={() => fetchReels()}>
           <Text style={styles.retryText}>Try Again</Text>
         </PressableScale>
       </View>
@@ -922,7 +1055,7 @@ export default function ReelsScreen({ navigation, route }: any) {
       <FlatList
         ref={listRef}
         data={reels}
-        onLayout={e => setListHeight(e.nativeEvent.layout.height)}
+        onLayout={handleListLayout}
         renderItem={renderReel}
         keyExtractor={item => item.id}
         showsVerticalScrollIndicator={false}
@@ -931,11 +1064,41 @@ export default function ReelsScreen({ navigation, route }: any) {
         decelerationRate="fast"
         onViewableItemsChanged={onViewRef.current}
         viewabilityConfig={viewConfigRef.current}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            // The feed is full-bleed video, so the spinner is drawn on
+            // white-on-dark rather than the default dark-on-light, which
+            // would disappear against a dark frame.
+            tintColor={colors.white}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.black}
+            // Android draws the spinner from the very top of the list,
+            // which on this screen is underneath the translucent status
+            // bar and the For You / Following tabs. This clears both:
+            // insets.top is the status bar, +8 matches the tab row's own
+            // top padding, and the rest is the tab row's height plus a
+            // gap, so the spinner reads as separate from the tabs rather
+            // than colliding with the active underline.
+            progressViewOffset={insets.top + 52}
+          />
+        }
         getItemLayout={(_, index) => ({ length: listHeight, offset: listHeight * index, index })}
         windowSize={3}
         maxToRenderPerBatch={2}
         initialNumToRender={2}
-        removeClippedSubviews={Platform.OS === 'android'}
+        // removeClippedSubviews is deliberately off. It detaches and
+        // reattaches native views behind the renderer's back, which this
+        // app cannot afford on two counts now that it runs on Fabric:
+        // it raced the mounting layer into a null dereference in
+        // MountingCoordinator::pullTransaction (a hard SIGSEGV on
+        // launch), and detaching a playing video left its TextureView's
+        // last frame on screen uncleared, so the tail of the previous
+        // reel stayed painted above the current one.
+        //
+        // The memory it saves is not needed here: windowSize={3} already
+        // keeps at most three cards mounted.
       />
       <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.tabRow}>
@@ -948,8 +1111,25 @@ export default function ReelsScreen({ navigation, route }: any) {
             {activeTab === 'following' && <View style={styles.tabUnderline} />}
           </PressableScale>
         </View>
-        {!isClient && (<PressableScale style={styles.createBtn}><Text style={styles.createBtnText}>+ Create</Text></PressableScale>)}
-        {isClient && (<PressableScale style={styles.searchBtn}><Text style={styles.searchIcon}>🔍</Text></PressableScale>)}
+        {/* The "+ Create" button that used to sit here is gone. It had no
+            onPress at all, so a worker tapping it got nothing — and reel
+            creation is already reachable from the Station tab and from
+            the worker's own profile, both of which work. A button that
+            does nothing is worse than no button. */}
+        {/* top is applied here rather than in the stylesheet because it
+            depends on the safe-area inset. The button is absolutely
+            positioned, so it does NOT inherit the overlay's paddingTop
+            the way the tab row does — without this it renders ~85px
+            higher than the tabs, half of it underneath the system status
+            bar, which swallows the touch. It looked tappable and wasn't. */}
+        <PressableScale
+          style={[styles.searchBtn, { top: insets.top + 8 }]}
+          onPress={() => navigation.navigate('Search')}
+          accessibilityRole="button"
+          accessibilityLabel="Search"
+        >
+          <Icon name="search" size={18} color={colors.white} />
+        </PressableScale>
       </View>
     </View>
   );
@@ -984,10 +1164,7 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 16, fontWeight: '600', color: colors.white, opacity: 0.5, paddingBottom: 4, textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   tabTextActive: { opacity: 1, fontWeight: '700' },
   tabUnderline: { height: 2.5, backgroundColor: colors.white, borderRadius: 2, marginTop: 2 },
-  createBtn: { position: 'absolute', right: 20, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.primary + '20', borderWidth: 1.5, borderColor: colors.primary + '50' },
-  createBtnText: { fontSize: 12, fontWeight: '700', color: colors.primary },
   searchBtn: { position: 'absolute', right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white + '10', alignItems: 'center', justifyContent: 'center' },
-  searchIcon: { fontSize: 16 },
   actionsColumn: { position: 'absolute', right: 10, alignItems: 'center', gap: 14, zIndex: 5 },
   actionAvatarContainer: { marginBottom: 4 },
   actionAvatarShadow: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
