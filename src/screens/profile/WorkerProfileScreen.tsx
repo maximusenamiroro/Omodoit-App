@@ -13,6 +13,7 @@ import { EASING, colors, spacing } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { uploadImageToStorage, clearOldUploads } from '../../lib/uploadImage';
+import { deleteFromR2, isR2Url } from '../../lib/r2';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const REEL_W = (SCREEN_W - spacing.screenPadding * 2 - 8) / 3;
@@ -81,17 +82,35 @@ export default function WorkerProfileScreen({ navigation }: any) {
 
               // Best-effort: the row is already gone, so a storage
               // hiccup here must not look like a failed delete.
-              const paths = [reel.videoUrl, reel.thumbnailUrl]
-                .filter(Boolean)
-                .map(url => (url as string).split('/reels/')[1])
+              //
+              // The two files can now live in different places. Video
+              // moved to R2 for its egress cost; posters are tiny and
+              // stayed on Supabase. Reels published before the move are
+              // still entirely on Supabase, so this has to route each
+              // URL by what it actually is rather than assume.
+              //
+              // The previous version split every URL on '/reels/' to get
+              // a Supabase path. An R2 URL has no such segment, so that
+              // silently produced undefined, deleted nothing, and left
+              // the video billed forever.
+              const media = [reel.videoUrl, reel.thumbnailUrl].filter(Boolean) as string[];
+
+              const r2Urls = media.filter(isR2Url);
+              const supabasePaths = media
+                .filter(u => !isR2Url(u))
+                .map(url => url.split('/reels/')[1])
                 .filter(Boolean)
                 .map(p => decodeURIComponent(p.split('?')[0]));
-              if (paths.length > 0) {
+
+              if (supabasePaths.length > 0) {
                 try {
-                  await supabase.storage.from('reels').remove(paths);
+                  await supabase.storage.from('reels').remove(supabasePaths);
                 } catch (storageErr) {
                   console.warn('Reel row deleted but files remain:', storageErr);
                 }
+              }
+              for (const url of r2Urls) {
+                await deleteFromR2(url);
               }
 
               setReels(prev => prev.filter(r => r.id !== reel.id));
