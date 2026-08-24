@@ -4,7 +4,8 @@ import {
   Animated, StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
 import PressableScale from '../../components/common/PressableScale';
 import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import { supabase } from '../../api/supabase';
@@ -33,6 +34,7 @@ interface WorkerRow {
 const WORKER_PAGE_SIZE = 20;
 
 export default function WorkerListScreen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { categoryName, subcategoryName, color } = route.params;
   const accentColor = color || colors.primary;
@@ -48,10 +50,10 @@ export default function WorkerListScreen({ navigation, route }: any) {
   const listSlide = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(listOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(listOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(listSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
@@ -136,7 +138,7 @@ export default function WorkerListScreen({ navigation, route }: any) {
 
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
         <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{subcategoryName}</Text>

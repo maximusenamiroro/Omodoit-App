@@ -5,13 +5,15 @@ import {
   ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
 import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { upsertWithRetry } from '../../lib/db';
 
 export default function WorkerRegStep4Screen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const params = route.params;
   const { setDirectAuth, beginRegistration, endRegistration } = useAuth();
@@ -33,17 +35,17 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
   const buttonOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
+    Animated.stagger(entrance.stagger, [
       Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
-        Animated.timing(headerSlide, { toValue: 0, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(headerSlide, { toValue: 0, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(commissionOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
-      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(commissionOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(buttonOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [buttonOpacity, commissionOpacity, formOpacity, formSlide, headerOpacity, headerSlide]);
 
@@ -187,7 +189,7 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
         style={styles.backButton}
         onPress={() => navigation.goBack()}
       >
-        <Text style={styles.backText}>←</Text>
+        <Icon name="back" size={20} color={colors.white} />
       </PressableScale>
 
       <View style={styles.progressContainer}>

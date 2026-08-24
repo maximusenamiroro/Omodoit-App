@@ -143,13 +143,37 @@ Deno.serve(async (req) => {
       if (typeof requestedKey !== 'string' || !requestedKey) {
         return json({ error: 'key is required to delete' }, 400);
       }
-      // The ONLY thing standing between a user and someone else's video.
-      // Keys are written as `${user.id}/...` at upload time, so an
-      // authenticated caller may delete inside their own prefix and
-      // nowhere else. Without this check any signed-in user could delete
-      // the whole bucket one object at a time.
-      if (!requestedKey.startsWith(`${user.id}/`) || requestedKey.includes('..')) {
+      // Path traversal is refused for everyone, owner and admin alike.
+      if (requestedKey.includes('..')) {
         return json({ error: 'Not permitted to delete that object' }, 403);
+      }
+
+      // Keys are written as `${user.id}/...` at upload time, so ordinary
+      // callers may delete inside their own prefix and nowhere else.
+      // Without that, any signed-in user could empty the bucket one
+      // object at a time.
+      //
+      // Moderators are the deliberate exception. Apple's Guideline 1.2
+      // asks not just for a report button but for reports to be acted
+      // on, and "actioned" has to mean the video comes down — a queue
+      // that only records opinions is not moderation. An admin has no
+      // prefix of their own to delete from, so ownership alone cannot
+      // express this.
+      //
+      // is_admin is read from the database on every call rather than
+      // trusted from the token, and migration 019 makes that column
+      // non-writable by the account itself, so this cannot be
+      // self-granted.
+      if (!requestedKey.startsWith(`${user.id}/`)) {
+        const { data: me } = await supabase
+          .from('profiles')
+          .select('is_admin')
+          .eq('id', user.id)
+          .maybeSingle();
+        if (!me?.is_admin) {
+          return json({ error: 'Not permitted to delete that object' }, 403);
+        }
+        console.log(`moderation delete by admin ${user.id}: ${requestedKey}`);
       }
 
       const delUrl = new URL(

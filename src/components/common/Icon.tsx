@@ -28,7 +28,7 @@ export type IconName =
   | 'reels' | 'explore' | 'inbox' | 'profile' | 'station'
   | 'mic' | 'micOff' | 'speaker' | 'speakerOff' | 'callEnd'
   | 'bell' | 'search' | 'settings' | 'orders' | 'bank' | 'back'
-  | 'bookings' | 'saved' | 'edit' | 'star';
+  | 'bookings' | 'saved' | 'edit' | 'star' | 'share' | 'chart';
 
 interface Props {
   name: IconName;
@@ -175,6 +175,25 @@ export default function Icon({ name, size = 24, color = colors.textPrimary, fill
       {name === 'star' && (
         <Path d="M12 4.5l2.35 4.76 5.25.76-3.8 3.7.9 5.23L12 16.48l-4.7 2.47.9-5.23-3.8-3.7 5.25-.76z"
               {...common} fill={filled ? stroke : 'none'} />
+      )}
+
+      {/* An arrow leaving a tray. Chosen over the iOS share glyph
+          because the same icon has to read correctly on Android, where
+          that shape means nothing. */}
+      {name === 'share' && (
+        <>
+          <Path d="M12 3.5v11" {...common} />
+          <Path d="M8.5 7L12 3.5 15.5 7" {...common} />
+          <Path d="M5.5 12.5v6A1.5 1.5 0 007 20h10a1.5 1.5 0 001.5-1.5v-6" {...common} />
+        </>
+      )}
+
+      {/* Bars, because the thing behind it is a count over time. */}
+      {name === 'chart' && (
+        <>
+          <Path d="M4 20h16" {...common} />
+          <Path d="M7.5 20v-6M12 20V7M16.5 20v-9" {...common} />
+        </>
       )}
 
       {name === 'edit' && (

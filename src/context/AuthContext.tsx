@@ -57,7 +57,8 @@ interface Profile {
   // Payout details deliberately absent. They live in payout_accounts,
   // which only their owner can read — profiles is world-readable, so
   // bank details sitting in it were readable by anyone holding the anon
-  // key. BankDetailsScreen loads them on demand instead.
+  // key. The screen that collected them has been removed; if payouts
+  // come back, they must be read on demand and never from here.
 }
 
 interface AuthContextValue {

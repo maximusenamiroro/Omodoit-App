@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
 import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
@@ -42,6 +43,7 @@ interface ProductRow {
 }
 
 export default function ProductCatalogueScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const [activeFilter, setActiveFilter] = useState<typeof FILTERS[number]['key']>('all');
   const [loadingMore, setLoadingMore] = useState(false);
@@ -53,9 +55,9 @@ export default function ProductCatalogueScreen({ navigation }: any) {
   const gridOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(200, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
-      Animated.timing(gridOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(gridOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [gridOpacity, headerOpacity]);
 
@@ -134,7 +136,7 @@ export default function ProductCatalogueScreen({ navigation }: any) {
 
       <Animated.View style={[st.header, { opacity: headerOpacity }]}>
         <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={st.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
         <Text style={st.headerTitle}>Products</Text>
         <View style={{ width: 36 }} />

@@ -4,7 +4,7 @@ import {
   StatusBar, Animated, Platform, TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import Avatar from '../../components/common/Avatar';
 import { useAuth } from '../../context/AuthContext';
@@ -59,6 +59,7 @@ interface CallLogItem {
 const CONVERSATION_PAGE_SIZE = 30;
 
 export default function InboxScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user, role } = useAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -76,9 +77,9 @@ export default function InboxScreen({ navigation }: any) {
   const listOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(200, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
-      Animated.timing(listOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(listOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [headerOpacity, listOpacity]);
 

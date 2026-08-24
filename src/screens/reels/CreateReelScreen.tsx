@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import Icon from '../../components/common/Icon';
 import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
@@ -379,7 +380,7 @@ export default function CreateReelScreen({ navigation }: any) {
 
       <View style={st.header}>
         <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={st.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
         <Text style={st.headerTitle}>Create Reel</Text>
         <View style={{ width: 36 }} />

@@ -73,60 +73,105 @@ async function namesAndCategories(ids: string[]) {
  * posted content, and the two run in parallel.
  */
 export async function searchWorkspace(rawQuery: string): Promise<SearchResults> {
+  const [products, reels] = await Promise.all([
+    searchNewArrivals(rawQuery),
+    searchReels(rawQuery, 20, CUTOFF_HOURS),
+  ]);
+  return { products, reels };
+}
+
+function cutoffIso(hours?: number): string | null {
+  if (!hours) return null;
+  return new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+}
+
+/**
+ * Products and services matching the query, posted recently.
+ *
+ * "Recently" is the point rather than an optimisation: this backs the
+ * New Arrivals section, where the question is what has appeared lately,
+ * not what exists.
+ */
+export async function searchNewArrivals(
+  rawQuery: string,
+  limit = 30,
+  cutoffHours: number = CUTOFF_HOURS,
+): Promise<ProductHit[]> {
   const query = escapeForFilter(rawQuery);
-  if (query.length < 2) return { products: [], reels: [] };
+  if (query.length < 2) return [];
 
-  const cutoff = new Date(Date.now() - CUTOFF_HOURS * 60 * 60 * 1000).toISOString();
   const like = `%${query}%`;
+  let q = supabase
+    .from('products')
+    .select('id, worker_id, type, title, description, price, image_url, video_url, category, created_at')
+    .or(`title.ilike.${like},description.ilike.${like},category.ilike.${like}`)
+    .order('created_at', { ascending: false })
+    .limit(limit);
 
-  const [productRes, reelRes] = await Promise.all([
-    supabase
-      .from('products')
-      .select('id, worker_id, type, title, description, price, image_url, video_url, category, created_at')
-      .gte('created_at', cutoff)
-      .or(`title.ilike.${like},description.ilike.${like},category.ilike.${like}`)
-      .order('created_at', { ascending: false })
-      .limit(30),
-    supabase
-      .from('reels')
-      .select('id, user_id, description, thumbnail_url, created_at')
-      .gte('created_at', cutoff)
-      .ilike('description', like)
-      .order('created_at', { ascending: false })
-      .limit(20),
-  ]);
+  const cutoff = cutoffIso(cutoffHours);
+  if (cutoff) q = q.gte('created_at', cutoff);
 
-  if (productRes.error) throw productRes.error;
-  if (reelRes.error) throw reelRes.error;
+  const { data, error } = await q;
+  if (error) throw error;
 
-  const profileMap = await namesAndCategories([
-    ...(productRes.data || []).map((p: any) => p.worker_id),
-    ...(reelRes.data || []).map((r: any) => r.user_id),
-  ]);
+  const profileMap = await namesAndCategories((data || []).map((p: any) => p.worker_id));
+  return (data || []).map((p: any) => ({
+    id: p.id,
+    workerId: p.worker_id,
+    type: p.type === 'service' ? 'service' : 'product',
+    title: p.title || 'Untitled',
+    description: p.description || null,
+    price: p.price != null ? Number(p.price) : null,
+    imageUrl: p.image_url || null,
+    videoUrl: p.video_url || null,
+    category: p.category || null,
+    createdAt: p.created_at,
+    posterName: profileMap[p.worker_id]?.name || 'A worker',
+  }));
+}
 
-  return {
-    products: (productRes.data || []).map((p: any) => ({
-      id: p.id,
-      workerId: p.worker_id,
-      type: p.type === 'service' ? 'service' : 'product',
-      title: p.title || 'Untitled',
-      description: p.description || null,
-      price: p.price != null ? Number(p.price) : null,
-      imageUrl: p.image_url || null,
-      videoUrl: p.video_url || null,
-      category: p.category || null,
-      createdAt: p.created_at,
-      posterName: profileMap[p.worker_id]?.name || 'A worker',
-    })),
-    reels: (reelRes.data || []).map((r: any) => ({
-      id: r.id,
-      workerId: r.user_id,
-      description: r.description || null,
-      thumbnailUrl: r.thumbnail_url || null,
-      posterName: profileMap[r.user_id]?.name || 'A worker',
-      category: profileMap[r.user_id]?.category || null,
-    })),
-  };
+/**
+ * Reels matching the query.
+ *
+ * cutoffHours is optional and defaults to no limit, which is the
+ * difference between this and the workspace search. On the workspace a
+ * 48-hour window is the point — that panel answers "what appeared
+ * lately". Search opened from the reels feed is the opposite question:
+ * someone looking for a reel wants it whatever week it was posted, and
+ * a recency window would report "nothing found" for a library that
+ * visibly contains the thing they typed.
+ */
+export async function searchReels(
+  rawQuery: string,
+  limit = 40,
+  cutoffHours?: number,
+): Promise<ReelHit[]> {
+  const query = escapeForFilter(rawQuery);
+  if (query.length < 2) return [];
+
+  const like = `%${query}%`;
+  let q = supabase
+    .from('reels')
+    .select('id, user_id, description, thumbnail_url, created_at')
+    .ilike('description', like)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  const cutoff = cutoffIso(cutoffHours);
+  if (cutoff) q = q.gte('created_at', cutoff);
+
+  const { data, error } = await q;
+  if (error) throw error;
+
+  const profileMap = await namesAndCategories((data || []).map((r: any) => r.user_id));
+  return (data || []).map((r: any) => ({
+    id: r.id,
+    workerId: r.user_id,
+    description: r.description || null,
+    thumbnailUrl: r.thumbnail_url || null,
+    posterName: profileMap[r.user_id]?.name || 'A worker',
+    category: profileMap[r.user_id]?.category || null,
+  }));
 }
 
 export interface LiveWorkerHit {

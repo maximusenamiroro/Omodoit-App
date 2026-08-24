@@ -7,11 +7,13 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
-import { colors, EASING } from '../../theme';
+import { colors, EASING, DURATION , useEntrance} from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import Avatar from '../../components/common/Avatar';
 import PauseIndicator from '../../components/common/PauseIndicator';
 import Icon from '../../components/common/Icon';
+import ReportSheet from '../../components/common/ReportSheet';
+import { blockedUserIds, notInFilter } from '../../lib/moderation';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { useIsFocused } from '@react-navigation/native';
@@ -417,9 +419,14 @@ const ps = StyleSheet.create({
   productArrow: { fontSize: 14, color: colors.textMuted },
 });
 
-interface ReelCardProps { reel: Reel; isClient: boolean; isActive: boolean; userId: string | undefined; navigation: any; cardHeight: number; }
+interface ReelCardProps { reel: Reel; isClient: boolean; isActive: boolean; userId: string | undefined; navigation: any; cardHeight: number;
+  /** Called after the viewer blocks this reel's owner. */
+  onBlocked?: (userId: string) => void;
+}
 
-function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight }: ReelCardProps) {
+function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight, onBlocked }: ReelCardProps) {
+  const entrance = useEntrance();
+  const [reportOpen, setReportOpen] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(reel.likes);
   const [saved, setSaved] = useState(false);
@@ -459,7 +466,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight }: 
       setPaused(false);
       setVideoLoaded(false);
       Animated.parallel([
-        Animated.timing(contentOpacity, { toValue: 1, duration: 400, delay: 200, useNativeDriver: true }),
+        Animated.timing(contentOpacity, { toValue: 1, duration: entrance.fade, delay: 120, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(actionsSlide, { toValue: 0, damping: 14, stiffness: 80, delay: 300, useNativeDriver: true }),
       ]).start();
     } else { setPaused(true); }
@@ -508,7 +515,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight }: 
   };
 
  const handleShare = async () => {
-    const shareUrl = 'https://omoworkit.com/reel/' + reel.id;
+    const shareUrl = 'https://www.omodoit.com/reel/' + reel.id;
     const workerName = reel.profiles?.full_name || 'Check out this worker';
     const caption = reel.description ? reel.description + '\n\n' : '';
     try {
@@ -679,12 +686,44 @@ function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight }: 
             <Text style={[styles.actionCount, saved && { color: colors.flash }]}>{saved ? 'Saved' : 'Save'}</Text>
           </PressableScale>
         ) : (
-          <PressableScale style={styles.actionBtn}>
-            <View style={styles.actionCircle}><Text style={styles.actionIcon}>📊</Text></View>
+          <PressableScale
+            style={styles.actionBtn}
+            onPress={() => navigation.navigate('Analytics')}
+            accessibilityRole="button"
+            accessibilityLabel="Your reel statistics"
+          >
+            <View style={styles.actionCircle}><Icon name="chart" size={22} color={colors.white} /></View>
             <Text style={styles.actionCount}>Stats</Text>
           </PressableScale>
         )}
+
+        {/* Report. Required by Apple's Guideline 1.2 and Google Play's
+            UGC policy: an app carrying user-posted video must let people
+            report it and block whoever posted it, and a reviewer checks
+            for exactly this control on exactly this screen.
+            Hidden on your own reel, where it makes no sense. */}
+        {reel.profiles?.id !== userId && (
+          <PressableScale
+            style={styles.actionBtn}
+            onPress={() => setReportOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Report this reel"
+          >
+            <View style={styles.actionCircle}><Text style={styles.actionIcon}>⋯</Text></View>
+            <Text style={styles.actionCount}>Report</Text>
+          </PressableScale>
+        )}
       </Animated.View>
+
+      <ReportSheet
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        targetType="reel"
+        targetId={reel.id}
+        targetOwnerId={reel.profiles?.id}
+        targetOwnerName={workerName}
+        onBlocked={onBlocked}
+      />
 
       <Animated.View style={[styles.bottomContent, { bottom: Platform.OS === 'ios' ? 106 : 78, opacity: contentOpacity }]}>
         <View style={styles.workerInfoRow}>
@@ -808,6 +847,16 @@ export default function ReelsScreen({ navigation, route }: any) {
       let query = supabase.from('reels')
         .select('id, video_url, thumbnail_url, description, type, likes, created_at, profiles(id, full_name, avatar_url, role, category, subcategory, location, verification_level)')
         .order('created_at', { ascending: false }).limit(50);
+
+      // Blocked people are excluded here rather than filtered out of the
+      // rendered list. A block that only hides rows in the UI still ships
+      // their video to the device and still shows it the moment any code
+      // path forgets the filter — which tells the user they are protected
+      // when they are not. Doing it in the query means there is one place
+      // to get right.
+      const blocked = await blockedUserIds();
+      const blockedFilter = notInFilter(blocked);
+      if (blockedFilter) query = query.not('user_id', 'in', blockedFilter);
       if (activeTab === 'following' && user?.id) {
         const { data: followData } = await supabase.from('follows')
           .select('following_id').eq('follower_id', user.id).limit(FOLLOWING_FETCH_LIMIT);
@@ -849,6 +898,14 @@ export default function ReelsScreen({ navigation, route }: any) {
   useEffect(() => { fetchReels(); }, [fetchReels]);
 
   const onRefresh = useCallback(() => { fetchReels(true); }, [fetchReels]);
+
+  // Drop the blocked person's reels from what is already on screen.
+  // Waiting for the next fetch would leave the video they just blocked
+  // still playing in front of them, which reads as the block not
+  // working — the moment that matters most for trusting the feature.
+  const handleBlocked = useCallback((blockedId: string) => {
+    setReels(prev => prev.filter(r => r.profiles?.id !== blockedId));
+  }, []);
 
   const onViewRef = useRef(({ viewableItems }: any) => {
     if (viewableItems.length > 0) {
@@ -947,7 +1004,7 @@ export default function ReelsScreen({ navigation, route }: any) {
       return <View style={{ height: listHeight, backgroundColor: '#000' }} />;
     }
     return (
-      <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} navigation={navigation} cardHeight={listHeight} />
+      <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} navigation={navigation} cardHeight={listHeight} onBlocked={handleBlocked} />
     );
   }, [isClient, activeIndex, user, isFocused, navigation, listHeight]);
 

@@ -4,7 +4,7 @@ import {
   StatusBar, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors } from '../../theme';
+import { EASING, colors, useEntrance } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { sendCallResponse } from '../../lib/calling';
 
@@ -15,6 +15,7 @@ const getInitials = (name: string): string => {
 };
 
 export default function IncomingCallScreen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { callId, callerId, callerName, callerCategory } = route.params;
   const [responding, setResponding] = useState(false);
@@ -26,7 +27,7 @@ export default function IncomingCallScreen({ navigation, route }: any) {
 
   useEffect(() => {
     Animated.timing(contentOpacity, { toValue: 1, duration: 500, easing: EASING.OUT, useNativeDriver: true }).start();
-    Animated.stagger(150, [
+    Animated.stagger(entrance.stagger, [
       Animated.spring(acceptSlide, { toValue: 0, damping: 12, stiffness: 100, useNativeDriver: true }),
       Animated.spring(declineSlide, { toValue: 0, damping: 12, stiffness: 100, useNativeDriver: true }),
     ]).start();

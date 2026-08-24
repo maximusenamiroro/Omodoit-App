@@ -4,7 +4,7 @@ import {
   StatusBar, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors } from '../../theme';
+import { EASING, colors , useReducedMotion} from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import Icon from '../../components/common/Icon';
 import { useAgoraCall, logCallOutcome } from '../../lib/calling';
@@ -23,6 +23,7 @@ const formatDuration = (sec: number): string => {
 };
 
 export default function InCallScreen({ navigation, route }: any) {
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { workerName, workerCategory, callId, otherUserId, isCaller } = route.params;
@@ -61,9 +62,11 @@ export default function InCallScreen({ navigation, route }: any) {
       timer = setInterval(() => setDuration(p => p + 1), 1000);
     }
 
+    // The waveform is decoration on top of audio that plays regardless.
+    if (reducedMotion) return;
     const animW = (w: Animated.Value) => Animated.loop(Animated.sequence([
-      Animated.timing(w, { toValue: Math.random() * 0.8 + 0.2, duration: 300 + Math.random() * 400, useNativeDriver: true }),
-      Animated.timing(w, { toValue: Math.random() * 0.4 + 0.1, duration: 300 + Math.random() * 400, useNativeDriver: true }),
+      Animated.timing(w, { toValue: Math.random() * 0.8 + 0.2, duration: 300 + Math.random() * 400, easing: EASING.LINEAR, useNativeDriver: true }),
+      Animated.timing(w, { toValue: Math.random() * 0.4 + 0.1, duration: 300 + Math.random() * 400, easing: EASING.LINEAR, useNativeDriver: true }),
     ]));
 
     const animations = [wave1, wave2, wave3, wave4, wave5].map(w => animW(w));

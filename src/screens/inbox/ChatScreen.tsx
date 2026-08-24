@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
+import Icon from '../../components/common/Icon';
 import Avatar from '../../components/common/Avatar';
 import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
@@ -280,7 +281,7 @@ export default function ChatScreen({ navigation, route }: any) {
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         <View style={styles.chatHeader}>
           <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
-            <Text style={styles.backText}>←</Text>
+            <Icon name="back" size={20} color={colors.white} />
           </PressableScale>
           <Text style={styles.chatHeaderName}>{otherUserName}</Text>
         </View>
@@ -298,7 +299,7 @@ export default function ChatScreen({ navigation, route }: any) {
       {/* Chat header */}
       <View style={styles.chatHeader}>
         <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
 
         <Avatar uri={otherUserAvatar} name={otherUserName} size={40} />
