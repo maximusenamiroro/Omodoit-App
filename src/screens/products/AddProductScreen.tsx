@@ -7,6 +7,7 @@ import {
   TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, Image, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import Icon from '../../components/common/Icon';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { uploadImageToStorage, uploadProductVideo, toFileUri } from '../../lib/uploadImage';
@@ -140,7 +141,7 @@ export default function AddProductScreen({ navigation }: any) {
 
       <View style={st.header}>
         <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={st.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
         <Text style={st.headerTitle}>Add {activeType.label}</Text>
         <View style={{ width: 36 }} />

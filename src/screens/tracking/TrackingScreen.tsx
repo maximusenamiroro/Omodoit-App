@@ -6,7 +6,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing , useEntrance} from '../../theme';
+import Icon from '../../components/common/Icon';
 import PressableScale from '../../components/common/PressableScale';
 import { useWatchLocation } from '../../lib/tracking';
 import { supabase } from '../../api/supabase';
@@ -26,6 +27,7 @@ function distanceKm(a: { latitude: number; longitude: number }, b: { latitude: n
 }
 
 export default function TrackingScreen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { bookingId, workerId, workerName = 'Worker', service = '' } = route?.params || {};
   const mapRef = useRef<MapView | null>(null);
@@ -39,7 +41,7 @@ export default function TrackingScreen({ navigation, route }: any) {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(cardOpacity, { toValue: 1, duration: 500, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(cardOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.spring(cardSlide, { toValue: 0, damping: 14, stiffness: 100, useNativeDriver: true }),
     ]).start();
 
@@ -144,7 +146,7 @@ export default function TrackingScreen({ navigation, route }: any) {
       </MapView>
 
       <PressableScale style={[st.backBtn, { top: insets.top + 10 }]} onPress={() => navigation.goBack()}>
-        <Text style={st.backText}>←</Text>
+        <Icon name="back" size={20} color={colors.white} />
       </PressableScale>
 
       <Animated.View style={[st.bottomCard, { opacity: cardOpacity, transform: [{ translateY: cardSlide }], paddingBottom: Platform.OS === 'ios' ? insets.bottom + 10 : 20 }]}>

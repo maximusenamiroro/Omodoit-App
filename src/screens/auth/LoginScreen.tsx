@@ -5,12 +5,14 @@ import {
   ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
 import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { PASSWORD_RESET_URL } from '../../config/site';
 
 export default function LoginScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
 
   // Email is the account identifier. It always was — the phone branch
@@ -32,21 +34,21 @@ export default function LoginScreen({ navigation }: any) {
   const registerOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(120, [
+    Animated.stagger(entrance.stagger, [
       Animated.parallel([
-        Animated.timing(logoOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(logoScale, { toValue: 1, damping: 15, stiffness: 120, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(titleOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
-        Animated.timing(titleSlide, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(titleOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(titleSlide, { toValue: 0, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
-      Animated.timing(registerOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(buttonOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(registerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [buttonOpacity, formOpacity, formSlide, logoOpacity, logoScale, registerOpacity, titleOpacity, titleSlide]);
 
@@ -142,7 +144,7 @@ export default function LoginScreen({ navigation }: any) {
         style={styles.backButton}
         onPress={() => navigation.goBack()}
       >
-        <Text style={styles.backText}>←</Text>
+        <Icon name="back" size={20} color={colors.white} />
       </PressableScale>
 
       <ScrollView

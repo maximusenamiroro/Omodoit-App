@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { uploadImageToStorage, clearOldUploads } from '../../lib/uploadImage';
@@ -37,6 +37,7 @@ const PRODUCT_PREVIEW_COUNT = 2;
 interface ReviewItem { id: string; name: string; rating: number; text: string; date: string; }
 
 export default function WorkerProfileScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const [uploading, setUploading] = useState(false);
@@ -52,9 +53,9 @@ export default function WorkerProfileScreen({ navigation }: any) {
   const contentOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(200, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
-      Animated.timing(contentOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [contentOpacity, headerOpacity]);
 
@@ -220,10 +221,7 @@ export default function WorkerProfileScreen({ navigation }: any) {
         <View style={{ width: 32 }} />
         <Text style={st.headerBarTitle}>My Profile</Text>
         <View style={st.headerBarRight}>
-          <PressableScale style={st.headerBarBtn} onPress={() => Alert.alert('Bank Details', 'This feature is coming soon.')}>
-            <Icon name="bank" size={19} color={colors.textPrimary} />
-          </PressableScale>
-          <PressableScale style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')}>
+          <PressableScale style={st.headerBarBtn} accessibilityRole="button" accessibilityLabel="Settings" onPress={() => navigation.navigate('Settings')}>
             <Icon name="settings" size={19} color={colors.textPrimary} />
           </PressableScale>
         </View>

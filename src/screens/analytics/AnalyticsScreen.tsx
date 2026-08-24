@@ -6,6 +6,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import Icon from '../../components/common/Icon';
 import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -66,7 +67,7 @@ export default function AnalyticsScreen({ navigation }: any) {
 
       <View style={st.header}>
         <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={st.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
         <Text style={st.headerTitle}>📊 Analytics</Text>
         <View style={{ width: 36 }} />

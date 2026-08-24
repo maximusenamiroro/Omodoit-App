@@ -4,13 +4,14 @@ import {
   StatusBar, ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing , useEntrance} from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 
 
 type AccountType = 'client' | 'worker' | null;
 
 export default function AccountTypeScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<AccountType>(null);
 
@@ -62,7 +63,7 @@ export default function AccountTypeScreen({ navigation }: any) {
       Animated.timing(loginOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
     ];
 
-    Animated.stagger(120, animations).start();
+    Animated.stagger(entrance.stagger, animations).start();
   }, [buttonOpacity, buttonSlide, clientOpacity, clientSlide, loginOpacity, logoOpacity, logoScale, subtitleOpacity, titleOpacity, titleSlide, workerOpacity, workerSlide]);
 
   const handleContinue = () => {

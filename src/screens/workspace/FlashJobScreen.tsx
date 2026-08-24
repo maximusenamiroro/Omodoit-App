@@ -5,7 +5,8 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
 import PressableScale from '../../components/common/PressableScale';
 import { CATEGORIES as CATEGORY_LIST } from '../../lib/categories';
 import { supabase } from '../../api/supabase';
@@ -25,6 +26,7 @@ const CATEGORY_ICONS: Record<string, string> = Object.fromEntries(
 );
 
 export default function FlashJobScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
@@ -49,10 +51,10 @@ export default function FlashJobScreen({ navigation }: any) {
   const formSlide = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
@@ -186,7 +188,7 @@ export default function FlashJobScreen({ navigation }: any) {
       {/* Header */}
       <Animated.View style={[st.header, { opacity: headerOpacity }]}>
         <PressableScale style={st.backBtn} onPress={() => step === 1 ? navigation.goBack() : goBack()}>
-          <Text style={st.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
         <View style={st.headerCenter}>
           <View style={st.flashBadge}>

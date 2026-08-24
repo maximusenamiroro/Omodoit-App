@@ -73,6 +73,36 @@ export const STAGGER_MS = 45;
  * translation, scale, parallax. Returning a boolean rather than
  * pre-baked values leaves that judgement with the caller.
  */
+/**
+ * Timing for a screen's entrance sequence, already respecting the OS
+ * "reduce motion" setting.
+ *
+ * WHY THIS EXISTS
+ * Two problems, one fix. Thirty of the thirty-five screens that animate
+ * never asked whether the user wanted motion at all, and the ones that
+ * did stagger hardcoded 100-200ms instead of the 45ms this file defines
+ * — so the last section of the login screen took a full second to
+ * finish arriving, on a screen with no data to wait for.
+ *
+ * `fade` and `stagger` collapse under reduced motion rather than
+ * disappearing: opacity is what tells you the screen changed, and Apple's
+ * own guidance is to reduce motion, not remove feedback. Movement is a
+ * different matter — `move` goes to zero so slides and scales snap into
+ * place instead of travelling.
+ */
+export function useEntrance() {
+  const reduced = useReducedMotion();
+  return {
+    reduced,
+    /** Delay between staggered steps. */
+    stagger: reduced ? 0 : STAGGER_MS,
+    /** Opacity fades. Kept under reduced motion, just quicker. */
+    fade: reduced ? DURATION.QUICK : DURATION.ENTER,
+    /** Translation and scale. Zero under reduced motion. */
+    move: reduced ? 0 : DURATION.ENTER,
+  };
+}
+
 export function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
 

@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView,
+  View, Text, StyleSheet, ScrollView, Share,
   Animated, StatusBar, Platform, ActivityIndicator, Dimensions, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
+import Icon from '../../components/common/Icon';
 import { supabase } from '../../api/supabase';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -28,6 +29,7 @@ interface ReviewRow {
 interface ReelRow {
   id: string;
   likes: number;
+  thumbnailUrl: string | null;
 }
 
 // What this worker offers. The profile previews the two most recent and
@@ -47,6 +49,8 @@ interface PostRow {
 }
 
 export default function WorkerPublicProfileScreen({ navigation, route }: any) {
+  const entrance = useEntrance();
+
   const insets = useSafeAreaInsets();
   const { worker, color, subcategoryName } = route.params;
   const accentColor = color || colors.primary;
@@ -64,13 +68,13 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
   const contentSlide = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
+    Animated.stagger(entrance.stagger, [
       Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(headerScale, { toValue: 1, damping: 15, stiffness: 100, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(contentOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(contentOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(contentSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
@@ -121,13 +125,13 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
       try {
         const { data, error } = await supabase
           .from('reels')
-          .select('id, likes')
+          .select('id, likes, thumbnail_url')
           .eq('user_id', worker.id)
           .order('created_at', { ascending: false })
           .limit(9);
 
         if (error) throw error;
-        setReels((data || []).map((r: any) => ({ id: r.id, likes: r.likes || 0 })));
+        setReels((data || []).map((r: any) => ({ id: r.id, likes: r.likes || 0, thumbnailUrl: r.thumbnail_url || null })));
       } catch (err) {
         console.warn('Could not load reels (non-fatal):', err);
         setReels([]);
@@ -190,6 +194,18 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
     });
   };
 
+  // Sharing a worker is how this app spreads — someone recommends a
+  // plumber to a friend. The button was rendered but did nothing.
+  const shareProfile = async () => {
+    try {
+      await Share.share({
+        message: `${worker.name || 'This worker'} on Omodoit — see their work and book them.\nhttps://www.omodoit.com`,
+      });
+    } catch {
+      // Sheet dismissed. Not an error.
+    }
+  };
+
   const goToChat = () => {
     navigation.navigate('Chat', { otherUserId: worker.id, otherUserName: worker.name, otherUserAvatar: null });
   };
@@ -201,11 +217,16 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
       {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
         <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
         <Text style={styles.headerTitle}>Worker Profile</Text>
-        <PressableScale style={styles.shareBtn}>
-          <Text style={styles.shareIcon}>↗️</Text>
+        <PressableScale
+          style={styles.shareBtn}
+          onPress={shareProfile}
+          accessibilityRole="button"
+          accessibilityLabel="Share this profile"
+        >
+          <Icon name="share" size={18} color={colors.textPrimary} />
         </PressableScale>
       </Animated.View>
 
@@ -306,9 +327,20 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
             ) : (
               <View style={styles.reelsGrid}>
                 {reels.map(reel => (
-                  <PressableScale key={reel.id} style={styles.reelCard}>
+                  <PressableScale
+                    key={reel.id}
+                    style={styles.reelCard}
+                    onPress={() => navigation.navigate('Reels', { focusReelId: reel.id })}
+                    accessibilityRole="button"
+                    accessibilityLabel="Play this reel"
+                  >
                     <View style={styles.reelThumb}>
-                      <Text style={styles.reelPlayIcon}>▶</Text>
+                      {/* The grid used to draw a play triangle over an
+                          empty box and do nothing when tapped. Now it
+                          shows the reel it opens. */}
+                      {reel.thumbnailUrl
+                        ? <Image source={{ uri: reel.thumbnailUrl }} style={styles.reelThumbImg} />
+                        : <Text style={styles.reelPlayIcon}>▶</Text>}
                     </View>
                     <View style={styles.reelOverlay}>
                       <Text style={styles.reelStatIcon}>❤</Text>
@@ -438,6 +470,7 @@ const styles = StyleSheet.create({
   showMoreText: { fontSize: 12, fontWeight: '700' },
   reelsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   reelCard: { width: REEL_W, aspectRatio: 9 / 16, backgroundColor: colors.bgCard, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
+  reelThumbImg: { width: '100%', height: '100%' },
   reelThumb: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
   reelPlayIcon: { fontSize: 20, color: colors.white, opacity: 0.5 },
   reelOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.6)' },

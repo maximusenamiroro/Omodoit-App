@@ -1,10 +1,11 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView,
+  View, Text, StyleSheet, ScrollView, ActivityIndicator,
   Animated, StatusBar, Alert, Platform, Linking, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
 import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
@@ -17,14 +18,20 @@ interface SettingsItem {
   danger?: boolean;
 }
 
+// Filled in once the listings exist. Until then it points at the site,
+// which is a real destination rather than a dead end.
+const RATE_URL = Platform.select({
+  ios: 'https://apps.apple.com/app/omodoit',
+  android: 'https://play.google.com/store/apps/details?id=com.omodoit',
+  default: 'https://www.omodoit.com',
+}) as string;
+
 export default function SettingsScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user, profile, role, logout } = useAuth();
+  const [deleting, setDeleting] = useState(false);
   const accentColor = role === 'client' ? colors.client : colors.primary;
-
-  const comingSoon = (feature: string) => {
-    Alert.alert(feature, 'This feature is coming soon.');
-  };
 
   const handleChangePassword = async () => {
     if (!user?.email) return;
@@ -52,7 +59,7 @@ export default function SettingsScreen({ navigation }: any) {
   const handleShare = async () => {
     try {
       await Share.share({
-        message: 'Check out Omodoit — find skilled workers or grow your business in Nigeria. https://omoworkit.com',
+        message: 'Check out Omodoit — find skilled workers or grow your business in Nigeria. https://www.omodoit.com',
       });
     } catch (err) {
       console.warn('Share failed:', err);
@@ -64,11 +71,11 @@ export default function SettingsScreen({ navigation }: any) {
   const contentSlide = useRef(new Animated.Value(20)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(contentOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
-        Animated.timing(contentSlide, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(contentOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(contentSlide, { toValue: 0, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       ]),
     ]).start();
   }, [contentOpacity, contentSlide, headerOpacity]);
@@ -80,17 +87,60 @@ export default function SettingsScreen({ navigation }: any) {
     ]);
   };
 
+  // Deletion happens in the app, not by email.
+  //
+  // This used to open an alert telling people to write to support, which
+  // is the pattern Apple's Guideline 5.1.1(v) names as insufficient: an
+  // app that offers account creation must offer account deletion inside
+  // the app. Deleting the test account is part of every review pass, so
+  // it would have been found in the first two minutes.
+  //
+  // Two confirmations, because it genuinely cannot be undone and the
+  // button sits one tap away from ordinary settings. The second one
+  // spells out what goes, since "all your data" means a worker's reels
+  // and reviews as well as their login.
   const handleDeleteAccount = () => {
     Alert.alert(
       'Delete Account',
-      'This will permanently delete your account and all your data. This action cannot be undone.',
+      'This permanently deletes your account, your reels, your messages and your reviews. It cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => {
-          Alert.alert('Contact Support', 'To delete your account, please email support@omoworkit.com with your request.');
-        }},
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => Alert.alert(
+            'Are you sure?',
+            'There is no way to get your account back afterwards.',
+            [
+              { text: 'Keep my account', style: 'cancel' },
+              { text: 'Delete forever', style: 'destructive', onPress: runDeleteAccount },
+            ],
+          ),
+        },
       ]
     );
+  };
+
+  const runDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('delete-account');
+      if (error || !data?.deleted) {
+        setDeleting(false);
+        Alert.alert(
+          'Could not delete your account',
+          data?.error || 'Something went wrong. Please try again, or email support@omodoit.com.',
+        );
+        return;
+      }
+      // The account no longer exists, so the stored session is a token
+      // for nothing. Signing out clears it and drops back to the login
+      // screen, which is where a deleted user belongs.
+      await logout();
+    } catch (err: any) {
+      setDeleting(false);
+      Alert.alert('Could not delete your account', err?.message || 'Please try again.');
+    }
   };
 
   const accountSettings: SettingsItem[] = [
@@ -101,21 +151,24 @@ export default function SettingsScreen({ navigation }: any) {
   ];
 
   const privacySettings: SettingsItem[] = [
-    { icon: '🛡️', label: 'Privacy', desc: 'Control who sees your info', action: () => comingSoon('Privacy Settings') },
-    { icon: '🚫', label: 'Blocked Users', desc: 'Manage blocked accounts', action: () => comingSoon('Blocked Users') },
-    { icon: '📍', label: 'Location Settings', desc: 'GPS and tracking preferences', action: () => comingSoon('Location Settings') },
+    { icon: '🚫', label: 'Blocked Users', desc: 'Manage blocked accounts', action: () => navigation.navigate('BlockedUsers') },
+    { icon: '📍', label: 'Location Settings', desc: 'Manage location permission', action: () => Linking.openSettings() },
   ];
 
   const supportItems: SettingsItem[] = [
-    { icon: '❓', label: 'Help Center', desc: 'FAQs and support', action: () => comingSoon('Help Center') },
-    { icon: '💬', label: 'Contact Us', desc: 'Get in touch with our team', action: () => Linking.openURL('mailto:support@omoworkit.com') },
-    { icon: '⭐', label: 'Rate Omodoit', desc: 'Love the app? Rate us!', action: () => comingSoon('Rate Omodoit') },
+    { icon: '❓', label: 'Help Center', desc: 'FAQs and support', action: () => Linking.openURL('https://www.omodoit.com/Help') },
+    { icon: '💬', label: 'Contact Us', desc: 'Get in touch with our team', action: () => Linking.openURL('mailto:support@omodoit.com') },
+    { icon: '⭐', label: 'Rate Omodoit', desc: 'Love the app? Rate us!', action: () => Linking.openURL(RATE_URL) },
     { icon: '📣', label: 'Share Omodoit', desc: 'Tell your friends about us', action: handleShare },
   ];
 
   const legalItems: SettingsItem[] = [
-    { icon: '📄', label: 'Terms of Use', desc: 'Our terms and conditions', action: () => Linking.openURL('https://omoworkit.com/Terms%20Of%20Use') },
-    { icon: '🔐', label: 'Privacy Policy', desc: 'How we protect your data', action: () => Linking.openURL('https://omoworkit.com/Privacy%20Policy') },
+    // Apple's Guideline 1.2 expects the content standards to be
+    // published where users can actually find them. The page existed but
+    // nothing in the app pointed at it, which does not count.
+    { icon: '📜', label: 'Community Guidelines', desc: 'What is and is not allowed', action: () => Linking.openURL('https://www.omodoit.com/Community%20Guidelines') },
+    { icon: '📄', label: 'Terms of Use', desc: 'Our terms and conditions', action: () => Linking.openURL('https://www.omodoit.com/Terms%20Of%20Use') },
+    { icon: '🔐', label: 'Privacy Policy', desc: 'How we protect your data', action: () => Linking.openURL('https://www.omodoit.com/Privacy%20Policy') },
   ];
 
   const renderSection = (title: string, items: SettingsItem[]) => (
@@ -148,7 +201,7 @@ export default function SettingsScreen({ navigation }: any) {
       {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
         <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={{ width: 36 }} />
@@ -190,13 +243,17 @@ export default function SettingsScreen({ navigation }: any) {
                 <Text style={[styles.settingsArrow, { color: colors.error }]}>→</Text>
               </PressableScale>
               <View style={styles.settingsDivider} />
-              <PressableScale style={styles.settingsRow} onPress={handleDeleteAccount}>
+              <PressableScale style={styles.settingsRow} onPress={handleDeleteAccount} disabled={deleting}>
                 <Text style={styles.settingsIcon}>⚠️</Text>
                 <View style={styles.settingsInfo}>
                   <Text style={[styles.settingsLabel, { color: colors.error }]}>Delete Account</Text>
-                  <Text style={styles.settingsDesc}>Permanently delete your account</Text>
+                  <Text style={styles.settingsDesc}>
+                    {deleting ? 'Deleting your account…' : 'Permanently delete your account'}
+                  </Text>
                 </View>
-                <Text style={[styles.settingsArrow, { color: colors.error }]}>→</Text>
+                {deleting
+                  ? <ActivityIndicator size="small" color={colors.error} />
+                  : <Text style={[styles.settingsArrow, { color: colors.error }]}>→</Text>}
               </PressableScale>
             </View>
           </View>

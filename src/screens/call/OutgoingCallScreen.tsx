@@ -4,7 +4,7 @@ import {
   StatusBar, Platform, Vibration,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors } from '../../theme';
+import { EASING, colors , useReducedMotion} from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { generateCallId, sendCallInvite, useCallResponseListener, logCallOutcome } from '../../lib/calling';
@@ -16,6 +16,7 @@ const getInitials = (name: string): string => {
 };
 
 export default function OutgoingCallScreen({ navigation, route }: any) {
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const { workerName, workerCategory, workerId } = route.params;
@@ -111,8 +112,8 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
       Animated.loop(Animated.sequence([
         Animated.delay(delay),
         Animated.parallel([
-          Animated.timing(s, { toValue: 1.8, duration: 1500, useNativeDriver: true }),
-          Animated.timing(o, { toValue: 0, duration: 1500, useNativeDriver: true }),
+          Animated.timing(s, { toValue: 1.8, duration: 1500, easing: EASING.OUT, useNativeDriver: true }),
+          Animated.timing(o, { toValue: 0, duration: 1500, easing: EASING.OUT, useNativeDriver: true }),
         ]),
         Animated.parallel([
           Animated.timing(s, { toValue: 1, duration: 0, useNativeDriver: true }),
@@ -120,6 +121,9 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
         ]),
       ]));
 
+    // Perpetual ripples are exactly what "reduce motion" is for. The
+    // call still works; it just does not pulse at the viewer.
+    if (reducedMotion) return;
     makePulse(pulse1, pulse1Op, 0).start();
     makePulse(pulse2, pulse2Op, 500).start();
     makePulse(pulse3, pulse3Op, 1000).start();

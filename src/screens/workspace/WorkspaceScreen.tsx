@@ -5,7 +5,7 @@ import {
   Dimensions, LayoutAnimation, PanResponder, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
 import PressableScale from '../../components/common/PressableScale';
 import SkeletonCircle from '../../components/common/SkeletonCircle';
 import { supabase } from '../../api/supabase';
@@ -81,6 +81,7 @@ const fabSt = StyleSheet.create({
 });
 
 export default function WorkspaceScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
@@ -99,17 +100,17 @@ export default function WorkspaceScreen({ navigation }: any) {
   const generalOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(100, [
+    Animated.stagger(entrance.stagger, [
       Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
-        Animated.timing(searchSlide, { toValue: 0, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(searchSlide, { toValue: 0, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       ]),
-      Animated.timing(arrivalsOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(arrivalsOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(liveOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(liveOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(liveSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(generalOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(generalOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [arrivalsOpacity, generalOpacity, headerOpacity, liveOpacity, liveSlide, searchSlide]);
 
@@ -125,7 +126,7 @@ export default function WorkspaceScreen({ navigation }: any) {
         const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
         const { data, error } = await supabase
           .from('products')
-          .select('id, worker_id, type, title, image_url, video_url, category, created_at')
+          .select('id, worker_id, type, title, description, price, image_url, video_url, category, created_at')
           .gte('created_at', cutoff)
           .order('created_at', { ascending: false })
           .limit(10);
@@ -146,8 +147,17 @@ export default function WorkspaceScreen({ navigation }: any) {
           const catMeta = MAIN_CATEGORIES.find(c => c.name === row.category);
           return {
             id: row.id,
+            // Everything ProductDetail needs travels with the item. The
+            // carousel used to keep only what it drew, which is why
+            // tapping one could not open anything.
+            workerId: row.worker_id,
+            type: row.type === 'service' ? 'service' : 'product',
             title: row.title || 'Untitled',
+            description: row.description || null,
+            price: row.price != null ? Number(row.price) : null,
             imageUrl: row.image_url || null,
+            videoUrl: row.video_url || null,
+            category: row.category || null,
             emoji: catMeta?.emoji || (row.type === 'service' ? '🛠️' : '📦'),
             color: catMeta?.color || colors.primary,
             posterName: nameMap[row.worker_id] || 'A worker',
@@ -408,7 +418,13 @@ export default function WorkspaceScreen({ navigation }: any) {
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.arrivalsScroll}>
                 {newArrivals.slice(0, VISIBLE_ARRIVALS).map(item => (
-                  <PressableScale key={item.id} style={styles.arrivalItem}>
+                  <PressableScale
+                    key={item.id}
+                    style={styles.arrivalItem}
+                    onPress={() => openProductHit(item)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${item.title} by ${item.posterName}`}
+                  >
                     <View style={styles.storyRing}>
                       <View style={styles.storyInner}>
                         {item.imageUrl ? (

@@ -1,19 +1,37 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  Animated, StatusBar, Platform, Alert, Image,
+  Animated, StatusBar, Platform, Alert, Image, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
 import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 
 export default function ProductDetailScreen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { product } = route.params;
+
+  // Shares a link plus the seller's name and price, because a bare URL
+  // pasted into WhatsApp tells the recipient nothing about what it is.
+  const handleShare = async () => {
+    const price = product.price != null ? `₦${Number(product.price).toLocaleString()}` : 'Price on request';
+    try {
+      await Share.share({
+        message:
+          `${product.title} — ${price}\n` +
+          `by ${product.sellerName || 'a worker'} on Omodoit\n\n` +
+          `https://www.omodoit.com/product/${product.id}`,
+      });
+    } catch {
+      // The user dismissing the share sheet throws here. Nothing to say.
+    }
+  };
   const [ordering, setOrdering] = useState(false);
   const [muted, setMuted] = useState(true);
 
@@ -27,10 +45,10 @@ export default function ProductDetailScreen({ navigation, route }: any) {
   const contentSlide = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.stagger(200, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(contentOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(contentOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(contentSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
@@ -146,7 +164,7 @@ export default function ProductDetailScreen({ navigation, route }: any) {
 
       <Animated.View style={[st.header, { opacity: headerOpacity }]}>
         <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={st.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
         <Text style={st.headerTitle}>{isService ? 'Service Details' : 'Product Details'}</Text>
         <PressableScale style={st.shareBtn}>

@@ -30,8 +30,9 @@ import ProductDetailScreen from '../screens/products/ProductDetailScreen';
 import EditProfileScreen from '../screens/settings/EditProfileScreen';
 import AddProductScreen from '../screens/products/AddProductScreen';
 import CreateReelScreen from '../screens/reels/CreateReelScreen';
+import SearchScreen from '../screens/search/SearchScreen';
+import BlockedUsersScreen from '../screens/settings/BlockedUsersScreen';
 import LeaveReviewScreen from '../screens/reviews/LeaveReviewScreen';
-import BankDetailsScreen from '../screens/bank/BankDetailsScreen';
 import AnalyticsScreen from '../screens/analytics/AnalyticsScreen';
 import EarningsScreen from '../screens/earnings/EarningsScreen';
 
@@ -116,7 +117,6 @@ export default function AppNavigator() {
         <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Tracking" component={TrackingScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
         <Stack.Screen name="LeaveReview" component={LeaveReviewScreen} options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="BankDetails" component={BankDetailsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Analytics" component={AnalyticsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Earnings" component={EarningsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="NewArrivals" component={NewArrivalsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
@@ -133,6 +133,8 @@ export default function AppNavigator() {
         <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="AddProduct" component={AddProductScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="CreateReel" component={CreateReelScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="Search" component={SearchScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: true }} />
+        <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
       </Stack.Navigator>
       {showLoading && <LoadingOverlay />}
     </NavigationContainer>

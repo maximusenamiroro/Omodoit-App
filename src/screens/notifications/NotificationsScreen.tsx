@@ -5,7 +5,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { EASING, colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
 import PressableScale from '../../components/common/PressableScale';
 import CardRowSkeleton from '../../components/common/CardRowSkeleton';
 import { useAuth } from '../../context/AuthContext';
@@ -63,6 +64,7 @@ const NOTIF_LABELS: Record<string, string> = {
 };
 
 export default function NotificationsScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user, role } = useAuth();
   const accentColor = role === 'client' ? colors.client : colors.primary;
@@ -73,9 +75,9 @@ export default function NotificationsScreen({ navigation }: any) {
   const listOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }),
-      Animated.timing(listOpacity, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(listOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
   }, [headerOpacity, listOpacity]);
 
@@ -298,7 +300,7 @@ export default function NotificationsScreen({ navigation }: any) {
 
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
         <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>←</Text>
+          <Icon name="back" size={20} color={colors.white} />
         </PressableScale>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Notifications</Text>
