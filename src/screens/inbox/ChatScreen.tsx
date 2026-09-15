@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  View, Text, StyleSheet, FlatList,
   TextInput, Image, StatusBar, KeyboardAvoidingView,
   Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { colors } from '../../theme';
+import Icon from '../../components/common/Icon';
+import Avatar from '../../components/common/Avatar';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -46,12 +49,17 @@ interface Message {
   media_url: string | null;
 }
 
+// One screenful and change. Older messages load as the user scrolls up.
+const MESSAGE_PAGE_SIZE = 50;
+
 export default function ChatScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { user, role } = useAuth();
   const { otherUserId, otherUserName, otherUserAvatar } = route.params;
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [hasOlder, setHasOlder] = useState(false);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -61,17 +69,21 @@ export default function ChatScreen({ navigation, route }: any) {
 
   const accentColor = role === 'client' ? colors.client : colors.primary;
 
-  useEffect(() => {
-    fetchMessages();
-    markAsSeen();
-    setupRealtime();
+  const markAsSeen = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      await supabase
+        .from('messages')
+        .update({ seen: true })
+        .eq('sender_id', otherUserId)
+        .eq('receiver_id', user.id)
+        .eq('seen', false);
+    } catch (err) {
+      console.error('Mark seen error:', err);
+    }
+  }, [user?.id, otherUserId]);
 
-    return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
-    };
-  }, []);
-
-  const setupRealtime = () => {
+  const setupRealtime = useCallback(() => {
     if (!user?.id) return;
     channelRef.current = supabase
       .channel('chat_' + otherUserId)
@@ -95,42 +107,81 @@ export default function ChatScreen({ navigation, route }: any) {
         }
       })
       .subscribe();
-  };
+  }, [user?.id, otherUserId, markAsSeen]);
 
-  const fetchMessages = async () => {
+  // Both directions of one conversation. Written out twice because
+  // PostgREST has no "either of these two pairs" operator.
+  const conversationFilter = useCallback(() => (
+    'and(sender_id.eq.' + user?.id + ',receiver_id.eq.' + otherUserId + '),' +
+    'and(sender_id.eq.' + otherUserId + ',receiver_id.eq.' + user?.id + ')'
+  ), [user?.id, otherUserId]);
+
+  const fetchMessages = useCallback(async () => {
     if (!user?.id) return;
     try {
+      // Newest page first, then flipped for display. Fetching the whole
+      // conversation ascending meant a long-running chat re-downloaded
+      // thousands of messages every time it was opened.
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .or(
-          'and(sender_id.eq.' + user.id + ',receiver_id.eq.' + otherUserId + '),' +
-          'and(sender_id.eq.' + otherUserId + ',receiver_id.eq.' + user.id + ')'
-        )
-        .order('created_at', { ascending: true });
+        .or(conversationFilter())
+        .order('created_at', { ascending: false })
+        .limit(MESSAGE_PAGE_SIZE);
 
       if (error) throw error;
-      setMessages((data as Message[]) || []);
+      const page = ((data as Message[]) || []).slice().reverse();
+      setMessages(page);
+      setHasOlder(page.length === MESSAGE_PAGE_SIZE);
     } catch (err) {
       console.error('Fetch messages error:', err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id, conversationFilter]);
 
-  const markAsSeen = async () => {
-    if (!user?.id) return;
+  // Pulls the previous page when the user scrolls back to the top.
+  const loadOlderMessages = useCallback(async () => {
+    if (!user?.id || loadingOlder || !hasOlder || messages.length === 0) return;
+    setLoadingOlder(true);
     try {
-      await supabase
+      const { data, error } = await supabase
         .from('messages')
-        .update({ seen: true })
-        .eq('sender_id', otherUserId)
-        .eq('receiver_id', user.id)
-        .eq('seen', false);
+        .select('*')
+        .or(conversationFilter())
+        .lt('created_at', messages[0].created_at)
+        .order('created_at', { ascending: false })
+        .limit(MESSAGE_PAGE_SIZE);
+
+      if (error) throw error;
+      const older = ((data as Message[]) || []).slice().reverse();
+      setHasOlder(older.length === MESSAGE_PAGE_SIZE);
+      if (older.length > 0) {
+        setMessages(prev => {
+          const seen = new Set(prev.map(m => m.id));
+          return [...older.filter(m => !seen.has(m.id)), ...prev];
+        });
+      }
     } catch (err) {
-      console.error('Mark seen error:', err);
+      console.error('Fetch older messages error:', err);
+    } finally {
+      setLoadingOlder(false);
     }
-  };
+  }, [user?.id, conversationFilter, messages, loadingOlder, hasOlder]);
+
+  useEffect(() => {
+    fetchMessages();
+    markAsSeen();
+    setupRealtime();
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
+    // These are memoised on user id and the person being messaged, so
+    // this still runs once per conversation — but opening a different
+    // chat now genuinely re-subscribes instead of reusing a channel
+    // bound to the previous one.
+  }, [fetchMessages, markAsSeen, setupRealtime]);
 
   const handleSend = async () => {
     if (!newMessage.trim() || !user?.id || sending) return;
@@ -229,9 +280,9 @@ export default function ChatScreen({ navigation, route }: any) {
       <View style={[styles.container, { paddingTop: insets.top }]}>
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
         <View style={styles.chatHeader}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-            <Text style={styles.backText}>←</Text>
-          </TouchableOpacity>
+          <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
+            <Icon name="back" size={20} color={colors.white} />
+          </PressableScale>
           <Text style={styles.chatHeaderName}>{otherUserName}</Text>
         </View>
         <View style={styles.loadingCenter}>
@@ -247,26 +298,25 @@ export default function ChatScreen({ navigation, route }: any) {
 
       {/* Chat header */}
       <View style={styles.chatHeader}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
 
-        {otherUserAvatar ? (
-          <Image source={{ uri: otherUserAvatar }} style={styles.chatAvatar} />
-        ) : (
-          <View style={[styles.chatAvatarFallback, { backgroundColor: accentColor }]}>
-            <Text style={styles.chatAvatarText}>{getInitials(otherUserName)}</Text>
-          </View>
-        )}
+        <Avatar uri={otherUserAvatar} name={otherUserName} size={40} />
 
         <View style={styles.chatHeaderInfo}>
           <Text style={styles.chatHeaderName} numberOfLines={1}>{otherUserName}</Text>
           <Text style={styles.chatHeaderStatus}>Tap for profile</Text>
         </View>
 
-        <TouchableOpacity style={styles.headerAction} activeOpacity={0.7}>
+        <PressableScale
+          style={styles.headerAction}
+          onPress={() => navigation.navigate('OutgoingCall', {
+            workerName: otherUserName, workerCategory: '', workerId: otherUserId,
+          })}
+        >
           <Text style={styles.headerActionIcon}>📞</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
 
       {/* Messages */}
@@ -298,8 +348,15 @@ export default function ChatScreen({ navigation, route }: any) {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.msgList}
             onContentSizeChange={() => {
-              flatListRef.current?.scrollToEnd({ animated: true });
+              // Prepending older messages also changes content size;
+              // scrolling to the end there would yank the user back down.
+              if (!loadingOlder) flatListRef.current?.scrollToEnd({ animated: true });
             }}
+            onStartReached={loadOlderMessages}
+            onStartReachedThreshold={0.2}
+            ListHeaderComponent={
+              loadingOlder ? <ActivityIndicator color={colors.primary} style={styles.olderLoader} /> : null
+            }
             onLayout={() => {
               flatListRef.current?.scrollToEnd({ animated: false });
             }}
@@ -318,17 +375,16 @@ export default function ChatScreen({ navigation, route }: any) {
               multiline
               maxLength={2000}
             />
-            <TouchableOpacity
+            <PressableScale
               style={[
                 styles.sendBtn,
                 { backgroundColor: newMessage.trim() ? accentColor : colors.bgCard },
               ]}
               onPress={handleSend}
               disabled={!newMessage.trim() || sending}
-              activeOpacity={0.85}
             >
               <Text style={styles.sendText}>{sending ? '...' : '↑'}</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         </View>
       </KeyboardAvoidingView>
@@ -422,6 +478,7 @@ const styles = StyleSheet.create({
   chatBody: {
     flex: 1,
   },
+  olderLoader: { marginVertical: 12 },
   msgList: {
     paddingHorizontal: 12,
     paddingTop: 8,

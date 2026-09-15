@@ -1,9 +1,12 @@
 import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+// Registration is email-only. The phone step that used to sit in front
+// of it was never real: its OTP screen accepted any six digits and no
+// SMS was ever sent, so it added friction and implied a verification
+// that had not happened. Email is the account identifier and is what
+// gets verified now.
 import AccountTypeScreen from '../screens/auth/AccountTypeScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
-import PhoneVerifyScreen from '../screens/auth/PhoneVerifyScreen';
-import OTPScreen from '../screens/auth/OTPScreen';
 import ClientRegStep1Screen from '../screens/auth/ClientRegStep1Screen';
 import ClientRegStep2Screen from '../screens/auth/ClientRegStep2Screen';
 import ClientRegStep3Screen from '../screens/auth/ClientRegStep3Screen';
@@ -15,15 +18,13 @@ import WorkerRegStep4Screen from '../screens/auth/WorkerRegStep4Screen';
 export type AuthStackParamList = {
   AccountType: undefined;
   Login: undefined;
-  PhoneVerify: { accountType: 'client' | 'worker' };
-  OTP: { accountType: 'client' | 'worker'; phoneNumber: string };
-  ClientRegStep1: { phoneNumber: string };
-  ClientRegStep2: { phoneNumber: string; fullName: string; email: string };
-  ClientRegStep3: { phoneNumber: string; fullName: string; email: string; location: string };
-  WorkerRegStep1: { phoneNumber: string };
-  WorkerRegStep2: { phoneNumber: string; fullName: string; email: string; businessName?: string };
-  WorkerRegStep3: { phoneNumber: string; fullName: string; email: string; businessName?: string; category: string; subcategory: string; experience: string };
-  WorkerRegStep4: { phoneNumber: string; fullName: string; email: string; businessName?: string; category: string; subcategory: string; experience: string; serviceArea: string };
+  ClientRegStep1: undefined;
+  ClientRegStep2: { fullName: string; email: string };
+  ClientRegStep3: { fullName: string; email: string; location: string };
+  WorkerRegStep1: undefined;
+  WorkerRegStep2: { fullName: string; email: string; businessName?: string };
+  WorkerRegStep3: { fullName: string; email: string; businessName?: string; category: string; subcategory: string; experience: string };
+  WorkerRegStep4: { fullName: string; email: string; businessName?: string; category: string; subcategory: string; experience: string; serviceArea: string };
 };
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
@@ -39,8 +40,6 @@ export default function AuthNavigator() {
       }}>
       <Stack.Screen name="AccountType" component={AccountTypeScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="PhoneVerify" component={PhoneVerifyScreen} />
-      <Stack.Screen name="OTP" component={OTPScreen} />
       <Stack.Screen name="ClientRegStep1" component={ClientRegStep1Screen} />
       <Stack.Screen name="ClientRegStep2" component={ClientRegStep2Screen} />
       <Stack.Screen name="ClientRegStep3" component={ClientRegStep3Screen} />

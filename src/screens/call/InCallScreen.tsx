@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated,
+  View, Text, StyleSheet, Animated,
   StatusBar, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../../theme';
-import { useAgoraCall } from '../../lib/calling';
+import { EASING, colors , useReducedMotion} from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
+import Icon from '../../components/common/Icon';
+import { useAgoraCall, logCallOutcome } from '../../lib/calling';
+import { useAuth } from '../../context/AuthContext';
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(' ');
@@ -20,13 +23,17 @@ const formatDuration = (sec: number): string => {
 };
 
 export default function InCallScreen({ navigation, route }: any) {
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
-  const { workerName, workerCategory, callId, otherUserId } = route.params;
+  const { user } = useAuth();
+  const { workerName, workerCategory, callId, otherUserId, isCaller } = route.params;
 
   const { connected, remoteJoined, muted, speaker, toggleMute, toggleSpeaker, permissionDenied } =
     useAgoraCall(callId || null, true);
 
   const [duration, setDuration] = useState(0);
+  const hasLoggedRef = useRef(false);
+  const wasRemoteJoinedRef = useRef(false);
 
   const wave1 = useRef(new Animated.Value(0.3)).current;
   const wave2 = useRef(new Animated.Value(0.5)).current;
@@ -43,10 +50,10 @@ export default function InCallScreen({ navigation, route }: any) {
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     }
-  }, [permissionDenied]);
+  }, [permissionDenied, navigation]);
 
   useEffect(() => {
-    Animated.timing(contentOpacity, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    Animated.timing(contentOpacity, { toValue: 1, duration: 400, easing: EASING.OUT, useNativeDriver: true }).start();
 
     // Duration only counts once the other person has actually joined
     // the channel — before that there's nothing to time.
@@ -55,18 +62,46 @@ export default function InCallScreen({ navigation, route }: any) {
       timer = setInterval(() => setDuration(p => p + 1), 1000);
     }
 
+    // The waveform is decoration on top of audio that plays regardless.
+    if (reducedMotion) return;
     const animW = (w: Animated.Value) => Animated.loop(Animated.sequence([
-      Animated.timing(w, { toValue: Math.random() * 0.8 + 0.2, duration: 300 + Math.random() * 400, useNativeDriver: true }),
-      Animated.timing(w, { toValue: Math.random() * 0.4 + 0.1, duration: 300 + Math.random() * 400, useNativeDriver: true }),
+      Animated.timing(w, { toValue: Math.random() * 0.8 + 0.2, duration: 300 + Math.random() * 400, easing: EASING.LINEAR, useNativeDriver: true }),
+      Animated.timing(w, { toValue: Math.random() * 0.4 + 0.1, duration: 300 + Math.random() * 400, easing: EASING.LINEAR, useNativeDriver: true }),
     ]));
 
     const animations = [wave1, wave2, wave3, wave4, wave5].map(w => animW(w));
     if (remoteJoined) animations.forEach(a => a.start());
 
     return () => { if (timer) clearInterval(timer); };
+  }, [remoteJoined, contentOpacity, wave1, wave2, wave3, wave4, wave5]);
+
+  useEffect(() => {
+    if (wasRemoteJoinedRef.current && !remoteJoined) {
+      // The other party left the call — same outcome as us ending it,
+      // just triggered from their side instead of ours.
+      if (isCaller && user?.id && otherUserId && !hasLoggedRef.current) {
+        hasLoggedRef.current = true;
+        logCallOutcome(user.id, otherUserId, 'completed', duration);
+      }
+      navigation.goBack();
+    }
+    wasRemoteJoinedRef.current = remoteJoined;
+    // Only remoteJoined may retrigger this. `duration` ticks every
+    // second, so including it would re-run this block once a second —
+    // logging the call outcome repeatedly and calling goBack() on a
+    // loop. The other values are read at the moment the remote party
+    // leaves, which is exactly when this runs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [remoteJoined]);
 
   const handleEndCall = () => {
+    // Only the caller logs completion — both InCallScreen instances
+    // (caller's and callee's) would otherwise each insert their own
+    // row for the exact same call.
+    if (isCaller && user?.id && otherUserId && !hasLoggedRef.current) {
+      hasLoggedRef.current = true;
+      logCallOutcome(user.id, otherUserId, 'completed', duration);
+    }
     navigation.goBack();
   };
 
@@ -109,34 +144,37 @@ export default function InCallScreen({ navigation, route }: any) {
 
       <View style={[s.bottom, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 30 }]}>
         <View style={s.actionsRow}>
-          <TouchableOpacity style={s.actionBtn} onPress={toggleMute} activeOpacity={0.85}>
+          <PressableScale style={s.actionBtn} onPress={toggleMute}>
             <View style={[s.actionCircle, muted && s.actionCircleActive]}>
-              <Text style={s.actionEmoji}>{muted ? '🔇' : '🎤'}</Text>
+              <Icon name={muted ? 'micOff' : 'mic'} size={26} color={muted ? colors.black : colors.white} />
             </View>
             <Text style={[s.actionLabel, muted && s.actionLabelActive]}>{muted ? 'Unmute' : 'Mute'}</Text>
-          </TouchableOpacity>
+          </PressableScale>
 
-          <TouchableOpacity style={s.actionBtn} onPress={toggleSpeaker} activeOpacity={0.85}>
+          <PressableScale style={s.actionBtn} onPress={toggleSpeaker}>
             <View style={[s.actionCircle, speaker && s.actionCircleActive]}>
-              <Text style={s.actionEmoji}>{speaker ? '🔊' : '🔈'}</Text>
+              <Icon name={speaker ? 'speaker' : 'speakerOff'} size={26} color={speaker ? colors.black : colors.white} />
             </View>
             <Text style={[s.actionLabel, speaker && s.actionLabelActive]}>Speaker</Text>
-          </TouchableOpacity>
+          </PressableScale>
 
-          <TouchableOpacity
+          <PressableScale
             style={s.actionBtn}
             onPress={() => { if (otherUserId) navigation.navigate('Chat', { otherUserId, otherUserName: workerName, otherUserAvatar: null }); }}
-            activeOpacity={0.85}
           >
-            <View style={s.actionCircle}><Text style={s.actionEmoji}>💬</Text></View>
+            <View style={s.actionCircle}><Icon name="inbox" size={26} color={colors.white} /></View>
             <Text style={s.actionLabel}>Message</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
 
-        <TouchableOpacity style={s.endBtn} onPress={handleEndCall} activeOpacity={0.85}>
-          <View style={s.endInner}><Text style={s.endIcon}>📞</Text></View>
+        <PressableScale style={s.endBtn} onPress={handleEndCall}>
+          <View style={s.endInner}>
+            <View style={s.endIconRotate}>
+              <Icon name="callEnd" size={30} color={colors.white} filled />
+            </View>
+          </View>
           <Text style={s.endLabel}>End Call</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );
@@ -167,6 +205,7 @@ const s = StyleSheet.create({
   actionLabel: { fontSize: 11, color: colors.white, opacity: 0.5 },
   actionLabelActive: { color: colors.primary, opacity: 1 },
   endBtn: { alignItems: 'center' },
+  endIconRotate: { transform: [{ rotate: '135deg' }] },
   endInner: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#EF4444', alignItems: 'center', justifyContent: 'center', transform: [{ rotate: '135deg' }], shadowColor: '#EF4444', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 10, elevation: 8 },
   endIcon: { fontSize: 28 },
   endLabel: { fontSize: 12, color: colors.white, opacity: 0.6, marginTop: 10 },

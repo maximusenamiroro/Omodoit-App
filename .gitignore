@@ -74,3 +74,13 @@ yarn-error.log
 !.yarn/releases
 !.yarn/sdks
 !.yarn/versions
+
+# Local environment (never commit)
+.env
+
+# Supabase CLI local state
+supabase/.temp/
+
+# Python bytecode from scripts/
+__pycache__/
+*.pyc

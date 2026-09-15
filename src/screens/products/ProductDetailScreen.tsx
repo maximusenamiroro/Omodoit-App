@@ -1,32 +1,89 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Platform, Alert, Image,
+  View, Text, StyleSheet, ScrollView,
+  Animated, StatusBar, Platform, Alert, Image, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing } from '../../theme';
+import Video from 'react-native-video';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 
 export default function ProductDetailScreen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { product } = route.params;
+
+  // Shares a link plus the seller's name and price, because a bare URL
+  // pasted into WhatsApp tells the recipient nothing about what it is.
+  const handleShare = async () => {
+    const price = product.price != null ? `₦${Number(product.price).toLocaleString()}` : 'Price on request';
+    try {
+      await Share.share({
+        message:
+          `${product.title} — ${price}\n` +
+          `by ${product.sellerName || 'a worker'} on Omodoit\n\n` +
+          `https://www.omodoit.com/product/${product.id}`,
+      });
+    } catch {
+      // The user dismissing the share sheet throws here. Nothing to say.
+    }
+  };
   const [ordering, setOrdering] = useState(false);
+  const [muted, setMuted] = useState(true);
+
+  // A service is booked, a product is ordered — two different tables and
+  // two different words on the button. Rows created before products.type
+  // existed have no type at all, and every one of those is a product.
+  const isService = product.type === 'service';
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const contentSlide = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.stagger(200, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(contentOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(contentOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(contentSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [contentOpacity, contentSlide, headerOpacity]);
+
+  // Booking reuses HireWorkerScreen rather than inserting a hire_request
+  // here: that screen already collects location, date and budget, sends
+  // the notification, and is what the worker's Workstation expects.
+  const handleBook = async () => {
+    if (!user?.id) {
+      Alert.alert('Please Log In', 'You need to be logged in to book a service.');
+      return;
+    }
+
+    let rating = 0;
+    let reviewCount = 0;
+    try {
+      const { data: reviewRows } = await supabase.from('reviews').select('rating').eq('worker_id', product.workerId);
+      const ratings = (reviewRows || []).map((r: any) => r.rating);
+      reviewCount = ratings.length;
+      rating = reviewCount > 0 ? ratings.reduce((a: number, b: number) => a + b, 0) / reviewCount : 0;
+    } catch {
+      // Non-fatal: the booking form only shows these, it doesn't need them.
+    }
+
+    navigation.navigate('HireWorker', {
+      worker: {
+        id: product.workerId,
+        name: product.sellerName || 'Worker',
+        rating: Number(rating.toFixed(1)),
+        reviews: reviewCount,
+      },
+      subcategoryName: product.title,
+    });
+  };
 
   const handleOrder = async () => {
     if (!user?.id) {
@@ -106,22 +163,38 @@ export default function ProductDetailScreen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[st.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
-        <Text style={st.headerTitle}>Product Details</Text>
-        <TouchableOpacity style={st.shareBtn} activeOpacity={0.7}>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
+        <Text style={st.headerTitle}>{isService ? 'Service Details' : 'Product Details'}</Text>
+        <PressableScale style={st.shareBtn}>
           <Text style={st.shareIcon}>↗️</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </Animated.View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}>
         {/* Product image */}
         <View style={[st.imageContainer, { backgroundColor: (product.color || colors.primary) + '15' }]}>
-          {product.imageUrl ? (
+          {product.videoUrl ? (
+            <PressableScale onPress={() => setMuted(m => !m)} style={st.heroImage}>
+              <Video
+                source={{ uri: product.videoUrl, type: 'mp4' }}
+                style={st.heroImage}
+                resizeMode="cover"
+                repeat
+                muted={muted}
+                poster={product.imageUrl || undefined}
+                useTextureView={Platform.OS === 'android'}
+                onError={(e: any) => console.log('Product video error:', JSON.stringify(e))}
+              />
+              <View style={st.muteBadge}>
+                <Text style={st.muteBadgeText}>{muted ? '🔇 Tap for sound' : '🔊'}</Text>
+              </View>
+            </PressableScale>
+          ) : product.imageUrl ? (
             <Image source={{ uri: product.imageUrl }} style={st.heroImage} />
           ) : (
-            <Text style={st.imageEmoji}>📦</Text>
+            <Text style={st.imageEmoji}>{isService ? '🛠️' : '📦'}</Text>
           )}
         </View>
 
@@ -137,11 +210,11 @@ export default function ProductDetailScreen({ navigation, route }: any) {
             </View>
             <View>
               <Text style={st.sellerName}>@{product.sellerName}</Text>
-              <Text style={st.sellerLabel}>Seller</Text>
+              <Text style={st.sellerLabel}>{isService ? 'Service provider' : 'Seller'}</Text>
             </View>
-            <TouchableOpacity style={st.viewProfileBtn} onPress={viewSellerProfile} activeOpacity={0.85}>
+            <PressableScale style={st.viewProfileBtn} onPress={viewSellerProfile}>
               <Text style={st.viewProfileText}>View Profile</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
 
           <View style={st.section}>
@@ -155,8 +228,8 @@ export default function ProductDetailScreen({ navigation, route }: any) {
             <Text style={st.sectionTitle}>Details</Text>
             <View style={st.sectionCard}>
               {[
-                { label: 'Category', value: product.category || 'General' },
-                { label: 'Delivery', value: 'On-site service' },
+                { label: 'Type', value: isService ? 'Service' : 'Product' },
+                { label: 'Delivery', value: isService ? 'On-site service' : 'Arranged with seller' },
                 { label: 'Availability', value: 'Available now' },
                 { label: 'Commission', value: '0% - full payment to worker' },
               ].map((item, i) => (
@@ -171,12 +244,18 @@ export default function ProductDetailScreen({ navigation, route }: any) {
       </ScrollView>
 
       <View style={[st.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={st.msgBtn} onPress={goToChat} activeOpacity={0.85}>
+        <PressableScale style={st.msgBtn} onPress={goToChat}>
           <Text style={st.msgIcon}>💬</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[st.orderBtn, { backgroundColor: product.color || colors.primary }, ordering && { opacity: 0.6 }]} onPress={handleOrder} disabled={ordering} activeOpacity={0.85}>
-          <Text style={st.orderBtnText}>{ordering ? 'Placing Order…' : '🛒 Order Now'}</Text>
-        </TouchableOpacity>
+        </PressableScale>
+        <PressableScale
+          style={[st.orderBtn, { backgroundColor: product.color || colors.primary }, ordering && { opacity: 0.6 }]}
+          onPress={isService ? handleBook : handleOrder}
+          disabled={ordering}
+        >
+          <Text style={st.orderBtnText}>
+            {isService ? '📅 Book Now' : ordering ? 'Placing Order…' : '🛒 Order Now'}
+          </Text>
+        </PressableScale>
       </View>
     </View>
   );
@@ -194,6 +273,8 @@ const st = StyleSheet.create({
   imageContainer: { height: 240, alignItems: 'center', justifyContent: 'center' },
   heroImage: { width: '100%', height: '100%' },
   imageEmoji: { fontSize: 64, opacity: 0.5 },
+  muteBadge: { position: 'absolute', right: 12, bottom: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12, backgroundColor: '#00000080' },
+  muteBadgeText: { fontSize: 11, color: '#fff', fontWeight: '600' },
 
   content: { padding: spacing.screenPadding },
   title: { fontSize: 22, fontWeight: '700', color: colors.textPrimary, marginBottom: 6 },

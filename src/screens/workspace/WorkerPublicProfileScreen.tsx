@@ -1,10 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  Animated, StatusBar, Platform, ActivityIndicator, Dimensions,
+  View, Text, StyleSheet, ScrollView, Share,
+  Animated, StatusBar, Platform, ActivityIndicator, Dimensions, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
+import Icon from '../../components/common/Icon';
 import { supabase } from '../../api/supabase';
 
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -27,9 +29,28 @@ interface ReviewRow {
 interface ReelRow {
   id: string;
   likes: number;
+  thumbnailUrl: string | null;
+}
+
+// What this worker offers. The profile previews the two most recent and
+// links to the rest — a worker with twenty listings shouldn't push the
+// reviews off the bottom of the page.
+const POST_PREVIEW_COUNT = 2;
+
+interface PostRow {
+  id: string;
+  type: 'service' | 'product';
+  title: string;
+  description: string | null;
+  price: number | null;
+  imageUrl: string | null;
+  videoUrl: string | null;
+  category: string | null;
 }
 
 export default function WorkerPublicProfileScreen({ navigation, route }: any) {
+  const entrance = useEntrance();
+
   const insets = useSafeAreaInsets();
   const { worker, color, subcategoryName } = route.params;
   const accentColor = color || colors.primary;
@@ -38,6 +59,8 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [reels, setReels] = useState<ReelRow[]>([]);
   const [reelsLoading, setReelsLoading] = useState(true);
+  const [posts, setPosts] = useState<PostRow[]>([]);
+  const [postsLoading, setPostsLoading] = useState(true);
 
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerScale = useRef(new Animated.Value(0.95)).current;
@@ -45,17 +68,17 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
   const contentSlide = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
+    Animated.stagger(entrance.stagger, [
       Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(headerScale, { toValue: 1, damping: 15, stiffness: 100, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(contentOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(contentOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(contentSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [contentOpacity, contentSlide, headerOpacity, headerScale]);
 
   // Real reviews for this worker. Degrades gracefully to an empty list
   // if the reviews table/columns don't match what's queried here,
@@ -102,13 +125,13 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
       try {
         const { data, error } = await supabase
           .from('reels')
-          .select('id, likes')
+          .select('id, likes, thumbnail_url')
           .eq('user_id', worker.id)
           .order('created_at', { ascending: false })
           .limit(9);
 
         if (error) throw error;
-        setReels((data || []).map((r: any) => ({ id: r.id, likes: r.likes || 0 })));
+        setReels((data || []).map((r: any) => ({ id: r.id, likes: r.likes || 0, thumbnailUrl: r.thumbnail_url || null })));
       } catch (err) {
         console.warn('Could not load reels (non-fatal):', err);
         setReels([]);
@@ -120,6 +143,69 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
     fetchReels();
   }, [worker.id]);
 
+  useEffect(() => {
+    const fetchPosts = async () => {
+      setPostsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select('id, type, title, description, price, image_url, video_url, category')
+          .eq('worker_id', worker.id)
+          .order('created_at', { ascending: false })
+          .limit(POST_PREVIEW_COUNT + 1);
+
+        if (error) throw error;
+        setPosts((data || []).map((p: any) => ({
+          id: p.id,
+          type: p.type === 'service' ? 'service' : 'product',
+          title: p.title || 'Untitled',
+          description: p.description || null,
+          price: p.price != null ? Number(p.price) : null,
+          imageUrl: p.image_url || null,
+          videoUrl: p.video_url || null,
+          category: p.category || null,
+        })));
+      } catch (err) {
+        console.warn('Could not load posts (non-fatal):', err);
+        setPosts([]);
+      } finally {
+        setPostsLoading(false);
+      }
+    };
+
+    fetchPosts();
+  }, [worker.id]);
+
+  const openPost = (post: PostRow) => {
+    navigation.navigate('ProductDetail', {
+      product: {
+        id: post.id,
+        workerId: worker.id,
+        type: post.type,
+        title: post.title,
+        description: post.description,
+        price: post.price,
+        imageUrl: post.imageUrl,
+        videoUrl: post.videoUrl,
+        category: post.category,
+        color: accentColor,
+        sellerName: worker.name,
+      },
+    });
+  };
+
+  // Sharing a worker is how this app spreads — someone recommends a
+  // plumber to a friend. The button was rendered but did nothing.
+  const shareProfile = async () => {
+    try {
+      await Share.share({
+        message: `${worker.name || 'This worker'} on Omodoit — see their work and book them.\nhttps://www.omodoit.com`,
+      });
+    } catch {
+      // Sheet dismissed. Not an error.
+    }
+  };
+
   const goToChat = () => {
     navigation.navigate('Chat', { otherUserId: worker.id, otherUserName: worker.name, otherUserAvatar: null });
   };
@@ -130,13 +216,18 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
 
       {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
         <Text style={styles.headerTitle}>Worker Profile</Text>
-        <TouchableOpacity style={styles.shareBtn} activeOpacity={0.7}>
-          <Text style={styles.shareIcon}>↗️</Text>
-        </TouchableOpacity>
+        <PressableScale
+          style={styles.shareBtn}
+          onPress={shareProfile}
+          accessibilityRole="button"
+          accessibilityLabel="Share this profile"
+        >
+          <Icon name="share" size={18} color={colors.textPrimary} />
+        </PressableScale>
       </Animated.View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 120 : 100 }}>
@@ -178,6 +269,51 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
             </View>
           </View>
 
+          {/* Services & products this worker offers */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Services & Products</Text>
+            {postsLoading ? (
+              <ActivityIndicator color={accentColor} style={{ marginVertical: 20 }} />
+            ) : posts.length === 0 ? (
+              <View style={styles.sectionCard}>
+                <Text style={styles.bioText}>Nothing posted yet.</Text>
+              </View>
+            ) : (
+              <>
+                {posts.slice(0, POST_PREVIEW_COUNT).map(post => (
+                  <PressableScale key={post.id} style={styles.postCard} onPress={() => openPost(post)}>
+                    {post.imageUrl ? (
+                      <Image source={{ uri: post.imageUrl }} style={styles.postThumb} />
+                    ) : (
+                      <View style={[styles.postThumb, styles.postThumbFallback]}>
+                        <Text style={styles.postEmoji}>{post.videoUrl ? '🎬' : post.type === 'service' ? '🛠️' : '📦'}</Text>
+                      </View>
+                    )}
+                    <View style={styles.postInfo}>
+                      <Text style={styles.postTitle} numberOfLines={1}>{post.title}</Text>
+                      <Text style={styles.postPrice}>
+                        {post.price != null ? `₦${post.price.toLocaleString()}` : 'Price on request'}
+                      </Text>
+                    </View>
+                    <View style={[styles.postAction, { backgroundColor: accentColor + '15', borderColor: accentColor + '30' }]}>
+                      <Text style={[styles.postActionText, { color: accentColor }]}>
+                        {post.type === 'service' ? 'Book' : 'Order'}
+                      </Text>
+                    </View>
+                  </PressableScale>
+                ))}
+                {posts.length > POST_PREVIEW_COUNT && (
+                  <PressableScale
+                    style={styles.showMoreBtn}
+                    onPress={() => navigation.navigate('MyProducts', { workerId: worker.id, workerName: worker.name })}
+                  >
+                    <Text style={[styles.showMoreText, { color: accentColor }]}>Show more →</Text>
+                  </PressableScale>
+                )}
+              </>
+            )}
+          </View>
+
           {/* Reels — real work, so a client can see what they're
               actually booking before committing */}
           <View style={styles.section}>
@@ -191,15 +327,26 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
             ) : (
               <View style={styles.reelsGrid}>
                 {reels.map(reel => (
-                  <TouchableOpacity key={reel.id} style={styles.reelCard} activeOpacity={0.85}>
+                  <PressableScale
+                    key={reel.id}
+                    style={styles.reelCard}
+                    onPress={() => navigation.navigate('Reels', { focusReelId: reel.id })}
+                    accessibilityRole="button"
+                    accessibilityLabel="Play this reel"
+                  >
                     <View style={styles.reelThumb}>
-                      <Text style={styles.reelPlayIcon}>▶</Text>
+                      {/* The grid used to draw a play triangle over an
+                          empty box and do nothing when tapped. Now it
+                          shows the reel it opens. */}
+                      {reel.thumbnailUrl
+                        ? <Image source={{ uri: reel.thumbnailUrl }} style={styles.reelThumbImg} />
+                        : <Text style={styles.reelPlayIcon}>▶</Text>}
                     </View>
                     <View style={styles.reelOverlay}>
                       <Text style={styles.reelStatIcon}>❤</Text>
                       <Text style={styles.reelStatText}>{reel.likes}</Text>
                     </View>
-                  </TouchableOpacity>
+                  </PressableScale>
                 ))}
               </View>
             )}
@@ -262,23 +409,21 @@ export default function WorkerPublicProfileScreen({ navigation, route }: any) {
 
       {/* Bottom action bar */}
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={styles.msgActionBtn} onPress={goToChat} activeOpacity={0.85}>
+        <PressableScale style={styles.msgActionBtn} onPress={goToChat}>
           <Text style={styles.msgActionIcon}>💬</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </PressableScale>
+        <PressableScale
           style={styles.callActionBtn}
           onPress={() => navigation.navigate('OutgoingCall', { workerName: worker.name, workerCategory: subcategoryName, workerId: worker.id })}
-          activeOpacity={0.85}
         >
           <Text style={styles.callActionIcon}>📞</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+        </PressableScale>
+        <PressableScale
           style={[styles.bookActionBtn, { backgroundColor: accentColor }]}
           onPress={() => navigation.navigate('HireWorker', { worker, subcategoryName })}
-          activeOpacity={0.85}
         >
           <Text style={styles.bookActionText}>📋 Book Now</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );
@@ -312,8 +457,20 @@ const styles = StyleSheet.create({
   sectionCard: { backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 16 },
   bioText: { fontSize: 13, color: colors.textSecondary, lineHeight: 20 },
 
+  postCard: { flexDirection: 'row', alignItems: 'center', padding: 12, marginBottom: 10, borderRadius: 14, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  postThumb: { width: 48, height: 48, borderRadius: 12, marginRight: 12 },
+  postThumbFallback: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white + '08' },
+  postEmoji: { fontSize: 20 },
+  postInfo: { flex: 1 },
+  postTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  postPrice: { fontSize: 12, color: colors.textSecondary, marginTop: 3 },
+  postAction: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1 },
+  postActionText: { fontSize: 12, fontWeight: '700' },
+  showMoreBtn: { paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },
+  showMoreText: { fontSize: 12, fontWeight: '700' },
   reelsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   reelCard: { width: REEL_W, aspectRatio: 9 / 16, backgroundColor: colors.bgCard, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
+  reelThumbImg: { width: '100%', height: '100%' },
   reelThumb: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
   reelPlayIcon: { fontSize: 20, color: colors.white, opacity: 0.5 },
   reelOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.6)' },

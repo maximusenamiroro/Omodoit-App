@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   TextInput, Animated, StatusBar, Platform, Alert,
-  KeyboardAvoidingView, Dimensions,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 import { CATEGORIES as CATEGORY_LIST } from '../../lib/categories';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { generateBatchId } from '../../lib/db';
 
-const { width: SCREEN_W } = Dimensions.get('window');
 
 // Derived from the shared taxonomy so this always matches exactly what
 // workers can register under and what shows up when browsing — this
@@ -25,6 +26,7 @@ const CATEGORY_ICONS: Record<string, string> = Object.fromEntries(
 );
 
 export default function FlashJobScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
@@ -41,20 +43,22 @@ export default function FlashJobScreen({ navigation }: any) {
   const [focused, setFocused] = useState('');
   const [catExpanded, setCatExpanded] = useState('');
 
-  const scrollRef = useRef(null);
+  // Typed, otherwise useRef(null) infers `never` and every
+  // scrollRef.current?.scrollTo(...) below is a type error.
+  const scrollRef = useRef<ScrollView>(null);
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
   const formSlide = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, [step]);
+  }, [step, formOpacity, formSlide, headerOpacity]);
 
   const goNext = () => {
     if (!category || !subcategory) {
@@ -98,7 +102,7 @@ export default function FlashJobScreen({ navigation }: any) {
       // just without a shared batch ID to auto-cancel the others once
       // someone accepts. That refinement needs an extra column on
       // hire_requests to track later.
-      const { data: matchingWorkers, error: matchError } = await supabase
+      let { data: matchingWorkers, error: matchError } = await supabase
         .from('profiles')
         .select('id')
         .eq('role', 'worker')
@@ -108,10 +112,31 @@ export default function FlashJobScreen({ navigation }: any) {
 
       if (matchError) throw matchError;
 
+      // No exact subcategory match — broaden to anyone in the same
+      // general category rather than failing outright. Reaching some
+      // relevant workers is better than reaching none over a narrow
+      // mismatch (e.g. the client picked a slightly different
+      // specialty within the same trade than any worker has listed).
+      let broadenedMatch = false;
+      if (!matchingWorkers || matchingWorkers.length === 0) {
+        const { data: categoryWorkers, error: categoryError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'worker')
+          .eq('category', category)
+          .limit(20);
+
+        if (categoryError) throw categoryError;
+        if (categoryWorkers && categoryWorkers.length > 0) {
+          matchingWorkers = categoryWorkers;
+          broadenedMatch = true;
+        }
+      }
+
       if (!matchingWorkers || matchingWorkers.length === 0) {
         Alert.alert(
           'No Workers Available',
-          `There are no ${subcategory} workers on Omodoit yet in this category. Try Browse Workers instead, or check back soon.`
+          `There are no ${category} workers on Omodoit yet. Try Browse Workers instead, or check back soon.`
         );
         setSubmitting(false);
         return;
@@ -139,7 +164,9 @@ export default function FlashJobScreen({ navigation }: any) {
 
       Alert.alert(
         '⚡ Flash Job Sent!',
-        `Your request has been flashed to ${matchingWorkers.length} nearby ${subcategory} worker${matchingWorkers.length === 1 ? '' : 's'}. The first to accept wins!`,
+        broadenedMatch
+          ? `No exact ${subcategory} match, so your request went to ${matchingWorkers.length} nearby ${category} worker${matchingWorkers.length === 1 ? '' : 's'} instead. The first to accept wins!`
+          : `Your request has been flashed to ${matchingWorkers.length} nearby ${subcategory} worker${matchingWorkers.length === 1 ? '' : 's'}. The first to accept wins!`,
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (err) {
@@ -150,7 +177,6 @@ export default function FlashJobScreen({ navigation }: any) {
     }
   };
 
-  const subs = category ? (CATEGORIES[category] || []) : [];
 
   return (
     <KeyboardAvoidingView
@@ -161,9 +187,9 @@ export default function FlashJobScreen({ navigation }: any) {
 
       {/* Header */}
       <Animated.View style={[st.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={st.backBtn} onPress={() => step === 1 ? navigation.goBack() : goBack()} activeOpacity={0.7}>
-          <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        <PressableScale style={st.backBtn} onPress={() => step === 1 ? navigation.goBack() : goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
         <View style={st.headerCenter}>
           <View style={st.flashBadge}>
             <Text style={st.flashBadgeIcon}>⚡</Text>
@@ -223,31 +249,29 @@ export default function FlashJobScreen({ navigation }: any) {
                 const isExpanded = catExpanded === cat;
                 return (
                   <View key={cat}>
-                    <TouchableOpacity
+                    <PressableScale
                       style={[st.catRow, isSelected && st.catRowSelected]}
                       onPress={() => {
                         setCategory(cat);
                         setCatExpanded(isExpanded ? '' : cat);
                         if (category !== cat) setSubcategory('');
                       }}
-                      activeOpacity={0.7}
                     >
                       <Text style={st.catEmoji}>{CATEGORY_ICONS[cat] || '📦'}</Text>
                       <Text style={[st.catName, isSelected && st.catNameSelected]}>{cat}</Text>
                       <Text style={st.catArrow}>{isExpanded ? '⌃' : '⌄'}</Text>
-                    </TouchableOpacity>
+                    </PressableScale>
 
                     {isExpanded && (
                       <View style={st.subsGrid}>
                         {(CATEGORIES[cat] || []).map(sub => (
-                          <TouchableOpacity
+                          <PressableScale
                             key={sub}
                             style={[st.subChip, subcategory === sub && st.subChipActive]}
                             onPress={() => setSubcategory(sub)}
-                            activeOpacity={0.85}
                           >
                             <Text style={[st.subChipText, subcategory === sub && st.subChipTextActive]}>{sub}</Text>
-                          </TouchableOpacity>
+                          </PressableScale>
                         ))}
                       </View>
                     )}
@@ -300,14 +324,13 @@ export default function FlashJobScreen({ navigation }: any) {
                 <Text style={st.fieldCardTitle}>💰 Budget</Text>
                 <View style={st.budgetTypes}>
                   {['Fixed Price', 'Price Range', 'Negotiable'].map(bt => (
-                    <TouchableOpacity
+                    <PressableScale
                       key={bt}
                       style={[st.budgetChip, budgetType === bt && st.budgetChipActive]}
                       onPress={() => setBudgetType(bt)}
-                      activeOpacity={0.85}
                     >
                       <Text style={[st.budgetChipText, budgetType === bt && st.budgetChipTextActive]}>{bt}</Text>
-                    </TouchableOpacity>
+                    </PressableScale>
                   ))}
                 </View>
 
@@ -385,15 +408,14 @@ export default function FlashJobScreen({ navigation }: any) {
       {/* Bottom button */}
       <View style={[st.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
         {step === 2 && (
-          <TouchableOpacity style={st.backStepBtn} onPress={goBack} activeOpacity={0.85}>
+          <PressableScale style={st.backStepBtn} onPress={goBack}>
             <Text style={st.backStepText}>← Back</Text>
-          </TouchableOpacity>
+          </PressableScale>
         )}
-        <TouchableOpacity
+        <PressableScale
           style={[st.nextBtn, step === 2 && { flex: 1 }, submitting && { opacity: 0.6 }]}
           onPress={step === 1 ? goNext : submitFlash}
           disabled={submitting}
-          activeOpacity={0.85}
         >
           {step === 1 ? (
             <Text style={st.nextBtnText}>Next →</Text>
@@ -403,7 +425,7 @@ export default function FlashJobScreen({ navigation }: any) {
               <Text style={st.nextBtnText}>{submitting ? 'Sending…' : 'Flash Job'}</Text>
             </View>
           )}
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </KeyboardAvoidingView>
   );

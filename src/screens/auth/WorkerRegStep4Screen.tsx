@@ -1,16 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TextInput,
   Animated, KeyboardAvoidingView, Platform, StatusBar,
   ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { upsertWithRetry } from '../../lib/db';
 
 export default function WorkerRegStep4Screen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const params = route.params;
   const { setDirectAuth, beginRegistration, endRegistration } = useAuth();
@@ -32,19 +35,19 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
   const buttonOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
+    Animated.stagger(entrance.stagger, [
       Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(headerSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(headerSlide, { toValue: 0, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(commissionOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(commissionOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(buttonOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [buttonOpacity, commissionOpacity, formOpacity, formSlide, headerOpacity, headerSlide]);
 
   const getPasswordStrength = () => {
     if (password.length === 0) return { label: '', color: colors.textMuted, width: '0%' };
@@ -76,19 +79,49 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
     beginRegistration();
 
     try {
+      // The profile fields ride along as user_metadata so the account
+      // can still be rebuilt correctly if the profiles write below
+      // fails (dropped connection, or email confirmation leaving us
+      // without a session). Without this, AuthContext's recovery path
+      // had nothing to go on and defaulted every affected business to
+      // a client account, permanently.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: params.email,
         password: password,
+        options: {
+          data: {
+            role: 'worker',
+            full_name: params.fullName,
+            location: params.location,
+            business_name: params.businessName,
+            category: params.category,
+            subcategory: params.subcategory,
+          },
+        },
       });
 
       if (authError) throw authError;
+
+      // With email confirmation enabled, signUp() returns a user but no
+      // session. Nothing signed in means auth.uid() is null, so the
+      // profile insert below would be refused by RLS — and every field
+      // needed to build it is already stored as user_metadata, which
+      // AuthContext writes out on first successful sign-in. So stop
+      // here and send them to their inbox.
+      if (!authData.session) {
+        setLoading(false);
+        Alert.alert(
+          'Check Your Email',
+          `We sent a confirmation link to ${params.email}. Open it to activate your account, then log in.`,
+          [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        );
+        return;
+      }
 
       if (authData.user) {
         const profileData = {
           id: authData.user.id,
           full_name: params.fullName,
-          phone: params.phoneNumber,
-          phone_verified: true,
           location: params.location,
           role: 'worker' as const,
           business_name: params.businessName,
@@ -120,7 +153,6 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
           full_name: params.fullName,
           avatar_url: null,
           role: 'worker',
-          phone: params.phoneNumber,
           location: params.location,
           verification_level: 1,
           verification_status: 'basic',
@@ -153,13 +185,12 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
     >
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      <TouchableOpacity
+      <PressableScale
         style={styles.backButton}
         onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
       >
-        <Text style={styles.backText}>←</Text>
-      </TouchableOpacity>
+        <Icon name="back" size={20} color={colors.white} />
+      </PressableScale>
 
       <View style={styles.progressContainer}>
         <Text style={styles.stepText}>Step 4 of 4</Text>
@@ -225,9 +256,9 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
                 onFocus={() => setFocused('password')}
                 onBlur={() => setFocused('')}
               />
-              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
+              <PressableScale onPress={() => setShowPassword(!showPassword)} style={styles.eyeButton}>
                 <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
             {password.length > 0 && (
               <View style={styles.strengthContainer}>
@@ -258,9 +289,9 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
                 onFocus={() => setFocused('confirm')}
                 onBlur={() => setFocused('')}
               />
-              <TouchableOpacity onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeButton}>
+              <PressableScale onPress={() => setShowConfirm(!showConfirm)} style={styles.eyeButton}>
                 <Text style={styles.eyeText}>{showConfirm ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
             {confirmPassword.length > 0 && password !== confirmPassword && (
               <Text style={styles.errorHint}>Passwords do not match</Text>
@@ -271,10 +302,9 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
           </View>
 
           {/* Terms */}
-          <TouchableOpacity
+          <PressableScale
             style={styles.termsRow}
             onPress={() => setAgreedToTerms(!agreedToTerms)}
-            activeOpacity={0.7}
           >
             <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
               {agreedToTerms && <Text style={styles.checkmark}>✓</Text>}
@@ -282,12 +312,11 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
             <Text style={styles.termsText}>
               I agree to the <Text style={styles.termsLink}>Terms of Use</Text> and <Text style={styles.termsLink}>Privacy Policy</Text>
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
 
-          <TouchableOpacity
+          <PressableScale
             style={styles.termsRow}
             onPress={() => setAgreedToConduct(!agreedToConduct)}
-            activeOpacity={0.7}
           >
             <View style={[styles.checkbox, agreedToConduct && styles.checkboxChecked]}>
               {agreedToConduct && <Text style={styles.checkmark}>✓</Text>}
@@ -295,7 +324,7 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
             <Text style={styles.termsText}>
               I will provide honest and quality services to all clients
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         {/* Commission card — the hook */}
@@ -312,21 +341,20 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
 
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: buttonOpacity }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.createButton,
               !isFormValid() && styles.createButtonDisabled,
             ]}
             onPress={handleCreateAccount}
             disabled={!isFormValid() || loading}
-            activeOpacity={0.85}
           >
             {loading ? (
               <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.createText}>Create My Worker Account</Text>
             )}
-          </TouchableOpacity>
+          </PressableScale>
 
           <Text style={styles.securityNote}>
             🔒 Your password is encrypted and never stored in plain text

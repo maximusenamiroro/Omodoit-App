@@ -1,17 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TextInput,
   Animated, KeyboardAvoidingView, Platform, StatusBar,
   ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
+import { PASSWORD_RESET_URL } from '../../config/site';
 
 export default function LoginScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
 
-  const [emailOrPhone, setEmailOrPhone] = useState('');
+  // Email is the account identifier. It always was — the phone branch
+  // here only ever ended in "please use your email instead".
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -28,40 +34,26 @@ export default function LoginScreen({ navigation }: any) {
   const registerOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(120, [
+    Animated.stagger(entrance.stagger, [
       Animated.parallel([
-        Animated.timing(logoOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(logoScale, { toValue: 1, damping: 15, stiffness: 120, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(titleOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(titleSlide, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(titleOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(titleSlide, { toValue: 0, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.timing(registerOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(buttonOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(registerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
-  }, []);
-
-  // Detect if input is phone or email
-  const isPhoneInput = () => {
-    const cleaned = emailOrPhone.replace(/\s/g, '');
-    return /^[0-9+]/.test(cleaned) && cleaned.length >= 4;
-  };
-
-  // Convert phone to international format
-  const formatPhoneToInternational = (phone: string) => {
-    let cleaned = phone.replace(/[^0-9+]/g, '');
-    if (cleaned.startsWith('0')) cleaned = '+234' + cleaned.slice(1);
-    if (!cleaned.startsWith('+')) cleaned = '+234' + cleaned;
-    return cleaned;
-  };
+  }, [buttonOpacity, formOpacity, formSlide, logoOpacity, logoScale, registerOpacity, titleOpacity, titleSlide]);
 
   const isFormValid = () => {
-    return emailOrPhone.trim().length >= 4 && password.length >= 6;
+    return email.trim().length >= 4 && password.length >= 6;
   };
 
   const handleLogin = async () => {
@@ -70,62 +62,10 @@ export default function LoginScreen({ navigation }: any) {
     setLoading(true);
 
     try {
-      let loginEmail = emailOrPhone.trim().toLowerCase();
-
-      // If user entered a phone number, look up their email first
-      if (isPhoneInput()) {
-        const phone = formatPhoneToInternational(emailOrPhone);
-
-        const { data: profileData, error: lookupError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('phone', phone)
-          .maybeSingle();
-
-        if (lookupError) throw lookupError;
-
-        if (!profileData) {
-          // Security: do not reveal that the phone does not exist
-          // Use the same generic error message
-          Alert.alert(
-            'Login Failed',
-            'The email/phone or password you entered is incorrect. Please check and try again.'
-          );
-          setLoading(false);
-          return;
-        }
-
-        // Get the email from auth.users via the profile id
-        const { data: userData, error: userError } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('id', profileData.id)
-          .maybeSingle();
-
-        if (userError || !userData) {
-          Alert.alert(
-            'Login Failed',
-            'The email/phone or password you entered is incorrect. Please check and try again.'
-          );
-          setLoading(false);
-          return;
-        }
-
-        // We need the email to sign in — get it from Supabase auth
-        // Since we cannot query auth.users directly from the client,
-        // we try signing in with the phone as email (won't work)
-        // Instead, ask user to use their email
-        Alert.alert(
-          'Use Email to Login',
-          'For security, please log in with your email address and password. Phone login will be available in a future update.',
-          [{ text: 'OK' }]
-        );
-        setLoading(false);
-        return;
-      }
+      const loginEmail = email.trim().toLowerCase();
 
       // Login with email + password
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { error } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: password,
       });
@@ -157,7 +97,7 @@ export default function LoginScreen({ navigation }: any) {
   };
 
   const handleForgotPassword = async () => {
-    if (!emailOrPhone.trim() || isPhoneInput()) {
+    if (!email.trim()) {
       Alert.alert(
         'Enter Email',
         'Please enter your email address above, then tap Forgot Password to receive a reset link.'
@@ -166,8 +106,13 @@ export default function LoginScreen({ navigation }: any) {
     }
 
     try {
+      // Without redirectTo, the link lands on the site's homepage, which
+      // has no form to set a new password — the reset token arrives and
+      // nothing can be done with it. The website's own reset flow passes
+      // this same path.
       const { error } = await supabase.auth.resetPasswordForEmail(
-        emailOrPhone.trim().toLowerCase()
+        email.trim().toLowerCase(),
+        { redirectTo: PASSWORD_RESET_URL }
       );
 
       if (error) throw error;
@@ -177,7 +122,7 @@ export default function LoginScreen({ navigation }: any) {
         'If an account exists with this email, we have sent a password reset link. Check your inbox.',
         [{ text: 'OK' }]
       );
-    } catch (error: any) {
+    } catch {
       // Security: always show the same message regardless of whether
       // the email exists — prevents account enumeration
       Alert.alert(
@@ -195,13 +140,12 @@ export default function LoginScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Back button */}
-      <TouchableOpacity
+      <PressableScale
         style={styles.backButton}
         onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
       >
-        <Text style={styles.backText}>←</Text>
-      </TouchableOpacity>
+        <Icon name="back" size={20} color={colors.white} />
+      </PressableScale>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -234,7 +178,7 @@ export default function LoginScreen({ navigation }: any) {
           opacity: formOpacity,
           transform: [{ translateY: formSlide }],
         }}>
-          {/* Email / Phone field */}
+          {/* Email field */}
           <View style={styles.fieldContainer}>
             <Text style={styles.fieldLabel}>Email Address</Text>
             <TextInput
@@ -242,8 +186,8 @@ export default function LoginScreen({ navigation }: any) {
                 styles.input,
                 focused === 'email' && styles.inputFocused,
               ]}
-              value={emailOrPhone}
-              onChangeText={setEmailOrPhone}
+              value={email}
+              onChangeText={setEmail}
               placeholder="Enter your email"
               placeholderTextColor={colors.textMuted}
               keyboardType="email-address"
@@ -272,23 +216,22 @@ export default function LoginScreen({ navigation }: any) {
                 onFocus={() => setFocused('password')}
                 onBlur={() => setFocused('')}
               />
-              <TouchableOpacity
+              <PressableScale
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
               >
                 <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
           </View>
 
           {/* Forgot password */}
-          <TouchableOpacity
+          <PressableScale
             style={styles.forgotContainer}
             onPress={handleForgotPassword}
-            activeOpacity={0.7}
           >
             <Text style={styles.forgotText}>Forgot password?</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </ScrollView>
 
@@ -296,29 +239,28 @@ export default function LoginScreen({ navigation }: any) {
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         {/* Login button */}
         <Animated.View style={{ opacity: buttonOpacity }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.loginButton,
               !isFormValid() && styles.loginButtonDisabled,
             ]}
             onPress={handleLogin}
             disabled={!isFormValid() || loading}
-            activeOpacity={0.85}
           >
             {loading ? (
               <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.loginButtonText}>Sign In</Text>
             )}
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         {/* Register link */}
         <Animated.View style={[styles.registerRow, { opacity: registerOpacity }]}>
           <Text style={styles.registerText}>Don't have an account? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('AccountType')}>
+          <PressableScale onPress={() => navigation.navigate('AccountType')}>
             <Text style={styles.registerLink}>Sign Up</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </View>
     </KeyboardAvoidingView>

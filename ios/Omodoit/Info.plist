@@ -33,8 +33,16 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Omodoit uses the camera so you can record a reel showing your work, and so you can see each other during a video call with a client.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Omodoit uses your location to show nearby workers and to share your live location with a client while you're on a job.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Omodoit uses the microphone to record sound with your reels and to carry your voice during calls with clients.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Omodoit needs access to your photos and videos so you can post a reel, add pictures of your work, and set your profile photo.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>RCTNewArchEnabled</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -49,8 +57,6 @@
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>

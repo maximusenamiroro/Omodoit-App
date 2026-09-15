@@ -1,22 +1,31 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Platform, Dimensions, Image, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const PRODUCT_W = (SCREEN_W - spacing.screenPadding * 2 - 12) / 2;
 
-// Matches AddProductScreen's category list exactly, so filtering here
-// always lines up with what a worker could have actually chosen when
-// publishing — previously this used a different, mismatched list
-// ('Service', 'Beauty', 'Tech', 'Food', 'Handwork') that didn't match
-// any category a product could actually be saved under.
-const FILTERS = ['All', 'Service', 'Physical Product', 'Digital Product', 'Consultation', 'Repair', 'Installation', 'Training', 'Other'];
+// There are two kinds of post now — a service you book and a product
+// you order — so those are the only filters that mean anything. This
+// used to list eight categories that no longer exist.
+const FILTERS = [
+  { key: 'all', label: 'All', type: null },
+  { key: 'service', label: 'Services', type: 'service' },
+  { key: 'product', label: 'Products', type: 'product' },
+] as const;
+
+// Products arrive a page at a time. The screen previously fetched every
+// product on the platform in one query, with no limit at all.
+const PAGE_SIZE = 24;
 
 const CARD_COLORS = ['#16a34a', '#D946EF', '#06B6D4', '#F97316', '#EAB308', '#6366F1', '#3B82F6', '#8B5CF6'];
 const colorForId = (id: string) => CARD_COLORS[Math.abs(id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % CARD_COLORS.length];
@@ -24,6 +33,7 @@ const colorForId = (id: string) => CARD_COLORS[Math.abs(id.split('').reduce((a, 
 interface ProductRow {
   id: string;
   title: string;
+  type: 'service' | 'product';
   price: number | null;
   category: string;
   imageUrl: string | null;
@@ -33,8 +43,11 @@ interface ProductRow {
 }
 
 export default function ProductCatalogueScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
-  const [activeFilter, setActiveFilter] = useState('All');
+  const [activeFilter, setActiveFilter] = useState<typeof FILTERS[number]['key']>('all');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [reachedEnd, setReachedEnd] = useState(false);
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,51 +55,78 @@ export default function ProductCatalogueScreen({ navigation }: any) {
   const gridOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(200, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(gridOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(gridOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [gridOpacity, headerOpacity]);
+
+  const activeType = FILTERS.find(f => f.key === activeFilter)?.type ?? null;
+
+  const fetchPage = useCallback(async (offset: number): Promise<ProductRow[]> => {
+    let query = supabase
+      .from('products')
+      .select('id, title, type, category, price, image_url, description, worker_id')
+      .order('created_at', { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    if (activeType) query = query.eq('type', activeType);
+
+    const { data: rows, error } = await query;
+    if (error) throw error;
+
+    const workerIds = [...new Set((rows || []).map((p: any) => p.worker_id).filter(Boolean))];
+    const nameMap: Record<string, string> = {};
+    if (workerIds.length > 0) {
+      const { data: profileRows } = await supabase
+        .from('profiles').select('id, full_name, business_name').in('id', workerIds);
+      (profileRows || []).forEach((p: any) => { nameMap[p.id] = p.business_name || p.full_name || 'Seller'; });
+    }
+
+    return (rows || []).map((p: any) => ({
+      id: p.id,
+      title: p.title,
+      price: p.price,
+      type: p.type === 'service' ? 'service' : 'product',
+      category: p.category,
+      imageUrl: p.image_url,
+      sellerName: nameMap[p.worker_id] || 'Seller',
+      workerId: p.worker_id,
+      description: p.description,
+    }));
+  }, [activeType]);
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
+    setReachedEnd(false);
     try {
-      let query = supabase
-        .from('products')
-        .select('id, title, category, price, image_url, description, worker_id')
-        .order('created_at', { ascending: false });
-
-      if (activeFilter !== 'All') {
-        query = query.eq('category', activeFilter);
-      }
-
-      const { data: rows, error } = await query;
-      if (error) throw error;
-
-      const workerIds = [...new Set((rows || []).map((p: any) => p.worker_id).filter(Boolean))];
-      let nameMap: Record<string, string> = {};
-      if (workerIds.length > 0) {
-        const { data: profileRows } = await supabase.from('profiles').select('id, full_name, business_name').in('id', workerIds);
-        (profileRows || []).forEach((p: any) => { nameMap[p.id] = p.business_name || p.full_name || 'Seller'; });
-      }
-
-      setProducts((rows || []).map((p: any) => ({
-        id: p.id,
-        title: p.title,
-        price: p.price,
-        category: p.category,
-        imageUrl: p.image_url,
-        sellerName: nameMap[p.worker_id] || 'Seller',
-        workerId: p.worker_id,
-        description: p.description,
-      })));
+      const rows = await fetchPage(0);
+      setProducts(rows);
+      setReachedEnd(rows.length < PAGE_SIZE);
     } catch (err) {
       console.error('Failed to load products:', err);
       setProducts([]);
     } finally {
       setLoading(false);
     }
-  }, [activeFilter]);
+  }, [fetchPage]);
+
+  const loadMore = useCallback(async () => {
+    if (loading || loadingMore || reachedEnd) return;
+    setLoadingMore(true);
+    try {
+      const rows = await fetchPage(products.length);
+      setProducts(prev => {
+        const seen = new Set(prev.map(p => p.id));
+        return [...prev, ...rows.filter(r => !seen.has(r.id))];
+      });
+      setReachedEnd(rows.length < PAGE_SIZE);
+    } catch (err) {
+      console.error('Failed to load more products:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [fetchPage, products.length, loading, loadingMore, reachedEnd]);
 
   useFocusEffect(useCallback(() => { loadProducts(); }, [loadProducts]));
 
@@ -95,31 +135,40 @@ export default function ProductCatalogueScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[st.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
         <Text style={st.headerTitle}>Products</Text>
         <View style={{ width: 36 }} />
       </Animated.View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.filterScroll}>
         {FILTERS.map(f => (
-          <TouchableOpacity key={f} style={[st.filterChip, activeFilter === f && st.filterChipActive]} onPress={() => setActiveFilter(f)} activeOpacity={0.85}>
-            <Text style={[st.filterText, activeFilter === f && st.filterTextActive]}>{f}</Text>
-          </TouchableOpacity>
+          <PressableScale key={f.key} style={[st.filterChip, activeFilter === f.key && st.filterChipActive]} onPress={() => setActiveFilter(f.key)}>
+            <Text style={[st.filterText, activeFilter === f.key && st.filterTextActive]}>{f.label}</Text>
+          </PressableScale>
         ))}
       </ScrollView>
 
       {loading ? (
-        <View style={st.loadingBox}>
-          <ActivityIndicator color={colors.primary} />
-        </View>
+        <CardRowSkeleton count={4} actions={false} />
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}
+          onScroll={({ nativeEvent: e }) => {
+            const nearBottom =
+              e.layoutMeasurement.height + e.contentOffset.y >= e.contentSize.height - e.layoutMeasurement.height;
+            if (nearBottom) loadMore();
+          }}
+          scrollEventThrottle={200}
+        >
           {products.length === 0 ? (
             <View style={st.emptyBox}>
               <Text style={st.emptyEmoji}>📦</Text>
-              <Text style={st.emptyTitle}>No products yet</Text>
+              <Text style={st.emptyTitle}>
+                {activeFilter === 'service' ? 'No services yet' : activeFilter === 'product' ? 'No products yet' : 'Nothing posted yet'}
+              </Text>
               <Text style={st.emptySub}>Check back soon, or try a different filter.</Text>
             </View>
           ) : (
@@ -127,8 +176,8 @@ export default function ProductCatalogueScreen({ navigation }: any) {
               {products.map(product => {
                 const accent = colorForId(product.id);
                 return (
-                  <TouchableOpacity key={product.id} style={st.productCard}
-                    onPress={() => navigation.navigate('ProductDetail', { product: { ...product, color: accent } })} activeOpacity={0.85}>
+                  <PressableScale key={product.id} style={st.productCard}
+                    onPress={() => navigation.navigate('ProductDetail', { product: { ...product, color: accent } })}>
                     <View style={[st.productThumb, { backgroundColor: accent + '15' }]}>
                       {product.imageUrl ? (
                         <Image source={{ uri: product.imageUrl }} style={st.productImg} />
@@ -138,14 +187,17 @@ export default function ProductCatalogueScreen({ navigation }: any) {
                     </View>
                     <View style={st.productInfo}>
                       <Text style={st.productTitle} numberOfLines={1}>{product.title}</Text>
-                      <Text style={st.productSeller}>@{product.sellerName}</Text>
+                      <Text style={st.productSeller}>
+                        @{product.sellerName} · {product.type === 'service' ? 'Book' : 'Order'}
+                      </Text>
                       <Text style={[st.productPrice, { color: accent }]}>
                         {product.price != null ? `₦${product.price.toLocaleString()}` : 'Contact for price'}
                       </Text>
                     </View>
-                  </TouchableOpacity>
+                  </PressableScale>
                 );
               })}
+              {loadingMore && <ActivityIndicator color={colors.primary} style={st.moreLoader} />}
             </Animated.View>
           )}
         </ScrollView>
@@ -155,6 +207,7 @@ export default function ProductCatalogueScreen({ navigation }: any) {
 }
 
 const st = StyleSheet.create({
+  moreLoader: { width: '100%', marginVertical: 16 },
   container: { flex: 1, backgroundColor: colors.bg },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.screenPadding, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white + '08', alignItems: 'center', justifyContent: 'center' },

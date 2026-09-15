@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated,
+  View, Text, StyleSheet, Animated,
   StatusBar, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import Geolocation from '@react-native-community/geolocation';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing , useEntrance} from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 import { useWatchLocation } from '../../lib/tracking';
 import { supabase } from '../../api/supabase';
 
@@ -25,6 +27,7 @@ function distanceKm(a: { latitude: number; longitude: number }, b: { latitude: n
 }
 
 export default function TrackingScreen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { bookingId, workerId, workerName = 'Worker', service = '' } = route?.params || {};
   const mapRef = useRef<MapView | null>(null);
@@ -38,7 +41,7 @@ export default function TrackingScreen({ navigation, route }: any) {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(cardOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(cardOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.spring(cardSlide, { toValue: 0, damping: 14, stiffness: 100, useNativeDriver: true }),
     ]).start();
 
@@ -50,7 +53,7 @@ export default function TrackingScreen({ navigation, route }: any) {
       (err) => console.warn('Could not get client location:', err.message),
       { enableHighAccuracy: true }
     );
-  }, []);
+  }, [cardOpacity, cardSlide]);
 
   // Real rating for this worker, replacing the hardcoded "4.9 (47 reviews)"
   useEffect(() => {
@@ -142,9 +145,9 @@ export default function TrackingScreen({ navigation, route }: any) {
         )}
       </MapView>
 
-      <TouchableOpacity style={[st.backBtn, { top: insets.top + 10 }]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-        <Text style={st.backText}>←</Text>
-      </TouchableOpacity>
+      <PressableScale style={[st.backBtn, { top: insets.top + 10 }]} onPress={() => navigation.goBack()}>
+        <Icon name="back" size={20} color={colors.white} />
+      </PressableScale>
 
       <Animated.View style={[st.bottomCard, { opacity: cardOpacity, transform: [{ translateY: cardSlide }], paddingBottom: Platform.OS === 'ios' ? insets.bottom + 10 : 20 }]}>
         <View style={st.etaBanner}>
@@ -171,18 +174,18 @@ export default function TrackingScreen({ navigation, route }: any) {
         </View>
 
         <View style={st.actionsRow}>
-          <TouchableOpacity style={st.actionBtn} onPress={handleCall} activeOpacity={0.85}>
+          <PressableScale style={st.actionBtn} onPress={handleCall}>
             <Text style={st.actionIcon}>📞</Text>
             <Text style={st.actionLabel}>Call</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={st.actionBtn} onPress={handleMessage} activeOpacity={0.85}>
+          </PressableScale>
+          <PressableScale style={st.actionBtn} onPress={handleMessage}>
             <Text style={st.actionIcon}>💬</Text>
             <Text style={st.actionLabel}>Message</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[st.actionBtn, st.actionBtnDanger]} onPress={handleCancel} activeOpacity={0.85}>
+          </PressableScale>
+          <PressableScale style={[st.actionBtn, st.actionBtnDanger]} onPress={handleCancel}>
             <Text style={st.actionIcon}>✕</Text>
             <Text style={[st.actionLabel, { color: '#EF4444' }]}>Cancel</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </Animated.View>
     </View>

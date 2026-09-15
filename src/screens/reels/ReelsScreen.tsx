@@ -1,17 +1,30 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
+  View, Text, Pressable, StyleSheet, FlatList,
   Dimensions, StatusBar, Animated, Image, ActivityIndicator,
   TextInput, Modal, Share, KeyboardAvoidingView, Platform, ScrollView,
+  RefreshControl,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Video from 'react-native-video';
-import { colors, typography, spacing } from '../../theme';
+import { colors, EASING, DURATION , useEntrance} from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
+import Avatar from '../../components/common/Avatar';
+import PauseIndicator from '../../components/common/PauseIndicator';
+import Icon from '../../components/common/Icon';
+import ReportSheet from '../../components/common/ReportSheet';
+import { blockedUserIds, notInFilter } from '../../lib/moderation';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { useIsFocused } from '@react-navigation/native';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+
+// Caps on lists that grow without bound as the platform does. Each is a
+// screenful or two of content — none of these views can show more.
+const COMMENT_FETCH_LIMIT = 100;
+const FOLLOWING_FETCH_LIMIT = 300;
+const WORKER_PRODUCT_LIMIT = 30;
 
 const formatCount = (n: number): string => {
   if (n >= 1000000) return (n / 1000000).toFixed(1) + 'm';
@@ -50,6 +63,9 @@ interface ReelProfile {
 interface Reel {
   id: string;
   video_url: string;
+  // Poster frame shown while the video buffers. Null for every reel
+  // uploaded before thumbnails existed, so it must stay optional.
+  thumbnail_url: string | null;
   description: string | null;
   type: string | null;
   likes: number;
@@ -57,13 +73,6 @@ interface Reel {
   profiles: ReelProfile;
 }
 
-interface CommentItem {
-  id: string;
-  user_id: string;
-  comment: string;
-  created_at: string;
-  profiles: { full_name: string | null; avatar_url: string | null };
-}
 
 
 function CommentSheet({ visible, onClose, reelId, userId }: {
@@ -78,16 +87,15 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
   const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
   const inputRef = useRef<TextInput>(null);
 
-  useEffect(() => { if (visible) fetchComments(); }, [visible]);
-
-  const fetchComments = async () => {
+  const fetchComments = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase
         .from('reel_comments')
         .select('id, user_id, comment, created_at, parent_id, profiles(full_name, avatar_url)')
         .eq('reel_id', reelId)
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .limit(COMMENT_FETCH_LIMIT);
       if (error) throw error;
       const formatted = (data || []).map((item: any) => ({
         ...item,
@@ -102,7 +110,9 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
       setComments(withReplies);
     } catch (err) { console.error('Fetch comments error:', err); }
     finally { setLoading(false); }
-  };
+  }, [reelId]);
+
+  useEffect(() => { if (visible) fetchComments(); }, [visible, fetchComments]);
 
   const handlePost = async () => {
     if (!newComment.trim() || !userId) return;
@@ -137,16 +147,16 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
-      <TouchableOpacity style={cs.overlay} activeOpacity={1} onPress={onClose}>
+      <PressableScale style={cs.overlay} onPress={onClose}>
         <View style={cs.dismissArea} />
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={cs.sheet}>
-          <TouchableOpacity activeOpacity={1} onPress={(e: any) => e.stopPropagation()} style={cs.sheetInner}>
+          <PressableScale onPress={(e: any) => e.stopPropagation()} style={cs.sheetInner}>
             <View style={cs.handle}><View style={cs.handleBar} /></View>
             <View style={cs.header}>
               <Text style={cs.headerTitle}>Comments ({totalComments})</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <PressableScale onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Text style={cs.closeBtn}>\u2715</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
 
             {loading ? (
@@ -178,15 +188,15 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
                         </View>
                         <Text style={cs.commentText}>{item.comment}</Text>
                         <View style={cs.actionRow}>
-                          <TouchableOpacity onPress={() => handleReply(item.id, item.profiles?.full_name || 'User')}>
+                          <PressableScale onPress={() => handleReply(item.id, item.profiles?.full_name || 'User')}>
                             <Text style={cs.replyBtn}>Reply</Text>
-                          </TouchableOpacity>
+                          </PressableScale>
                           {item.replies && item.replies.length > 0 && (
-                            <TouchableOpacity onPress={() => toggleReplies(item.id)}>
+                            <PressableScale onPress={() => toggleReplies(item.id)}>
                               <Text style={cs.viewRepliesBtn}>
                                 {expandedReplies.has(item.id) ? 'Hide replies' : 'View ' + item.replies.length + (item.replies.length === 1 ? ' reply' : ' replies')}
                               </Text>
-                            </TouchableOpacity>
+                            </PressableScale>
                           )}
                         </View>
                       </View>
@@ -215,9 +225,9 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
             {replyTo && (
               <View style={cs.replyIndicator}>
                 <Text style={cs.replyIndicatorText}>Replying to {replyTo.name}</Text>
-                <TouchableOpacity onPress={() => setReplyTo(null)}>
+                <PressableScale onPress={() => setReplyTo(null)}>
                   <Text style={cs.replyCancel}>\u2715</Text>
-                </TouchableOpacity>
+                </PressableScale>
               </View>
             )}
 
@@ -232,18 +242,17 @@ function CommentSheet({ visible, onClose, reelId, userId }: {
                 multiline
                 maxLength={500}
               />
-              <TouchableOpacity
+              <PressableScale
                 style={[cs.sendBtn, !newComment.trim() && cs.sendBtnOff]}
                 onPress={handlePost}
                 disabled={!newComment.trim() || posting}
-                activeOpacity={0.85}
               >
                 <Text style={cs.sendText}>{posting ? '...' : '\u2191'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
-          </TouchableOpacity>
+          </PressableScale>
         </KeyboardAvoidingView>
-      </TouchableOpacity>
+      </PressableScale>
     </Modal>
   );
 }
@@ -307,7 +316,8 @@ function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
           .from('products')
           .select('id, title, price, image_url, description, category, worker_id')
           .eq('worker_id', workerId)
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .limit(WORKER_PRODUCT_LIMIT);
         if (error) throw error;
         setProducts(data || []);
       } catch (err) {
@@ -322,16 +332,16 @@ function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
 
   return (
     <Modal visible={visible} animationType="slide" transparent statusBarTranslucent>
-      <TouchableOpacity style={cs.overlay} activeOpacity={1} onPress={onClose}>
+      <PressableScale style={cs.overlay} onPress={onClose}>
         <View style={cs.dismissArea} />
         <View style={[cs.sheet, { maxHeight: SCREEN_H * 0.6 }]}>
-          <TouchableOpacity activeOpacity={1} onPress={(e: any) => e.stopPropagation()} style={cs.sheetInner}>
+          <PressableScale onPress={(e: any) => e.stopPropagation()} style={cs.sheetInner}>
             <View style={cs.handle}><View style={cs.handleBar} /></View>
             <View style={cs.header}>
               <Text style={cs.headerTitle}>@{workerName} — Products</Text>
-              <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <PressableScale onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Text style={cs.closeBtn}>✕</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
 
             {loading ? (
@@ -340,7 +350,7 @@ function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
               <View style={cs.center}>
                 <Text style={cs.emptyEmoji}>📦</Text>
                 <Text style={cs.emptyText}>No products listed yet</Text>
-                <TouchableOpacity onPress={() => {
+                <PressableScale onPress={() => {
                   onClose();
                   navigation.navigate('WorkerPublicProfile', {
                     worker: { id: workerId, name: workerName, rating: 0, reviews: 0, location: '', experience: '', verified: false, bio: '' },
@@ -348,15 +358,14 @@ function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
                   });
                 }}>
                   <Text style={[cs.emptyDesc, { color: colors.primary, marginTop: 10 }]}>View Profile →</Text>
-                </TouchableOpacity>
+                </PressableScale>
               </View>
             ) : (
               <ScrollView style={ps.list} showsVerticalScrollIndicator={false}>
                 {products.map(product => (
-                  <TouchableOpacity
+                  <PressableScale
                     key={product.id}
                     style={ps.productRow}
-                    activeOpacity={0.85}
                     onPress={() => {
                       onClose();
                       navigation.navigate('ProductDetail', {
@@ -387,13 +396,13 @@ function ProductSheet({ visible, onClose, workerId, workerName, navigation }: {
                       </Text>
                     </View>
                     <Text style={ps.productArrow}>→</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 ))}
               </ScrollView>
             )}
-          </TouchableOpacity>
+          </PressableScale>
         </View>
-      </TouchableOpacity>
+      </PressableScale>
     </Modal>
   );
 }
@@ -410,9 +419,14 @@ const ps = StyleSheet.create({
   productArrow: { fontSize: 14, color: colors.textMuted },
 });
 
-interface ReelCardProps { reel: Reel; isClient: boolean; isActive: boolean; userId: string | undefined; navigation: any; }
+interface ReelCardProps { reel: Reel; isClient: boolean; isActive: boolean; userId: string | undefined; navigation: any; cardHeight: number;
+  /** Called after the viewer blocks this reel's owner. */
+  onBlocked?: (userId: string) => void;
+}
 
-function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProps) {
+function ReelCard({ reel, isClient, isActive, userId, navigation, cardHeight, onBlocked }: ReelCardProps) {
+  const entrance = useEntrance();
+  const [reportOpen, setReportOpen] = useState(false);
   const [liked, setLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(reel.likes);
   const [saved, setSaved] = useState(false);
@@ -420,8 +434,9 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
   const [showProductSheet, setShowProductSheet] = useState(false);
   const isOwnReel = userId === reel.profiles?.id;
   const [paused, setPaused] = useState(false);
-  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [, setVideoLoaded] = useState(false);
   const [videoError, setVideoError] = useState(false);
+  const [buffering, setBuffering] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [commentCount, setCommentCount] = useState(0);
 
@@ -444,17 +459,18 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
       // Count likes from reel_likes table — same as website
     supabase.from('reel_likes').select('id', { count: 'exact', head: true }).eq('reel_id', reel.id)
       .then(({ count }) => { if (count !== null) setLikeCount(count); });
-  }, [userId, reel.id]);
+  }, [userId, reel.id, reel.profiles.id]);
 
   useEffect(() => {
     if (isActive) {
       setPaused(false);
+      setVideoLoaded(false);
       Animated.parallel([
-        Animated.timing(contentOpacity, { toValue: 1, duration: 400, delay: 200, useNativeDriver: true }),
+        Animated.timing(contentOpacity, { toValue: 1, duration: entrance.fade, delay: 120, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(actionsSlide, { toValue: 0, damping: 14, stiffness: 80, delay: 300, useNativeDriver: true }),
       ]).start();
     } else { setPaused(true); }
-  }, [isActive]);
+  }, [isActive, actionsSlide, contentOpacity]);
 
   const handleLike = async () => {
     if (!userId) return;
@@ -462,7 +478,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
     setLiked(!wasLiked);
     setLikeCount(prev => wasLiked ? prev - 1 : prev + 1);
     Animated.sequence([
-      Animated.timing(likeScale, { toValue: 1.4, duration: 100, useNativeDriver: true }),
+      Animated.timing(likeScale, { toValue: 1.4, duration: 100, easing: EASING.OUT, useNativeDriver: true }),
       Animated.spring(likeScale, { toValue: 1, damping: 8, stiffness: 200, useNativeDriver: true }),
     ]).start();
     try {
@@ -473,7 +489,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
         // 23505 = already liked (unique constraint) — treat as success
         if (error && error.code !== '23505') throw error;
       }
-    } catch (err) {
+    } catch {
       // Revert on error
       setLiked(wasLiked);
       setLikeCount(prev => wasLiked ? prev + 1 : prev - 1);
@@ -486,7 +502,7 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
     try {
       if (wasSaved) { await supabase.from('saved_reels').delete().eq('user_id', userId).eq('reel_id', reel.id); }
       else { await supabase.from('saved_reels').insert({ user_id: userId, reel_id: reel.id }); }
-    } catch (err) { setSaved(wasSaved); }
+    } catch { setSaved(wasSaved); }
   };
 
   const handleFollow = async () => {
@@ -495,18 +511,18 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
     try {
       if (wasFollowing) { await supabase.from('follows').delete().eq('follower_id', userId).eq('following_id', reel.profiles.id); }
       else { await supabase.from('follows').insert({ follower_id: userId, following_id: reel.profiles.id }); }
-    } catch (err) { setFollowing(wasFollowing); }
+    } catch { setFollowing(wasFollowing); }
   };
 
  const handleShare = async () => {
-    const shareUrl = 'https://omoworkit.com/reel/' + reel.id;
+    const shareUrl = 'https://www.omodoit.com/reel/' + reel.id;
     const workerName = reel.profiles?.full_name || 'Check out this worker';
     const caption = reel.description ? reel.description + '\n\n' : '';
     try {
       await Share.share({
         message: workerName + ' on Omodoit\n\n' + caption + shareUrl,
       });
-    } catch (err) {}
+    } catch {}
   };
 
   // "Order Now" for product reels vs "Book Now" for service reels,
@@ -542,8 +558,11 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
   const isVerified = (reel.profiles?.verification_level ?? 0) >= 1;
 
   return (
-    <View style={[styles.reelContainer, { height: SCREEN_H }]}>
-      <TouchableOpacity activeOpacity={1} onPress={() => setPaused(!paused)} style={styles.videoContainer}>
+    <View style={[styles.reelContainer, { height: cardHeight }]}>
+      {/* Just a container. The tap target is a sibling below, not a
+          wrapper, because a Pressable wrapping the player did not
+          receive taps on Android at all. */}
+      <View style={styles.videoContainer}>
         {!videoError ? (
          <Video
             source={{ uri: reel.video_url, type: 'mp4' }}
@@ -552,13 +571,37 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
             repeat
             paused={paused || !isActive}
             muted={false}
+            // The player draws the poster itself, underneath its own
+            // surface, so it shows no matter how the video view is
+            // composited. The React <Image> that used to do this job sat
+            // inside the video container and was painted over, which is
+            // why a buffering reel was a black rectangle with nothing on
+            // it. On a slow connection that is the normal case, not the
+            // edge case.
+            poster={reel.thumbnail_url ? { source: { uri: reel.thumbnail_url }, resizeMode: 'cover' } : undefined}
+            // Fires on the first renderable frame, which is the honest
+            // moment to stop showing loading state. onLoad fires earlier,
+            // when metadata arrives but there is still nothing to look at.
+            // The ONLY signal that there is a frame on screen. onLoad
+            // fires when metadata arrives, which on a slow link is many
+            // seconds before the first frame, and onBuffer(false) only
+            // means the buffer is no longer starved. Using either to
+            // clear the loading state is what left users staring at
+            // black with no indication anything was happening.
+            onReadyForDisplay={() => setVideoLoaded(true)}
             onLoad={() => setVideoLoaded(true)}
-            onError={(e) => { console.log('Video error:', JSON.stringify(e)); setVideoError(true); }}
-            onBuffer={({ isBuffering }: { isBuffering: boolean }) => {
-              if (!isBuffering && !videoLoaded) setVideoLoaded(true);
-            }}
+            onError={() => setVideoError(true)}
+            onBuffer={({ isBuffering }: { isBuffering: boolean }) => setBuffering(isBuffering)}
+            // TextureView participates in the normal view hierarchy, so
+            // anything drawn after it actually appears on top. SurfaceView
+            // composites in its own layer and swallows the overlays.
             useTextureView={Platform.OS === 'android'}
             bufferConfig={{
+              // Back to the values this shipped with. A lower
+              // bufferForPlaybackMs starts sooner in theory, and an
+              // on-disk cache saves data in theory, but both were added
+              // speculatively and playback stopped working, so they are
+              // out until they can be tested one at a time.
               minBufferMs: 5000,
               maxBufferMs: 30000,
               bufferForPlaybackMs: 2500,
@@ -569,56 +612,118 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
           <View style={styles.errorContainer}>
             <Text style={styles.errorEmoji}>📹</Text>
             <Text style={styles.errorText}>Video unavailable</Text>
-            <TouchableOpacity
+            <PressableScale
               style={styles.retryVideoBtn}
               onPress={() => { setVideoError(false); setVideoLoaded(false); }}
-              activeOpacity={0.85}
             >
               <Text style={styles.retryVideoText}>Tap to retry</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         )}
-        {!videoLoaded && !videoError && (<View style={styles.loadingOverlay}><ActivityIndicator size="large" color={colors.white} /></View>)}
-        {paused && (<View style={styles.pauseOverlay}><View style={styles.pauseIcon}><Text style={styles.pauseText}>▶</Text></View></View>)}
-      </TouchableOpacity>
+      </View>
+
+      {/* Full-area tap target, drawn after the player so it actually
+          receives the touch. It sits before the action rail and the
+          caption, so those still get their own taps. */}
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={() => setPaused(p => !p)}
+        accessibilityRole="button"
+        accessibilityLabel={paused ? 'Play video' : 'Pause video'}
+      />
+
+      {/* The pause indicator used to live inside the video container,
+          where the player's surface covered it, so pausing gave no
+          feedback at all. Out here it is visible. */}
+      <PauseIndicator visible={paused} />
+
+      {/* Deliberately a sibling of the video container rather than a
+          child of it. Anything inside that container competes with the
+          player's own surface for the same pixels and loses, which is
+          how a buffering reel ended up showing nothing at all. Out here
+          it is just another view drawn after, so it always appears.
+
+          Shown while the first frame is still coming and again on every
+          rebuffer, because on a slow connection a reel stalls mid-play
+          and silence looks identical to a frozen app. */}
+      {!videoError && buffering && (
+        <View style={styles.bufferingBadge} pointerEvents="none">
+          <ActivityIndicator size="small" color={colors.white} />
+          <Text style={styles.bufferingText}>Buffering</Text>
+        </View>
+      )}
 
       <Animated.View style={[styles.actionsColumn, { bottom: Platform.OS === 'ios' ? (isClient ? 190 : 170) : (isClient ? 150 : 130), opacity: contentOpacity, transform: [{ translateX: actionsSlide }] }]}>
-        <TouchableOpacity style={styles.actionAvatarContainer} onPress={isClient ? handleFollow : undefined} activeOpacity={0.8}>
-          {reel.profiles?.avatar_url ? (
-            <Image source={{ uri: reel.profiles.avatar_url }} style={styles.actionAvatar} />
-          ) : (
-            <View style={[styles.actionAvatarFallback, { backgroundColor: colors.primary }]}><Text style={styles.actionAvatarText}>{getInitials(workerName)}</Text></View>
-          )}
+        <PressableScale style={styles.actionAvatarContainer} onPress={isClient ? handleFollow : undefined}>
+          <Avatar
+            uri={reel.profiles?.avatar_url}
+            name={workerName}
+            size={46}
+            ringColor={colors.white}
+            style={styles.actionAvatarShadow}
+          />
           {isClient && (<View style={[styles.actionAvatarPlus, following && { backgroundColor: '#22c55e' }]}><Text style={styles.plusText}>{following ? '✓' : '+'}</Text></View>)}
-        </TouchableOpacity>
+        </PressableScale>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={handleLike} activeOpacity={0.8}>
+        <PressableScale style={styles.actionBtn} onPress={handleLike}>
           <Animated.View style={[styles.actionCircle, { transform: [{ scale: likeScale }] }]}><Text style={styles.actionIcon}>{liked ? '❤️' : '🤍'}</Text></Animated.View>
           <Text style={styles.actionCount}>{formatCount(likeCount)}</Text>
-        </TouchableOpacity>
+        </PressableScale>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={() => setShowComments(true)} activeOpacity={0.8}>
+        <PressableScale style={styles.actionBtn} onPress={() => setShowComments(true)}>
           <View style={styles.actionCircle}><Text style={styles.actionIcon}>💬</Text></View>
           <Text style={styles.actionCount}>{formatCount(commentCount)}</Text>
-        </TouchableOpacity>
+        </PressableScale>
 
-        <TouchableOpacity style={styles.actionBtn} onPress={handleShare} activeOpacity={0.8}>
+        <PressableScale style={styles.actionBtn} onPress={handleShare}>
           <View style={styles.actionCircle}><Text style={styles.actionIcon}>↗️</Text></View>
           <Text style={styles.actionCount}>Share</Text>
-        </TouchableOpacity>
+        </PressableScale>
 
         {isClient ? (
-          <TouchableOpacity style={styles.actionBtn} onPress={handleSave} activeOpacity={0.8}>
+          <PressableScale style={styles.actionBtn} onPress={handleSave}>
             <View style={styles.actionCircle}><Text style={[styles.actionIcon, { color: saved ? colors.flash : colors.white }]}>★</Text></View>
             <Text style={[styles.actionCount, saved && { color: colors.flash }]}>{saved ? 'Saved' : 'Save'}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         ) : (
-          <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-            <View style={styles.actionCircle}><Text style={styles.actionIcon}>📊</Text></View>
+          <PressableScale
+            style={styles.actionBtn}
+            onPress={() => navigation.navigate('Analytics')}
+            accessibilityRole="button"
+            accessibilityLabel="Your reel statistics"
+          >
+            <View style={styles.actionCircle}><Icon name="chart" size={22} color={colors.white} /></View>
             <Text style={styles.actionCount}>Stats</Text>
-          </TouchableOpacity>
+          </PressableScale>
+        )}
+
+        {/* Report. Required by Apple's Guideline 1.2 and Google Play's
+            UGC policy: an app carrying user-posted video must let people
+            report it and block whoever posted it, and a reviewer checks
+            for exactly this control on exactly this screen.
+            Hidden on your own reel, where it makes no sense. */}
+        {reel.profiles?.id !== userId && (
+          <PressableScale
+            style={styles.actionBtn}
+            onPress={() => setReportOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Report this reel"
+          >
+            <View style={styles.actionCircle}><Text style={styles.actionIcon}>⋯</Text></View>
+            <Text style={styles.actionCount}>Report</Text>
+          </PressableScale>
         )}
       </Animated.View>
+
+      <ReportSheet
+        visible={reportOpen}
+        onClose={() => setReportOpen(false)}
+        targetType="reel"
+        targetId={reel.id}
+        targetOwnerId={reel.profiles?.id}
+        targetOwnerName={workerName}
+        onBlocked={onBlocked}
+      />
 
       <Animated.View style={[styles.bottomContent, { bottom: Platform.OS === 'ios' ? 106 : 78, opacity: contentOpacity }]}>
         <View style={styles.workerInfoRow}>
@@ -644,17 +749,17 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
         {isClient && !isOwnReel && (
           <View style={styles.reelActionsRow}>
             {reel.type === 'product' ? (
-              <TouchableOpacity style={styles.bookNowBtn} onPress={handleOrderNow} activeOpacity={0.85}>
+              <PressableScale style={styles.bookNowBtn} onPress={handleOrderNow}>
                 <Text style={styles.bookNowText}>🛍️  Order Now</Text>
-              </TouchableOpacity>
+              </PressableScale>
             ) : (
-              <TouchableOpacity style={styles.bookNowBtn} onPress={handleBookNow} activeOpacity={0.85}>
+              <PressableScale style={styles.bookNowBtn} onPress={handleBookNow}>
                 <Text style={styles.bookNowText}>📋  Book Now</Text>
-              </TouchableOpacity>
+              </PressableScale>
             )}
-            <TouchableOpacity style={styles.messageNowBtn} onPress={handleMessage} activeOpacity={0.85}>
+            <PressableScale style={styles.messageNowBtn} onPress={handleMessage}>
               <Text style={styles.messageNowText}>💬</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
         )}
         {!isClient && (<View style={styles.reelStatsRow}><View style={styles.reelStatChip}><Text style={styles.reelStatText}>❤ {formatCount(likeCount)} likes</Text></View><View style={styles.reelStatChip}><Text style={styles.reelStatText}>{timeAgo(reel.created_at)}</Text></View></View>)}
@@ -678,45 +783,230 @@ function ReelCard({ reel, isClient, isActive, userId, navigation }: ReelCardProp
 }
 
 
-export default function ReelsScreen({ navigation }: any) {
+// Fisher-Yates.
+//
+// Deliberately not `items.sort(() => Math.random() - 0.5)`, which is the
+// popular one-liner and is not a shuffle. It hands the sort an
+// inconsistent comparator, so the result is biased towards the original
+// order — with a feed that means the newest reels keep landing near the
+// top and a refresh looks like it did nothing.
+//
+// `avoidFirstId` is a small courtesy: a refresh that drops you back on
+// the reel you were just watching reads as broken even when everything
+// below it did change, so if the shuffle lands there, swap the head with
+// a random other card.
+function shuffled(items: Reel[], avoidFirstId?: string | null): Reel[] {
+  const out = items.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  if (avoidFirstId && out.length > 1 && out[0].id === avoidFirstId) {
+    const j = 1 + Math.floor(Math.random() * (out.length - 1));
+    [out[0], out[j]] = [out[j], out[0]];
+  }
+  return out;
+}
+
+export default function ReelsScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { role, user } = useAuth();
   const isClient = role === 'client';
   const isFocused = useIsFocused();
   const [activeTab, setActiveTab] = useState<'foryou' | 'following'>('foryou');
   const [activeIndex, setActiveIndex] = useState(0);
+  const [listHeight, setListHeight] = useState(SCREEN_H);
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when arriving from workspace search: open on that reel instead
+  // of the top of the feed.
+  const focusReelId: string | undefined = route?.params?.focusReelId;
+  const listRef = useRef<FlatList<Reel>>(null);
+  const focusHandledRef = useRef<string | null>(null);
+  // Which reel the last shuffle put first, so the next one can avoid
+  // opening on it again.
+  const lastFirstReelRef = useRef<string | null>(null);
+  // Mirrors activeIndex so callbacks can read the current card without
+  // being rebuilt every time it changes.
+  const activeIndexRef = useRef(0);
 
-  useEffect(() => { fetchReels(); }, [activeTab]);
-
-
-  const fetchReels = async () => {
-    setLoading(true); setError(null);
+  // Memoised and declared before the effect that runs it. Previously
+  // the effect depended only on activeTab, so fetchReels kept whatever
+  // `user` it closed over on first render — signing in did not refetch
+  // the feed, and the "following" tab kept querying with a stale id.
+  const fetchReels = useCallback(async (isRefresh = false) => {
+    // A refresh leaves the current feed on screen and lets the spinner in
+    // the pull gesture carry the wait. Swapping in the full-screen
+    // skeleton would blank out a video the user is still watching, which
+    // is a worse experience than the wait itself.
+    if (isRefresh) setRefreshing(true); else setLoading(true);
+    setError(null);
     try {
       let query = supabase.from('reels')
-        .select('id, video_url, description, type, likes, created_at, profiles(id, full_name, avatar_url, role, category, subcategory, location, verification_level)')
+        .select('id, video_url, thumbnail_url, description, type, likes, created_at, profiles(id, full_name, avatar_url, role, category, subcategory, location, verification_level)')
         .order('created_at', { ascending: false }).limit(50);
+
+      // Blocked people are excluded here rather than filtered out of the
+      // rendered list. A block that only hides rows in the UI still ships
+      // their video to the device and still shows it the moment any code
+      // path forgets the filter — which tells the user they are protected
+      // when they are not. Doing it in the query means there is one place
+      // to get right.
+      const blocked = await blockedUserIds();
+      const blockedFilter = notInFilter(blocked);
+      if (blockedFilter) query = query.not('user_id', 'in', blockedFilter);
       if (activeTab === 'following' && user?.id) {
-        const { data: followData } = await supabase.from('follows').select('following_id').eq('follower_id', user.id);
+        const { data: followData } = await supabase.from('follows')
+          .select('following_id').eq('follower_id', user.id).limit(FOLLOWING_FETCH_LIMIT);
         const followedIds = (followData || []).map((f: any) => f.following_id);
         if (followedIds.length > 0) { query = query.in('user_id', followedIds); }
-        else { setReels([]); setLoading(false); return; }
+        // No setLoading here: the finally block below runs on this
+        // return too, and it clears whichever flag was set.
+        else { setReels([]); return; }
       }
       const { data, error: fetchError } = await query;
       if (fetchError) throw fetchError;
-      const formatted = (data || []).map((item: any) => ({ ...item, profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles }));
-      setReels(formatted as Reel[]);
-    } catch (err: any) { console.error('Fetch reels error:', err); setError(err.message || 'Failed to load reels'); }
-    finally { setLoading(false); }
-  };
+      const formatted = (data || []).map((item: any) => ({ ...item, profiles: Array.isArray(item.profiles) ? item.profiles[0] : item.profiles })) as Reel[];
 
-  const onViewRef = useRef(({ viewableItems }: any) => { if (viewableItems.length > 0) setActiveIndex(viewableItems[0].index ?? 0); });
+      // The query orders by created_at, so this is the most recent 50
+      // either way. For You then shuffles that window, which is what
+      // makes a pull down feel like it fetched something rather than
+      // redrawing the same list.
+      //
+      // Following stays chronological on purpose. You chose those people,
+      // so "what did they post, newest first" is the useful order, and
+      // scrambling it would lose the one thing that feed is for.
+      const ordered = activeTab === 'foryou'
+        ? shuffled(formatted, lastFirstReelRef.current)
+        : formatted;
+      lastFirstReelRef.current = ordered[0]?.id ?? null;
+      setReels(ordered);
+
+      // Back to the top, or the new order is applied under a scroll
+      // position that belonged to the old one.
+      if (isRefresh) {
+        activeIndexRef.current = 0;
+        setActiveIndex(0);
+        listRef.current?.scrollToOffset({ offset: 0, animated: false });
+      }
+    } catch (err: any) { console.error('Fetch reels error:', err); setError(err.message || 'Failed to load reels'); }
+    finally { setLoading(false); setRefreshing(false); }
+  }, [activeTab, user?.id]);
+
+  useEffect(() => { fetchReels(); }, [fetchReels]);
+
+  const onRefresh = useCallback(() => { fetchReels(true); }, [fetchReels]);
+
+  // Drop the blocked person's reels from what is already on screen.
+  // Waiting for the next fetch would leave the video they just blocked
+  // still playing in front of them, which reads as the block not
+  // working — the moment that matters most for trusting the feature.
+  const handleBlocked = useCallback((blockedId: string) => {
+    setReels(prev => prev.filter(r => r.profiles?.id !== blockedId));
+  }, []);
+
+  const onViewRef = useRef(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      const i = viewableItems[0].index ?? 0;
+      // Cleared only when the list reports the card that was asked for,
+      // so a transient report mid-scroll does not release the target.
+      if (pendingFocusIndexRef.current === i) pendingFocusIndexRef.current = null;
+      activeIndexRef.current = i;
+      setActiveIndex(i);
+    }
+  });
   const viewConfigRef = useRef({ viewAreaCoveragePercentThreshold: 50 });
-  const renderReel = useCallback(({ item, index }: { item: Reel; index: number }) => (
-    <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} navigation={navigation} />
-  ), [isClient, activeIndex, user, isFocused, navigation]);
+
+  // The list's own height is doing four jobs at once: the card height,
+  // the snap interval, and both numbers in getItemLayout. Two things
+  // follow from that, and neither was handled.
+  //
+  // Rounding: onLayout reports a float. A card is laid out at whole
+  // pixels but snapToInterval and getItemLayout keep the fraction, so
+  // the snap target and the card's real top drift apart by a little
+  // more with every card. Rounding first keeps all four uses agreeing.
+  //
+  // Re-anchoring: Android can report a new height after the first
+  // layout, when the translucent status bar and the tab bar settle. The
+  // list is still resting at oldHeight * index while every card is now
+  // at newHeight * index, so the rest position falls between two reels.
+  // Re-anchoring on change puts the active card back under the viewport.
+  //
+  // This is defensive rather than the diagnosed cause of the misaligned
+  // video — that was removeClippedSubviews, see the FlatList below.
+  const listHeightRef = useRef(SCREEN_H);
+  // False until onLayout reports a real measurement. Until then
+  // listHeight is only Dimensions.get('window'), which is the whole
+  // window rather than this list inside it.
+  const listMeasuredRef = useRef(false);
+  // The card index a deep link asked for, held until the list actually
+  // settles on it. Re-anchoring after a re-measure would otherwise scroll
+  // back to whatever was on screen a frame earlier and undo the jump.
+  const pendingFocusIndexRef = useRef<number | null>(null);
+  const handleListLayout = useCallback((e: any) => {
+    const h = Math.round(e.nativeEvent.layout.height);
+    if (h <= 0) return;
+    // Set before the no-op guard: a height that happens to equal the
+    // initial guess is still a genuine measurement.
+    listMeasuredRef.current = true;
+    if (h === listHeightRef.current) return;
+    listHeightRef.current = h;
+    setListHeight(h);
+    // Deferred a frame so the offset is measured against the new item
+    // positions rather than the old ones.
+    requestAnimationFrame(() => {
+      // A pending deep-link target wins. The sequence that made this
+      // necessary: onLayout reports a new height and schedules this, the
+      // focus effect scrolls to the requested reel, onViewableItemsChanged
+      // reports the card that was visible a moment ago, and then this
+      // frame fires and scrolls back to it — landing on the wrong reel
+      // every time a reel was opened from search.
+      const target = pendingFocusIndexRef.current ?? activeIndexRef.current;
+      listRef.current?.scrollToOffset({ offset: h * target, animated: false });
+    });
+  }, []);
+  // Runs once per requested id, after the feed has the reel in hand.
+  // Silently does nothing when the reel isn't in this batch — it may be
+  // older than the 50 the feed loads, and scrolling somewhere arbitrary
+  // would be worse than staying put.
+  useEffect(() => {
+    if (!focusReelId || loading || focusHandledRef.current === focusReelId) return;
+    // Wait for a real measurement. getItemLayout multiplies listHeight by
+    // the index, so scrolling while listHeight is still the window-sized
+    // guess lands at an offset that belongs to a different card — the
+    // reel opened from search was consistently the wrong one.
+    if (!listMeasuredRef.current) return;
+    const index = reels.findIndex(r => r.id === focusReelId);
+    if (index > 0) {
+      pendingFocusIndexRef.current = index;
+      listRef.current?.scrollToIndex({ index, animated: false });
+      activeIndexRef.current = index;
+      setActiveIndex(index);
+    }
+    focusHandledRef.current = focusReelId;
+    // listHeight is a dependency so that when the real measurement
+    // arrives after this first runs, the scroll is retried with it.
+  }, [focusReelId, loading, reels, listHeight]);
+
+  const renderReel = useCallback(({ item, index }: { item: Reel; index: number }) => {
+    // Android has a hard limit on simultaneous hardware video decoders.
+    // Without this, every reel that scrolled into FlatList's render
+    // window stayed fully mounted with its own decoder instance -
+    // scrolling through enough reels would exceed that limit and
+    // crash. Only the current reel and its immediate neighbors get a
+    // real <Video> (and the data queries ReelCard fires on mount);
+    // everything else renders a lightweight placeholder that still
+    // preserves scroll-snap positions.
+    const withinWindow = Math.abs(index - activeIndex) <= 1;
+    if (!withinWindow) {
+      return <View style={{ height: listHeight, backgroundColor: '#000' }} />;
+    }
+    return (
+      <ReelCard reel={item} isClient={isClient} isActive={index === activeIndex && isFocused} userId={user?.id} navigation={navigation} cardHeight={listHeight} onBlocked={handleBlocked} />
+    );
+  }, [isClient, activeIndex, user, isFocused, navigation, listHeight]);
 
   if (loading) return (
     <View style={styles.container}>
@@ -750,13 +1040,13 @@ export default function ReelsScreen({ navigation }: any) {
       {/* Top tabs still visible during loading */}
       <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.tabRow}>
-          <TouchableOpacity activeOpacity={0.7}>
+          <PressableScale>
             <Text style={[styles.tabText, styles.tabTextActive]}>For You</Text>
             <View style={styles.tabUnderline} />
-          </TouchableOpacity>
-          <TouchableOpacity activeOpacity={0.7}>
+          </PressableScale>
+          <PressableScale>
             <Text style={styles.tabText}>Following</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </View>
     </View>
@@ -771,9 +1061,11 @@ export default function ReelsScreen({ navigation }: any) {
         </View>
         <Text style={styles.errorTitle}>Could not load reels</Text>
         <Text style={styles.errorDesc}>{error}</Text>
-        <TouchableOpacity style={styles.retryBtn} onPress={fetchReels} activeOpacity={0.85}>
+        {/* Wrapped, not passed bare: onPress hands the handler a touch
+            event, which as a first argument would read as isRefresh. */}
+        <PressableScale style={styles.retryBtn} onPress={() => fetchReels()}>
           <Text style={styles.retryText}>Try Again</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );
@@ -794,21 +1086,21 @@ export default function ReelsScreen({ navigation }: any) {
             : 'Create your first reel!'}
         </Text>
         {activeTab === 'following' && (
-          <TouchableOpacity style={styles.retryBtn} onPress={() => setActiveTab('foryou')} activeOpacity={0.85}>
+          <PressableScale style={styles.retryBtn} onPress={() => setActiveTab('foryou')}>
             <Text style={styles.retryText}>Browse For You</Text>
-          </TouchableOpacity>
+          </PressableScale>
         )}
       </View>
       <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.tabRow}>
-          <TouchableOpacity onPress={() => setActiveTab('foryou')} activeOpacity={0.7}>
+          <PressableScale onPress={() => setActiveTab('foryou')}>
             <Text style={[styles.tabText, activeTab === 'foryou' && styles.tabTextActive]}>For You</Text>
             {activeTab === 'foryou' && <View style={styles.tabUnderline} />}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setActiveTab('following')} activeOpacity={0.7}>
+          </PressableScale>
+          <PressableScale onPress={() => setActiveTab('following')}>
             <Text style={[styles.tabText, activeTab === 'following' && styles.tabTextActive]}>Following</Text>
             {activeTab === 'following' && <View style={styles.tabUnderline} />}
-          </TouchableOpacity>
+          </PressableScale>
         </View>
       </View>
     </View>
@@ -818,30 +1110,83 @@ export default function ReelsScreen({ navigation }: any) {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <FlatList
+        ref={listRef}
         data={reels}
+        onLayout={handleListLayout}
         renderItem={renderReel}
         keyExtractor={item => item.id}
-        pagingEnabled
         showsVerticalScrollIndicator={false}
-        snapToInterval={SCREEN_H}
+        snapToInterval={listHeight}
+        disableIntervalMomentum
         decelerationRate="fast"
         onViewableItemsChanged={onViewRef.current}
         viewabilityConfig={viewConfigRef.current}
-        getItemLayout={(_, index) => ({ length: SCREEN_H, offset: SCREEN_H * index, index })}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            // The feed is full-bleed video, so the spinner is drawn on
+            // white-on-dark rather than the default dark-on-light, which
+            // would disappear against a dark frame.
+            tintColor={colors.white}
+            colors={[colors.primary]}
+            progressBackgroundColor={colors.black}
+            // Android draws the spinner from the very top of the list,
+            // which on this screen is underneath the translucent status
+            // bar and the For You / Following tabs. This clears both:
+            // insets.top is the status bar, +8 matches the tab row's own
+            // top padding, and the rest is the tab row's height plus a
+            // gap, so the spinner reads as separate from the tabs rather
+            // than colliding with the active underline.
+            progressViewOffset={insets.top + 52}
+          />
+        }
+        getItemLayout={(_, index) => ({ length: listHeight, offset: listHeight * index, index })}
+        windowSize={3}
+        maxToRenderPerBatch={2}
+        initialNumToRender={2}
+        // removeClippedSubviews is deliberately off. It detaches and
+        // reattaches native views behind the renderer's back, which this
+        // app cannot afford on two counts now that it runs on Fabric:
+        // it raced the mounting layer into a null dereference in
+        // MountingCoordinator::pullTransaction (a hard SIGSEGV on
+        // launch), and detaching a playing video left its TextureView's
+        // last frame on screen uncleared, so the tail of the previous
+        // reel stayed painted above the current one.
+        //
+        // The memory it saves is not needed here: windowSize={3} already
+        // keeps at most three cards mounted.
       />
       <View style={[styles.topOverlay, { paddingTop: insets.top + 8 }]}>
         <View style={styles.tabRow}>
-          <TouchableOpacity onPress={() => setActiveTab('foryou')} activeOpacity={0.7}>
+          <PressableScale onPress={() => setActiveTab('foryou')}>
             <Text style={[styles.tabText, activeTab === 'foryou' && styles.tabTextActive]}>For You</Text>
             {activeTab === 'foryou' && <View style={styles.tabUnderline} />}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setActiveTab('following')} activeOpacity={0.7}>
+          </PressableScale>
+          <PressableScale onPress={() => setActiveTab('following')}>
             <Text style={[styles.tabText, activeTab === 'following' && styles.tabTextActive]}>Following</Text>
             {activeTab === 'following' && <View style={styles.tabUnderline} />}
-          </TouchableOpacity>
+          </PressableScale>
         </View>
-        {!isClient && (<TouchableOpacity style={styles.createBtn} activeOpacity={0.85}><Text style={styles.createBtnText}>+ Create</Text></TouchableOpacity>)}
-        {isClient && (<TouchableOpacity style={styles.searchBtn} activeOpacity={0.7}><Text style={styles.searchIcon}>🔍</Text></TouchableOpacity>)}
+        {/* The "+ Create" button that used to sit here is gone. It had no
+            onPress at all, so a worker tapping it got nothing — and reel
+            creation is already reachable from the Station tab and from
+            the worker's own profile, both of which work. A button that
+            does nothing is worse than no button. */}
+        {/* top is applied here rather than in the stylesheet because it
+            depends on the safe-area inset. The button is absolutely
+            positioned, so it does NOT inherit the overlay's paddingTop
+            the way the tab row does — without this it renders ~85px
+            higher than the tabs, half of it underneath the system status
+            bar, which swallows the touch. It looked tappable and wasn't. */}
+        <PressableScale
+          style={[styles.searchBtn, { top: insets.top + 8 }]}
+          onPress={() => navigation.navigate('Search')}
+          accessibilityRole="button"
+          accessibilityLabel="Search"
+        >
+          <Icon name="search" size={18} color={colors.white} />
+        </PressableScale>
       </View>
     </View>
   );
@@ -857,6 +1202,13 @@ const styles = StyleSheet.create({
   reelContainer: { width: SCREEN_W, position: 'relative', backgroundColor: colors.black },
   videoContainer: { flex: 1 },
   video: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  bufferingBadge: {
+    position: 'absolute', top: '46%', alignSelf: 'center',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  bufferingText: { color: colors.white, fontSize: 12, fontWeight: '600' },
   loadingOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.2)' },
   pauseOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   pauseIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.15)' },
@@ -869,12 +1221,10 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 16, fontWeight: '600', color: colors.white, opacity: 0.5, paddingBottom: 4, textShadowColor: 'rgba(0,0,0,0.6)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
   tabTextActive: { opacity: 1, fontWeight: '700' },
   tabUnderline: { height: 2.5, backgroundColor: colors.white, borderRadius: 2, marginTop: 2 },
-  createBtn: { position: 'absolute', right: 20, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 999, backgroundColor: colors.primary + '20', borderWidth: 1.5, borderColor: colors.primary + '50' },
-  createBtnText: { fontSize: 12, fontWeight: '700', color: colors.primary },
   searchBtn: { position: 'absolute', right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white + '10', alignItems: 'center', justifyContent: 'center' },
-  searchIcon: { fontSize: 16 },
   actionsColumn: { position: 'absolute', right: 10, alignItems: 'center', gap: 14, zIndex: 5 },
   actionAvatarContainer: { marginBottom: 4 },
+  actionAvatarShadow: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
   actionAvatar: { width: 46, height: 46, borderRadius: 23, borderWidth: 2.5, borderColor: colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
   actionAvatarFallback: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center', borderWidth: 2.5, borderColor: colors.white, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
   actionAvatarText: { fontSize: 16, fontWeight: '700', color: colors.white },

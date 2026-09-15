@@ -44,63 +44,61 @@ export type RespondResult =
 // accepting/declining a booking request. Kept in one place so a fix
 // here (e.g. to the race-condition handling) applies everywhere this
 // is used, instead of two copies quietly drifting apart.
+// Takes only what it needs. clientId/workerName/workerId used to be
+// passed in solely to compose a notification here — that now comes
+// from the on_booking_update database trigger, so requiring callers to
+// thread three extra values through is just noise they can get wrong.
 export async function respondToBookingRequest(
   bookingId: string,
   newStatus: 'accepted' | 'declined',
-  clientId: string,
-  workerName: string,
-  workerId: string,
 ): Promise<RespondResult> {
   try {
-    // WHERE status='pending' makes this atomic against two workers
-    // both tapping Accept on the same Flash Job request at nearly the
-    // same time — Postgres processes each row's UPDATE individually,
-    // so whichever lands first flips the row away from 'pending'; the
-    // second one then matches zero rows instead of succeeding twice.
-    const { data: updateResult, error } = await supabase
-      .from('hire_requests')
-      .update({ status: newStatus })
-      .eq('id', bookingId)
-      .eq('status', 'pending')
-      .select('id, flash_batch_id')
-      .maybeSingle();
-
-    if (error) throw error;
-    if (!updateResult) return { ok: false, reason: 'taken' };
-
-    // Part of a Flash Job broadcast — the other workers' pending
-    // requests for the same job are no longer relevant now that
-    // someone has accepted. Mark them expired instead of leaving them
-    // sitting as actionable-looking pending requests forever.
-    if (newStatus === 'accepted' && updateResult.flash_batch_id) {
-      try {
-        await supabase
-          .from('hire_requests')
-          .update({ status: 'expired' })
-          .eq('flash_batch_id', updateResult.flash_batch_id)
-          .eq('status', 'pending')
-          .neq('id', bookingId);
-      } catch (expireErr) {
-        console.warn('Could not expire sibling flash job requests (non-fatal):', expireErr);
-      }
-    }
-
-    // Best-effort notification — if the notifications table/columns
-    // don't match, the status change itself already succeeded, so
-    // this failing shouldn't surface as an error to the worker.
-    try {
-      await supabase.from('notifications').insert({
-        user_id: clientId,
-        type: 'booking',
-        message: `${workerName || 'The worker'} ${newStatus === 'accepted' ? 'accepted' : 'declined'} your booking request`,
-        from_user_id: workerId,
-        booking_id: bookingId,
-        is_read: false,
+    if (newStatus === 'accepted') {
+      // Accepting goes through the database function, which decides the
+      // winner of a Flash Job in ONE transaction and expires the losers.
+      //
+      // The previous approach here was `.eq('status','pending')` on the
+      // update, with a comment claiming that made it atomic against two
+      // workers accepting the same flash job. It doesn't: a Flash Job
+      // creates a SEPARATE row per worker, so each worker's own row is
+      // independently 'pending' and every one of those updates
+      // succeeds. Every worker won, and the client got the whole batch
+      // arriving at one address. The guard only ever protected against
+      // the same worker double-tapping one request.
+      const { data: result, error } = await supabase.rpc('accept_hire_request', {
+        request_id: bookingId,
       });
-    } catch (notifErr) {
-      console.warn('Could not create notification (non-fatal):', notifErr);
+
+      if (error) throw error;
+      if (result === 'taken') return { ok: false, reason: 'taken' };
+      if (result !== 'accepted') {
+        // 'forbidden', 'not_found', or an already-decided status.
+        return { ok: false, reason: 'error', error: new Error(String(result)) };
+      }
+    } else {
+      // Declining needs no coordination — it just frees the job for
+      // whoever else still holds a pending row in the same batch.
+      // Writes 'rejected', matching what the rest of the platform
+      // stores; this used to write 'declined', a value no status
+      // filter or colour map anywhere recognises.
+      const { data: updateResult, error } = await supabase
+        .from('hire_requests')
+        .update({ status: 'rejected' })
+        .eq('id', bookingId)
+        .eq('status', 'pending')
+        .select('id')
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!updateResult) return { ok: false, reason: 'taken' };
     }
 
+    // No notification is created here on purpose. The database has an
+    // on_booking_update trigger that already notifies the client on
+    // every status change — inserting one here too meant the client
+    // got the same message twice for every accept and decline. The
+    // trigger is the better place for it: it also covers status
+    // changes made from the website, which this code path never sees.
     return { ok: true };
   } catch (error) {
     return { ok: false, reason: 'error', error };

@@ -1,12 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, Animated,
-  StatusBar, Platform,
+  View, Text, StyleSheet, Animated,
+  StatusBar, Platform, Vibration,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors } from '../../theme';
+import { EASING, colors , useReducedMotion} from '../../theme';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
-import { generateCallId, sendCallInvite, useCallResponseListener } from '../../lib/calling';
+import { generateCallId, sendCallInvite, useCallResponseListener, logCallOutcome } from '../../lib/calling';
 
 const getInitials = (name: string): string => {
   const parts = name.trim().split(' ');
@@ -15,12 +16,13 @@ const getInitials = (name: string): string => {
 };
 
 export default function OutgoingCallScreen({ navigation, route }: any) {
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const { workerName, workerCategory, workerId } = route.params;
 
   const [callId] = useState(() => generateCallId());
-  const [status, setStatus] = useState<'ringing' | 'declined' | 'sending'>('sending');
+  const [status, setStatus] = useState<'ringing' | 'declined' | 'missed' | 'sending'>('sending');
 
   const pulse1 = useRef(new Animated.Value(1)).current;
   const pulse1Op = useRef(new Animated.Value(0.6)).current;
@@ -34,17 +36,49 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
   const contentOpacity = useRef(new Animated.Value(0)).current;
   const avatarScale = useRef(new Animated.Value(0.8)).current;
 
+  // No audio ringback tone yet — that needs a sound library
+  // (react-native-sound) plus an actual audio asset, neither of which
+  // exist in this project. Vibration is a real, verifiable substitute
+  // that needs no new dependency or asset, giving the caller physical
+  // confirmation the call is actively ringing.
+  useEffect(() => {
+    if (status === 'ringing') {
+      Vibration.vibrate([500, 1000, 500, 1000], true);
+    } else {
+      Vibration.cancel();
+    }
+    return () => Vibration.cancel();
+  }, [status]);
+
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Real signaling — waits for the callee to actually respond instead
   // of blindly transitioning to InCall after a fixed timer regardless
   // of whether anyone answered.
   useCallResponseListener(callId, (response) => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
     if (response === 'accepted') {
-      navigation.replace('InCall', { workerName, workerCategory, callId, isCaller: true });
+      navigation.replace('InCall', { workerName, workerCategory, callId, isCaller: true, otherUserId: workerId });
     } else {
       setStatus('declined');
+      logCallOutcome(user?.id || '', workerId, 'declined');
       setTimeout(() => navigation.goBack(), 1500);
     }
   });
+
+  // A call that never gets answered shouldn't ring forever — 30
+  // seconds with no response is treated as missed, matching normal
+  // phone call behavior.
+  useEffect(() => {
+    if (status === 'ringing') {
+      timeoutRef.current = setTimeout(() => {
+        logCallOutcome(user?.id || '', workerId, 'missed');
+        setStatus('missed');
+        setTimeout(() => navigation.goBack(), 1000);
+      }, 30000);
+    }
+    return () => { if (timeoutRef.current) clearTimeout(timeoutRef.current); };
+  }, [status, navigation, user?.id, workerId]);
 
   useEffect(() => {
     if (!workerId) {
@@ -61,11 +95,16 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
         console.error('Failed to send call invite:', err);
         navigation.goBack();
       });
+    // Deliberately mount-only. This sends the call invite; re-running
+    // it because a dependency changed identity would ring the callee a
+    // second time for the same call. The lint rule can't see that this
+    // is a one-shot side effect rather than a subscription.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(contentOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: 1, duration: 500, easing: EASING.OUT, useNativeDriver: true }),
       Animated.spring(avatarScale, { toValue: 1, damping: 12, stiffness: 100, useNativeDriver: true }),
     ]).start();
 
@@ -73,8 +112,8 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
       Animated.loop(Animated.sequence([
         Animated.delay(delay),
         Animated.parallel([
-          Animated.timing(s, { toValue: 1.8, duration: 1500, useNativeDriver: true }),
-          Animated.timing(o, { toValue: 0, duration: 1500, useNativeDriver: true }),
+          Animated.timing(s, { toValue: 1.8, duration: 1500, easing: EASING.OUT, useNativeDriver: true }),
+          Animated.timing(o, { toValue: 0, duration: 1500, easing: EASING.OUT, useNativeDriver: true }),
         ]),
         Animated.parallel([
           Animated.timing(s, { toValue: 1, duration: 0, useNativeDriver: true }),
@@ -82,29 +121,32 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
         ]),
       ]));
 
+    // Perpetual ripples are exactly what "reduce motion" is for. The
+    // call still works; it just does not pulse at the viewer.
+    if (reducedMotion) return;
     makePulse(pulse1, pulse1Op, 0).start();
     makePulse(pulse2, pulse2Op, 500).start();
     makePulse(pulse3, pulse3Op, 1000).start();
 
     Animated.loop(Animated.stagger(200, [
       Animated.sequence([
-        Animated.timing(dot1, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(dot1, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(dot1, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(dot1, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.sequence([
-        Animated.timing(dot2, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(dot2, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(dot2, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(dot2, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.sequence([
-        Animated.timing(dot3, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.timing(dot3, { toValue: 0, duration: 300, useNativeDriver: true }),
+        Animated.timing(dot3, { toValue: 1, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(dot3, { toValue: 0, duration: 300, easing: EASING.OUT, useNativeDriver: true }),
       ]),
     ])).start();
 
     // No more auto-connect timer — the useCallResponseListener above
     // is what actually transitions to InCall now, only once the
     // callee has genuinely accepted.
-  }, []);
+  }, [avatarScale, contentOpacity, dot1, dot2, dot3, pulse1, pulse1Op, pulse2, pulse2Op, pulse3, pulse3Op]);
 
   return (
     <View style={s.container}>
@@ -112,7 +154,7 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
       <Animated.View style={[s.content, { opacity: contentOpacity }]}>
         <View style={[s.statusRow, { marginTop: insets.top + 60 }]}>
           <Text style={s.callingText}>
-            {status === 'declined' ? 'Call Declined' : status === 'sending' ? 'Connecting…' : 'Calling'}
+            {status === 'declined' ? 'Call Declined' : status === 'missed' ? 'No Answer' : status === 'sending' ? 'Connecting…' : 'Calling'}
           </Text>
           {status === 'ringing' && (
             <View style={s.dotsRow}>
@@ -137,10 +179,18 @@ export default function OutgoingCallScreen({ navigation, route }: any) {
       </Animated.View>
 
       <View style={[s.bottom, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 20 : 30 }]}>
-        <TouchableOpacity style={s.cancelBtn} onPress={() => navigation.goBack()} activeOpacity={0.85}>
+        <PressableScale
+          style={s.cancelBtn}
+          onPress={() => {
+            if (status === 'ringing' || status === 'sending') {
+              logCallOutcome(user?.id || '', workerId, 'cancelled');
+            }
+            navigation.goBack();
+          }}
+        >
           <View style={s.cancelInner}><Text style={s.cancelIcon}>📞</Text></View>
           <Text style={s.cancelLabel}>Cancel</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </View>
   );

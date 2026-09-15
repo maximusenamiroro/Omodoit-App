@@ -1,22 +1,20 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { ensureMediaPermission } from '../../lib/permissions';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
+import PressableScale from '../../components/common/PressableScale';
+import Icon from '../../components/common/Icon';
+import Avatar from '../../components/common/Avatar';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Alert, Platform, Image, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { uploadImageToStorage, clearOldUploads } from '../../lib/uploadImage';
-
-const getInitials = (name?: string | null) => {
-  if (!name) return '?';
-  const parts = name.trim().split(' ');
-  if (parts.length >= 2) return parts[0][0] + parts[1][0];
-  return parts[0][0];
-};
 
 interface OrderItem {
   id: string;
@@ -35,11 +33,16 @@ interface BookingItem {
   location: string;
 }
 
+// The profile shows recent activity, not a lifetime archive.
+const HISTORY_LIMIT = 50;
+
 export default function ClientProfileScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState<'orders' | 'bookings' | 'saved'>('orders');
+  const [saved, setSaved] = useState<{ id: string; reelId: string; poster: string | null; caption: string }[]>([]);
 
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [bookings, setBookings] = useState<BookingItem[]>([]);
@@ -49,27 +52,39 @@ export default function ClientProfileScreen({ navigation }: any) {
   const contentOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(200, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(contentOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [contentOpacity, headerOpacity]);
 
   const loadData = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [ordersRes, bookingsRes] = await Promise.all([
+      const [ordersRes, bookingsRes, savedRes] = await Promise.all([
         supabase
           .from('orders')
           .select('id, product_name, price, status, created_at')
           .eq('user_id', user.id)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(HISTORY_LIMIT),
         supabase
           .from('hire_requests')
           .select('id, job_description, location, status, created_at, worker_id')
           .eq('client_id', user.id)
-          .order('created_at', { ascending: false }),
+          .order('created_at', { ascending: false })
+          .limit(HISTORY_LIMIT),
+        // Saved reels were never fetched at all. The count on this
+        // screen was the literal string '0' and the tab always said
+        // "No saved reels", so anyone who had saved something was told
+        // flatly that they had not.
+        supabase
+          .from('saved_reels')
+          .select('id, reel_id, reels(id, thumbnail_url, description)')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(HISTORY_LIMIT),
       ]);
 
       const orderRows = ordersRes.data || [];
@@ -80,6 +95,17 @@ export default function ClientProfileScreen({ navigation }: any) {
         price: o.price ? `₦${o.price.toLocaleString()}` : '',
         date: new Date(o.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       })));
+
+      setSaved((savedRes.data || [])
+        // A saved row whose reel has since been deleted has nothing to
+        // show, so it is dropped rather than rendered as a blank tile.
+        .filter((s: any) => s.reels)
+        .map((s: any) => ({
+          id: s.id,
+          reelId: s.reel_id,
+          poster: s.reels?.thumbnail_url || null,
+          caption: s.reels?.description || '',
+        })));
 
       const bookingRows = bookingsRes.data || [];
       const workerIds = [...new Set(bookingRows.map((b: any) => b.worker_id).filter(Boolean))];
@@ -105,7 +131,10 @@ export default function ClientProfileScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
-  const handleAvatarPick = () => {
+  const handleAvatarPick = async () => {
+    // Android 13+ returns an empty picker without this.
+    if (!(await ensureMediaPermission('photo'))) return;
+
     launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 800, maxHeight: 800 }, async (res) => {
       const uri = res.assets?.[0]?.uri;
       if (!uri || !user?.id) return;
@@ -145,81 +174,98 @@ export default function ClientProfileScreen({ navigation }: any) {
         <View style={{ width: 32 }} />
         <Text style={st.headerBarTitle}>My Profile</Text>
         <View style={st.headerBarRight}>
-          <TouchableOpacity style={st.headerBarBtn} onPress={() => Alert.alert('Bank Details', 'This feature is coming soon.')} activeOpacity={0.7}>
-            <Text style={st.headerBarIcon}>🏦</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
-            <Text style={st.headerBarIcon}>⚙️</Text>
-          </TouchableOpacity>
+          <PressableScale style={st.headerBarBtn} accessibilityRole="button" accessibilityLabel="Settings" onPress={() => navigation.navigate('Settings')}>
+            <Icon name="settings" size={19} color={colors.textPrimary} />
+          </PressableScale>
         </View>
       </Animated.View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}>
         <Animated.View style={[st.profileSection, { opacity: headerOpacity }]}>
           <View style={st.avatarWrap}>
-            <View style={[st.avatarRing, { borderColor: colors.client }]}>
-              {profile?.avatar_url ? (
-                <Image source={{ uri: profile.avatar_url }} style={st.avatarImg} />
-              ) : (
-                <View style={[st.avatarFb, { backgroundColor: colors.client }]}>
-                  <Text style={st.avatarFbText}>{getInitials(profile?.full_name)}</Text>
-                </View>
-              )}
+            <View style={st.avatarRing}>
+              {/* Avatar rather than a local fallback: this one only
+                  showed initials when avatar_url was null, so a URL
+                  that 404s left an empty coloured circle. */}
+              <Avatar
+                uri={profile?.avatar_url}
+                name={profile?.full_name}
+                size={90}
+                ringColor={colors.client}
+              />
               {uploading && (
                 <View style={st.avatarUploadingOverlay}>
                   <ActivityIndicator color="#fff" />
                 </View>
               )}
             </View>
-            <TouchableOpacity style={[st.avatarPlus, { backgroundColor: colors.client }]} onPress={handleAvatarPick} disabled={uploading} activeOpacity={0.85}>
+            <PressableScale style={[st.avatarPlus, { backgroundColor: colors.client }]} onPress={handleAvatarPick} disabled={uploading}>
               <Text style={st.avatarPlusIcon}>+</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
 
           <Text style={st.profileName}>{profile?.full_name || 'Your Name'}</Text>
           {profile?.location && <Text style={st.profileLocation}>📍 {profile.location}</Text>}
           <Text style={st.memberText}>Member since {memberSince}</Text>
 
+          {/* Each count is the tab directly below it, so tapping one
+              selects that tab. It read as a label but behaved as
+              decoration, and a number sitting above a tab of the same
+              name is something people reach for. */}
           <View style={st.statsRow}>
             {[
-              { value: orders.length.toString(), label: 'Orders' },
-              { value: bookings.length.toString(), label: 'Bookings' },
-              { value: '0', label: 'Saved' },
-            ].map((s, i) => (
-              <View key={i} style={st.statItem}>
-                <Text style={st.statValue}>{s.value}</Text>
-                <Text style={st.statLabel}>{s.label}</Text>
-              </View>
+              { key: 'orders' as const, value: orders.length, one: 'Order', many: 'Orders' },
+              { key: 'bookings' as const, value: bookings.length, one: 'Booking', many: 'Bookings' },
+              { key: 'saved' as const, value: saved.length, one: 'Saved', many: 'Saved' },
+            ].map(s => (
+              <PressableScale
+                key={s.key}
+                style={st.statItem}
+                onPress={() => setActiveTab(s.key)}
+                accessibilityRole="button"
+                accessibilityLabel={`${s.value} ${s.value === 1 ? s.one : s.many}, show them`}
+              >
+                <Text style={[st.statValue, activeTab === s.key && { color: colors.client }]}>
+                  {s.value}
+                </Text>
+                {/* "1 Orders" was on screen until now. */}
+                <Text style={st.statLabel}>{s.value === 1 ? s.one : s.many}</Text>
+              </PressableScale>
             ))}
           </View>
 
-          <TouchableOpacity style={[st.editBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('EditProfile')} activeOpacity={0.85}>
-            <Text style={st.editBtnText}>✏️ Edit Profile</Text>
-          </TouchableOpacity>
+          <PressableScale style={[st.editBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('EditProfile')}>
+            <Icon name="edit" size={17} color="#fff" />
+            <Text style={st.editBtnText}>Edit Profile</Text>
+          </PressableScale>
         </Animated.View>
 
         <View style={st.tabBar}>
           {[
-            { key: 'orders' as const, icon: '📦', label: 'Orders' },
-            { key: 'bookings' as const, icon: '📋', label: 'Bookings' },
-            { key: 'saved' as const, icon: '🔖', label: 'Saved' },
+            { key: 'orders' as const, icon: 'orders' as const, label: 'Orders' },
+            { key: 'bookings' as const, icon: 'bookings' as const, label: 'Bookings' },
+            { key: 'saved' as const, icon: 'saved' as const, label: 'Saved' },
           ].map(tab => (
-            <TouchableOpacity
+            <PressableScale
               key={tab.key}
               style={[st.tab, activeTab === tab.key && st.tabActive]}
               onPress={() => setActiveTab(tab.key)}
-              activeOpacity={0.7}
             >
-              <Text style={st.tabIcon}>{tab.icon}</Text>
+              <Icon
+                name={tab.icon}
+                size={18}
+                color={activeTab === tab.key ? colors.client : colors.textMuted}
+                filled={activeTab === tab.key}
+              />
               <Text style={[st.tabText, activeTab === tab.key && st.tabTextActive]}>{tab.label}</Text>
               {activeTab === tab.key && <View style={[st.tabLine, { backgroundColor: colors.client }]} />}
-            </TouchableOpacity>
+            </PressableScale>
           ))}
         </View>
 
         <Animated.View style={[st.tabContent, { opacity: contentOpacity }]}>
           {loading ? (
-            <ActivityIndicator color={colors.client} style={{ marginVertical: 30 }} />
+            <CardRowSkeleton count={3} actions={false} />
           ) : (
             <>
               {activeTab === 'orders' && (
@@ -227,9 +273,9 @@ export default function ClientProfileScreen({ navigation }: any) {
                   <View style={st.emptyState}>
                     <Text style={st.emptyEmoji}>📦</Text>
                     <Text style={st.emptyTitle}>No orders yet</Text>
-                    <TouchableOpacity style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('ProductCatalogue')} activeOpacity={0.85}>
+                    <PressableScale style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('ProductCatalogue')}>
                       <Text style={st.emptyBtnText}>Browse Products</Text>
-                    </TouchableOpacity>
+                    </PressableScale>
                   </View>
                 ) : (
                   orders.map(order => {
@@ -258,9 +304,9 @@ export default function ClientProfileScreen({ navigation }: any) {
                   <View style={st.emptyState}>
                     <Text style={st.emptyEmoji}>📋</Text>
                     <Text style={st.emptyTitle}>No bookings yet</Text>
-                    <TouchableOpacity style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('Workspace')} activeOpacity={0.85}>
+                    <PressableScale style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('Explore')}>
                       <Text style={st.emptyBtnText}>Hire a Worker</Text>
-                    </TouchableOpacity>
+                    </PressableScale>
                   </View>
                 ) : (
                   bookings.map(booking => {
@@ -285,13 +331,41 @@ export default function ClientProfileScreen({ navigation }: any) {
               )}
 
               {activeTab === 'saved' && (
-                <View style={st.emptyState}>
-                  <Text style={st.emptyEmoji}>🔖</Text>
-                  <Text style={st.emptyTitle}>No saved reels</Text>
-                  <TouchableOpacity style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('Reels')} activeOpacity={0.85}>
-                    <Text style={st.emptyBtnText}>Browse Reels</Text>
-                  </TouchableOpacity>
-                </View>
+                saved.length === 0 ? (
+                  <View style={st.emptyState}>
+                    <Icon name="saved" size={30} color={colors.textMuted} />
+                    <Text style={st.emptyTitle}>Nothing saved yet</Text>
+                    <Text style={st.emptySub}>Tap Save on a reel and it will wait for you here.</Text>
+                    <PressableScale style={[st.emptyBtn, { backgroundColor: colors.client }]} onPress={() => navigation.navigate('Reels')}>
+                      <Text style={st.emptyBtnText}>Browse Reels</Text>
+                    </PressableScale>
+                  </View>
+                ) : (
+                  /* A grid, because what you saved was a video and a
+                     still frame identifies it far faster than a line of
+                     text would. Every reel has a poster now. */
+                  <View style={st.savedGrid}>
+                    {saved.map(item => (
+                      <PressableScale
+                        key={item.id}
+                        style={st.savedTile}
+                        onPress={() => navigation.navigate('Reels', { focusReelId: item.reelId })}
+                        accessibilityLabel={item.caption || 'Saved reel'}
+                      >
+                        {item.poster ? (
+                          <Image source={{ uri: item.poster }} style={st.savedImage} />
+                        ) : (
+                          <View style={[st.savedImage, st.savedFallback]}>
+                            <Icon name="reels" size={22} color={colors.textMuted} />
+                          </View>
+                        )}
+                        {!!item.caption && (
+                          <Text style={st.savedCaption} numberOfLines={1}>{item.caption}</Text>
+                        )}
+                      </PressableScale>
+                    ))}
+                  </View>
+                )
               )}
             </>
           )}
@@ -311,7 +385,7 @@ const st = StyleSheet.create({
 
   profileSection: { alignItems: 'center', paddingVertical: 24, paddingHorizontal: spacing.screenPadding },
   avatarWrap: { marginBottom: 14 },
-  avatarRing: { width: 96, height: 96, borderRadius: 48, borderWidth: 3, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  avatarRing: { alignItems: 'center', justifyContent: 'center' },
   avatarImg: { width: 88, height: 88, borderRadius: 44 },
   avatarFb: { width: 88, height: 88, borderRadius: 44, alignItems: 'center', justifyContent: 'center' },
   avatarFbText: { fontSize: 32, fontWeight: '700', color: colors.white },
@@ -328,7 +402,7 @@ const st = StyleSheet.create({
   statValue: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, letterSpacing: -0.5 },
   statLabel: { fontSize: 10, color: colors.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: 1 },
 
-  editBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14 },
   editBtnText: { fontSize: 12, fontWeight: '600', color: colors.white },
 
   tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -352,8 +426,14 @@ const st = StyleSheet.create({
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
   statusText: { fontSize: 10, fontWeight: '600' },
 
+  savedGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  savedTile: { width: '31.5%' },
+  savedImage: { width: '100%', aspectRatio: 9 / 16, borderRadius: 12, backgroundColor: colors.bgCard },
+  savedFallback: { alignItems: 'center', justifyContent: 'center' },
+  savedCaption: { fontSize: 11, color: colors.textMuted, marginTop: 6 },
   emptyState: { alignItems: 'center', paddingVertical: 48 },
   emptyEmoji: { fontSize: 40, marginBottom: 12, opacity: 0.3 },
+  emptySub: { fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: 6, marginBottom: 4 },
   emptyTitle: { fontSize: 14, color: colors.textMuted, marginBottom: 16 },
   emptyBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14 },
   emptyBtnText: { fontSize: 12, fontWeight: '600', color: colors.white },

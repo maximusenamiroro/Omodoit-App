@@ -21,13 +21,19 @@
     "react-native": "0.86.0",
     "react-native-agora": "^4.6.2",
     "react-native-bootsplash": "^7.3.2",
+    "react-native-compressor": "^2.0.3",
+    "react-native-create-thumbnail": "^2.2.0",
     "react-native-gesture-handler": "^3.1.0",
     "react-native-image-picker": "^8.2.1",
     "react-native-maps": "^1.29.0",
+    "react-native-nitro-modules": "^0.36.5",
     "react-native-safe-area-context": "^5.8.0",
     "react-native-screens": "^4.26.2",
+    "react-native-svg": "^15.15.5",
     "react-native-url-polyfill": "^4.0.0",
-    "react-native-video": "^6.19.2"
+    "react-native-video": "^6.19.2",
+    "react-native-video-trim": "^8.2.2",
+    "text-encoding-polyfill": "^0.6.7"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

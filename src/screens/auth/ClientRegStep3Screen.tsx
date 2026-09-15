@@ -1,18 +1,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TextInput,
   Animated, KeyboardAvoidingView, Platform, StatusBar,
   ScrollView, Alert, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 import { upsertWithRetry } from '../../lib/db';
 
 export default function ClientRegStep3Screen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
-  const { phoneNumber, fullName, email, location } = route.params;
+  const { fullName, email, location } = route.params;
   const { setDirectAuth, beginRegistration, endRegistration } = useAuth();
 
   const [password, setPassword] = useState('');
@@ -32,19 +35,19 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
   const buttonOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
+    Animated.stagger(entrance.stagger, [
       Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(headerSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(headerSlide, { toValue: 0, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(benefitsOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(benefitsOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(buttonOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [benefitsOpacity, buttonOpacity, formOpacity, formSlide, headerOpacity, headerSlide]);
 
   // Password strength
   const getPasswordStrength = () => {
@@ -85,20 +88,44 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
 
     try {
       // Step 1: Create the account with Supabase Auth
+      // Carried as user_metadata so AuthContext can rebuild this
+      // profile correctly if the write below fails — see the worker
+      // flow for why a hardcoded fallback role was a problem.
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email,
         password: password,
+        options: {
+          data: {
+            role: 'client',
+            full_name: fullName,
+            location: location,
+          },
+        },
       });
 
       if (authError) throw authError;
+
+      // With email confirmation enabled, signUp() returns a user but no
+      // session. Nothing signed in means auth.uid() is null, so the
+      // profile insert below would be refused by RLS — and every field
+      // needed to build it is already stored as user_metadata, which
+      // AuthContext writes out on first successful sign-in. So stop
+      // here and send them to their inbox.
+      if (!authData.session) {
+        setLoading(false);
+        Alert.alert(
+          'Check Your Email',
+          `We sent a confirmation link to ${email}. Open it to activate your account, then log in.`,
+          [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
+        );
+        return;
+      }
 
       if (authData.user) {
         // Step 2: Create the profile in the profiles table
         const profileData = {
           id: authData.user.id,
           full_name: fullName,
-          phone: phoneNumber,
-          phone_verified: true,
           location: location,
           role: 'client' as const,
           verification_level: 1,
@@ -135,7 +162,6 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
           full_name: fullName,
           avatar_url: null,
           role: 'client',
-          phone: phoneNumber,
           location: location,
           verification_level: 1,
           verification_status: 'basic',
@@ -173,13 +199,12 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Back */}
-      <TouchableOpacity
+      <PressableScale
         style={styles.backButton}
         onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
       >
-        <Text style={styles.backText}>←</Text>
-      </TouchableOpacity>
+        <Icon name="back" size={20} color={colors.white} />
+      </PressableScale>
 
       {/* Progress */}
       <View style={styles.progressContainer}>
@@ -207,11 +232,6 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
 
         {/* Summary */}
         <Animated.View style={[styles.summaryCard, { opacity: headerOpacity }]}>
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Phone</Text>
-            <Text style={styles.summaryValue}>✓ {phoneNumber}</Text>
-          </View>
-          <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Name</Text>
             <Text style={styles.summaryValue}>{fullName}</Text>
@@ -251,12 +271,12 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
                 onFocus={() => setFocused('password')}
                 onBlur={() => setFocused('')}
               />
-              <TouchableOpacity
+              <PressableScale
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
               >
                 <Text style={styles.eyeText}>{showPassword ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
 
             {password.length > 0 && (
@@ -294,12 +314,12 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
                 onFocus={() => setFocused('confirm')}
                 onBlur={() => setFocused('')}
               />
-              <TouchableOpacity
+              <PressableScale
                 onPress={() => setShowConfirm(!showConfirm)}
                 style={styles.eyeButton}
               >
                 <Text style={styles.eyeText}>{showConfirm ? '🙈' : '👁'}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             </View>
             {confirmPassword.length > 0 && password !== confirmPassword && (
               <Text style={styles.errorHint}>Passwords do not match</Text>
@@ -310,10 +330,9 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
           </View>
 
           {/* Terms */}
-          <TouchableOpacity
+          <PressableScale
             style={styles.termsRow}
             onPress={() => setAgreedToTerms(!agreedToTerms)}
-            activeOpacity={0.7}
           >
             <View style={[
               styles.checkbox,
@@ -327,7 +346,7 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
               {' '}and{' '}
               <Text style={styles.termsLink}>Privacy Policy</Text>
             </Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
 
         {/* Benefits */}
@@ -352,7 +371,7 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
       {/* Bottom */}
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: buttonOpacity }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.createButton,
               { backgroundColor: isFormValid() ? colors.client : colors.bgCard },
@@ -360,14 +379,13 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
             ]}
             onPress={handleCreateAccount}
             disabled={!isFormValid() || loading}
-            activeOpacity={0.85}
           >
             {loading ? (
               <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.createText}>Create My Account</Text>
             )}
-          </TouchableOpacity>
+          </PressableScale>
 
           <Text style={styles.securityNote}>
             🔒 Your password is encrypted and never stored in plain text

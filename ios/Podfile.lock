@@ -1,4 +1,6 @@
 PODS:
+  - AgoraIrisRTC_iOS2 (4.6.2-build.1)
+  - AgoraVideo_Special_iOS (4.6.2.70)
   - AsyncStorage (3.1.1):
     - hermes-engine
     - RCTRequired
@@ -22,9 +24,33 @@ PODS:
     - ReactNativeDependencies
     - Yoga
   - FBLazyVector (0.86.0)
+  - ffmpeg-mobile-min (6.0.6)
   - hermes-engine (250829098.0.14):
     - hermes-engine/Pre-built (= 250829098.0.14)
   - hermes-engine/Pre-built (250829098.0.14)
+  - NitroModules (0.36.5):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-callinvoker
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - RCTDeprecation (0.86.0)
   - RCTRequired (0.86.0)
   - RCTSwiftUI (0.86.0)
@@ -1448,6 +1474,77 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - react-native-agora (4.6.2):
+    - AgoraIrisRTC_iOS2 (= 4.6.2-build.1)
+    - AgoraVideo_Special_iOS (= 4.6.2.70)
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - react-native-compressor (2.0.3):
+    - hermes-engine
+    - NitroModules
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - react-native-create-thumbnail (2.2.0):
+    - React-Core
+  - react-native-geolocation (3.4.0):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - react-native-image-picker (8.2.1):
     - hermes-engine
     - RCTRequired
@@ -1517,7 +1614,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-safe-area-context (5.8.1):
+  - react-native-safe-area-context (5.8.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1529,8 +1626,8 @@ PODS:
     - React-graphics
     - React-ImageManager
     - React-jsi
-    - react-native-safe-area-context/common (= 5.8.1)
-    - react-native-safe-area-context/fabric (= 5.8.1)
+    - react-native-safe-area-context/common (= 5.8.0)
+    - react-native-safe-area-context/fabric (= 5.8.0)
     - React-NativeModulesApple
     - React-RCTFabric
     - React-renderercss
@@ -1541,7 +1638,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-safe-area-context/common (5.8.1):
+  - react-native-safe-area-context/common (5.8.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -1563,7 +1660,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - react-native-safe-area-context/fabric (5.8.1):
+  - react-native-safe-area-context/fabric (5.8.0):
     - hermes-engine
     - RCTRequired
     - RCTTypeSafety
@@ -2142,12 +2239,81 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - RNSVG (15.15.5):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - RNSVG/common (= 15.15.5)
+    - Yoga
+  - RNSVG/common (15.15.5):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - VideoTrim (8.2.2):
+    - ffmpeg-mobile-min (~> 6.0.6)
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - Yoga (0.0.0)
 
 DEPENDENCIES:
   - "AsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
   - FBLazyVector (from `../node_modules/react-native/Libraries/FBLazyVector`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
+  - NitroModules (from `../node_modules/react-native-nitro-modules`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../node_modules/react-native/Libraries/Required`)
   - RCTSwiftUI (from `../node_modules/react-native/ReactApple/RCTSwiftUI`)
@@ -2186,6 +2352,10 @@ DEPENDENCIES:
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - React-mutationobservernativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver`)
+  - react-native-agora (from `../node_modules/react-native-agora`)
+  - react-native-compressor (from `../node_modules/react-native-compressor`)
+  - react-native-create-thumbnail (from `../node_modules/react-native-create-thumbnail`)
+  - "react-native-geolocation (from `../node_modules/@react-native-community/geolocation`)"
   - react-native-image-picker (from `../node_modules/react-native-image-picker`)
   - react-native-maps (from `../node_modules/react-native-maps`)
   - react-native-safe-area-context (from `../node_modules/react-native-safe-area-context`)
@@ -2228,7 +2398,15 @@ DEPENDENCIES:
   - RNBootSplash (from `../node_modules/react-native-bootsplash`)
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
   - RNScreens (from `../node_modules/react-native-screens`)
+  - RNSVG (from `../node_modules/react-native-svg`)
+  - VideoTrim (from `../node_modules/react-native-video-trim`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
+
+SPEC REPOS:
+  trunk:
+    - AgoraIrisRTC_iOS2
+    - AgoraVideo_Special_iOS
+    - ffmpeg-mobile-min
 
 EXTERNAL SOURCES:
   AsyncStorage:
@@ -2238,6 +2416,8 @@ EXTERNAL SOURCES:
   hermes-engine:
     :podspec: "../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec"
     :tag: hermes-v250829098.0.14
+  NitroModules:
+    :path: "../node_modules/react-native-nitro-modules"
   RCTDeprecation:
     :path: "../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation"
   RCTRequired:
@@ -2312,6 +2492,14 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
   React-mutationobservernativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver"
+  react-native-agora:
+    :path: "../node_modules/react-native-agora"
+  react-native-compressor:
+    :path: "../node_modules/react-native-compressor"
+  react-native-create-thumbnail:
+    :path: "../node_modules/react-native-create-thumbnail"
+  react-native-geolocation:
+    :path: "../node_modules/@react-native-community/geolocation"
   react-native-image-picker:
     :path: "../node_modules/react-native-image-picker"
   react-native-maps:
@@ -2396,13 +2584,21 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-gesture-handler"
   RNScreens:
     :path: "../node_modules/react-native-screens"
+  RNSVG:
+    :path: "../node_modules/react-native-svg"
+  VideoTrim:
+    :path: "../node_modules/react-native-video-trim"
   Yoga:
     :path: "../node_modules/react-native/ReactCommon/yoga"
 
 SPEC CHECKSUMS:
+  AgoraIrisRTC_iOS2: 13996c3c78134da357634f6a1a12741436658886
+  AgoraVideo_Special_iOS: 9bd42c487f936f4d335d5630e2632f0b08e214f5
   AsyncStorage: 163ab23f6aa37a58b7f2379d0b4ee7ac84d6655c
   FBLazyVector: b3e7ad108f0d882e30445c5527d774e3fd432f3d
+  ffmpeg-mobile-min: 9538b45c977da90be8e3b37f79cd0480d9c13eea
   hermes-engine: 7746845292c17fe9aa199cb407a14d75880a515d
+  NitroModules: 452230d9b63c6c3f59dd97eeaa27ec3449271d4a
   RCTDeprecation: 2a74a2c57675e64419bd89078efde81f7c1de90b
   RCTRequired: 30451112e6fef4e6f31b4e7eee0845156e35e4b0
   RCTSwiftUI: 5aaf0b07e747ba749dc6acc94d8bd41eea4b570f
@@ -2440,9 +2636,13 @@ SPEC CHECKSUMS:
   React-Mapbuffer: ce449ccdf3b80384415b925606be8a4bdcfc65d3
   React-microtasksnativemodule: 2eb3f49d0d8e77b5343455eccd057010b8d38b6b
   React-mutationobservernativemodule: f0a0d5ae9b51caf7becbeabf836d716cfedb6bf2
+  react-native-agora: 323795587c9e64ae6e5d3c37ce713398cea8d0c9
+  react-native-compressor: 72a0e54fabb44e7f781e73c9f62afc1dbcefa51b
+  react-native-create-thumbnail: c15cedc37f3822777d44e6035be041f7961341ea
+  react-native-geolocation: c41d1ad8e832fa800b4e457c721e348bcc5aa147
   react-native-image-picker: 23540feacc79c63c60857f318fdfa8477c26e70a
   react-native-maps: 7e3af023b773d6670e3c07e9c8170af842b243e0
-  react-native-safe-area-context: c4a6d0fbf9c77ee28dab7e4d4c369df7753f20d4
+  react-native-safe-area-context: fb5c8ee9f6dd62ef710611b3d370c501f42a4ac0
   react-native-video: db3a70efc9fa0c00f5499d7798283bf0585cbd37
   React-NativeModulesApple: a092d89b58f635ebfab88048b0eda9fb516819fd
   React-networking: 968bbbe73590149feb1e72b2af4f6a68e4796ece
@@ -2482,6 +2682,8 @@ SPEC CHECKSUMS:
   RNBootSplash: dcf4ccd62104bee81893e3d8c342860a491d3204
   RNGestureHandler: a426f18ab9021991fe2cbc8bf1677b740e20e70c
   RNScreens: 7118cd7715c226856125b5bece3c4d9abec90356
+  RNSVG: 6cae8d4082913be2eb43eaec2a456222c42195ed
+  VideoTrim: 40e15a78c6a77a62919b73a7ce98c04293983358
   Yoga: fe50ab299e578f397fef753cf309c6703a4db29b
 
 PODFILE CHECKSUM: 9c95b6d87d229efffacbbc7ace8fc4cd87105c04

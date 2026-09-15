@@ -1,15 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TextInput,
   Animated, KeyboardAvoidingView, Platform, StatusBar,
   ScrollView, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 
-export default function ClientRegStep1Screen({ navigation, route }: any) {
+export default function ClientRegStep1Screen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
-  const { phoneNumber } = route.params;
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -27,19 +29,19 @@ export default function ClientRegStep1Screen({ navigation, route }: any) {
   const buttonOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
+    Animated.stagger(entrance.stagger, [
       Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(headerSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(headerSlide, { toValue: 0, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       ]),
-      Animated.timing(verifiedOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(verifiedOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(buttonOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [buttonOpacity, formOpacity, formSlide, headerOpacity, headerSlide, verifiedOpacity]);
 
   // Validation
   const isValidEmail = (e: string) => {
@@ -63,7 +65,6 @@ export default function ClientRegStep1Screen({ navigation, route }: any) {
     }
 
     navigation.navigate('ClientRegStep3', {
-      phoneNumber,
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
       location: location.trim(),
@@ -78,13 +79,12 @@ export default function ClientRegStep1Screen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       {/* Back */}
-      <TouchableOpacity
+      <PressableScale
         style={styles.backButton}
         onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
       >
-        <Text style={styles.backText}>←</Text>
-      </TouchableOpacity>
+        <Icon name="back" size={20} color={colors.white} />
+      </PressableScale>
 
       {/* Progress */}
       <View style={styles.progressContainer}>
@@ -108,12 +108,6 @@ export default function ClientRegStep1Screen({ navigation, route }: any) {
           <Text style={styles.subtitle}>
             This information helps workers and clients connect with you
           </Text>
-        </Animated.View>
-
-        {/* Phone verified badge */}
-        <Animated.View style={[styles.verifiedBadge, { opacity: verifiedOpacity }]}>
-          <Text style={styles.verifiedIcon}>✓</Text>
-          <Text style={styles.verifiedText}>Phone verified: {phoneNumber}</Text>
         </Animated.View>
 
         {/* Form */}
@@ -212,7 +206,7 @@ export default function ClientRegStep1Screen({ navigation, route }: any) {
       {/* Bottom */}
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: buttonOpacity }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.continueButton,
               { backgroundColor: isFormValid() ? colors.client : colors.bgCard },
@@ -220,10 +214,9 @@ export default function ClientRegStep1Screen({ navigation, route }: any) {
             ]}
             onPress={handleContinue}
             disabled={!isFormValid()}
-            activeOpacity={0.85}
           >
             <Text style={styles.continueText}>Continue</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </View>
     </KeyboardAvoidingView>

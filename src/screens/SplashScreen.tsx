@@ -1,12 +1,12 @@
 import React, { useEffect, useRef } from 'react';
+import { EASING , useEntrance} from '../theme';
 import {
   View, Text, StyleSheet, Animated, StatusBar, Image,
-  Dimensions,
 } from 'react-native';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
-export default function SplashScreen({ onFinish }) {
+export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
+  const entrance = useEntrance();
   const logoScale = useRef(new Animated.Value(0.6)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
@@ -17,18 +17,22 @@ export default function SplashScreen({ onFinish }) {
     Animated.sequence([
       Animated.parallel([
         Animated.spring(logoScale, { toValue: 1, damping: 12, stiffness: 100, useNativeDriver: true }),
-        Animated.timing(logoOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+        Animated.timing(logoOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.delay(200),
       Animated.parallel([
-        Animated.timing(textOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(textOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(textSlide, { toValue: 0, damping: 14, stiffness: 100, useNativeDriver: true }),
       ]),
-      Animated.timing(tagOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(tagOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.delay(800),
     ]).start(() => {
       if (onFinish) onFinish();
     });
+    // Mount-only by design: the splash animation runs once and then
+    // hands off. Re-running it because onFinish changed identity would
+    // replay the whole intro.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -52,7 +56,7 @@ export default function SplashScreen({ onFinish }) {
       </Animated.View>
 
       <View style={st.bottomRow}>
-        <Text style={st.madeIn}>Made in Nigeria \U0001f1f3\U0001f1ec</Text>
+        <Text style={st.madeIn}>Made in Nigeria 🇳🇬</Text>
       </View>
     </View>
   );

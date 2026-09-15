@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
+  View, Text, StyleSheet, TextInput,
   Animated, StatusBar, ScrollView, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { EASING, colors, typography, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 
 const SERVICE_AREAS = ['Within 3km', 'Within 5km', 'Within 10km', 'Within 20km', 'State-wide', 'Nationwide'];
 
 export default function WorkerRegStep3Screen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const params = route.params;
 
@@ -23,18 +26,18 @@ export default function WorkerRegStep3Screen({ navigation, route }: any) {
   const buttonOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
+    Animated.stagger(entrance.stagger, [
       Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(headerSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
+        Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+        Animated.timing(headerSlide, { toValue: 0, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       ]),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
-      Animated.timing(buttonOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+      Animated.timing(buttonOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [buttonOpacity, formOpacity, formSlide, headerOpacity, headerSlide]);
 
   const isFormValid = () => {
     return location.trim().length >= 2 && serviceArea !== null;
@@ -57,13 +60,12 @@ export default function WorkerRegStep3Screen({ navigation, route }: any) {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      <TouchableOpacity
+      <PressableScale
         style={styles.backButton}
         onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
       >
-        <Text style={styles.backText}>←</Text>
-      </TouchableOpacity>
+        <Icon name="back" size={20} color={colors.white} />
+      </PressableScale>
 
       <View style={styles.progressContainer}>
         <Text style={styles.stepText}>Step 3 of 4</Text>
@@ -116,21 +118,20 @@ export default function WorkerRegStep3Screen({ navigation, route }: any) {
 
           <View style={styles.areaGrid}>
             {SERVICE_AREAS.map((area, i) => (
-              <TouchableOpacity
+              <PressableScale
                 key={i}
                 style={[
                   styles.areaChip,
                   serviceArea === area && styles.areaChipSelected,
                 ]}
                 onPress={() => setServiceArea(area)}
-                activeOpacity={0.85}
               >
                 {serviceArea === area && <Text style={styles.areaCheck}>✓ </Text>}
                 <Text style={[
                   styles.areaText,
                   serviceArea === area && styles.areaTextSelected,
                 ]}>{area}</Text>
-              </TouchableOpacity>
+              </PressableScale>
             ))}
           </View>
 
@@ -149,17 +150,16 @@ export default function WorkerRegStep3Screen({ navigation, route }: any) {
 
       <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
         <Animated.View style={{ opacity: buttonOpacity }}>
-          <TouchableOpacity
+          <PressableScale
             style={[
               styles.continueButton,
               !isFormValid() && styles.continueButtonDisabled,
             ]}
             onPress={handleContinue}
             disabled={!isFormValid()}
-            activeOpacity={0.85}
           >
             <Text style={styles.continueText}>Continue</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </Animated.View>
       </View>
     </View>

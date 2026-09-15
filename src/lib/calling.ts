@@ -56,7 +56,20 @@ export async function sendCallInvite(
   calleeId: string, callId: string, callerId: string, callerName: string, callerCategory: string
 ) {
   const channel = supabase.channel('calls:' + calleeId);
-  await channel.subscribe();
+
+  // await channel.subscribe() does NOT wait for the realtime
+  // connection to actually be established — it returns almost
+  // immediately, which meant channel.send() below could fire before
+  // the WebSocket handshake finished, silently dropping the ring.
+  // Waiting for the 'SUBSCRIBED' status via callback is the reliable
+  // way to know the channel is actually ready to send on.
+  await new Promise<void>((resolve, reject) => {
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') resolve();
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') reject(new Error('Failed to connect: ' + status));
+    });
+  });
+
   await channel.send({
     type: 'broadcast',
     event: 'ring',
@@ -92,14 +105,98 @@ export function useCallResponseListener(
 
 export async function sendCallResponse(callId: string, response: 'accepted' | 'declined') {
   const channel = supabase.channel('call_response:' + callId);
-  await channel.subscribe();
+
+  await new Promise<void>((resolve, reject) => {
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') resolve();
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') reject(new Error('Failed to connect: ' + status));
+    });
+  });
+
   await channel.send({ type: 'broadcast', event: 'response', payload: { response } });
   supabase.removeChannel(channel);
 }
 
+export type CallOutcome = 'completed' | 'declined' | 'missed' | 'cancelled';
+
+export async function logCallOutcome(
+  callerId: string, calleeId: string, status: CallOutcome, durationSeconds = 0
+) {
+  try {
+    await supabase.from('call_logs').insert({
+      caller_id: callerId,
+      callee_id: calleeId,
+      status,
+      duration_seconds: durationSeconds,
+    });
+  } catch (err) {
+    // Best-effort — a failed log entry shouldn't disrupt the call itself
+    console.warn('Could not log call outcome (non-fatal):', err);
+  }
+}
+
 // ── Agora voice engine ──────────────────────────────────────────────
-// Uses "App ID only" auth (no token) — fine for development/testing,
-// see src/config/agora.ts for what's needed before a real launch.
+// Joins are authenticated with a short-lived token from the agora-token
+// Edge Function, signed with the App Certificate. See src/config/agora.ts.
+
+// The engine currently holding a channel, if any. Module-level rather
+// than per-hook because two call screens can be mounted at once (the
+// navigator pushes call screens rather than replacing them), and each
+// hook instance can only see its own ref.
+let activeEngine: IRtcEngine | null = null;
+
+function releaseActiveEngine() {
+  if (!activeEngine) return;
+  try {
+    activeEngine.leaveChannel();
+    activeEngine.release();
+  } catch (err) {
+    // A half-initialised engine can throw here; losing it is still
+    // better than leaving it holding the channel.
+    console.warn('Could not cleanly release previous call engine:', err);
+  }
+  activeEngine = null;
+}
+
+// Returns '' when no token could be obtained. That was a valid join
+// argument while the project ran in App-ID-only mode, and the fallback
+// exists so a user who briefly can't reach the token endpoint could
+// still talk.
+//
+// With the App Certificate enabled that reasoning no longer holds:
+// Agora rejects an empty token, so this fallback converts one failure
+// into another — and the user sees "Connecting…" rather than an error
+// naming the cause. Worth replacing with an explicit failure once the
+// console-side enforcement is confirmed.
+const TOKEN_FETCH_TIMEOUT_MS = 6000;
+
+async function fetchAgoraToken(channelName: string): Promise<string> {
+  try {
+    // The timeout is the important part. functions.invoke has none of
+    // its own, so a hung request — slow network, cold start, DNS —
+    // leaves this awaiting forever. joinChannel is never reached, and
+    // the call sits on "Connecting…" with nothing logged and no error
+    // to show the user. Failing fast to an empty token at least lets
+    // the call proceed the way it did before tokens existed.
+    const token = await Promise.race([
+      supabase.functions
+        .invoke('agora-token', { body: { channelName } })
+        .then(({ data, error }) => {
+          if (error) throw error;
+          return typeof data?.token === 'string' ? data.token : '';
+        }),
+      new Promise<string>((_, reject) =>
+        setTimeout(() => reject(new Error('token request timed out')), TOKEN_FETCH_TIMEOUT_MS)
+      ),
+    ]);
+
+    if (!token) console.warn('Agora token endpoint returned no token; joining without one');
+    return token;
+  } catch (err) {
+    console.warn('Could not fetch Agora token, joining without one:', err);
+    return '';
+  }
+}
 
 async function ensureMicPermission(): Promise<boolean> {
   if (Platform.OS === 'android') {
@@ -142,8 +239,20 @@ export function useAgoraCall(channelName: string | null, enabled: boolean) {
         return;
       }
 
+      // Only ONE engine may exist at a time. Agora rejects a join with
+      // error -17 (ERR_JOIN_CHANNEL_REJECTED) if the SDK is already in
+      // a channel, and that is exactly what happened: a call screen
+      // that stayed mounted in the navigation stack kept its engine
+      // alive, so the NEXT call could never connect — both sides sat on
+      // "Connecting…" forever with no error shown to the user.
+      //
+      // The per-hook cleanup below is still the normal path; this is
+      // the backstop for when a screen doesn't unmount when we expect.
+      releaseActiveEngine();
+
       const engine = createAgoraRtcEngine();
       engineRef.current = engine;
+      activeEngine = engine;
       engine.initialize({ appId: AGORA_APP_ID });
       engine.enableAudio();
 
@@ -154,7 +263,21 @@ export function useAgoraCall(channelName: string | null, enabled: boolean) {
         onLeaveChannel: () => setConnected(false),
       });
 
-      engine.joinChannel('', channelName, 0, {
+      // Ask the server to mint a token for this channel. The App
+      // Certificate that signs it never leaves the backend — see
+      // supabase/functions/agora-token.
+      //
+      // Falls back to an empty token, which is what Agora accepts while
+      // the project is still in App-ID-only mode. That fallback is what
+      // makes the migration safe in either order: shipping this before
+      // enabling the certificate keeps working, and enabling the
+      // certificate before everyone has updated still works for anyone
+      // who has. Once every client is on this build and the certificate
+      // is enforced, the fallback simply stops being reachable.
+      const token = await fetchAgoraToken(channelName);
+      if (cancelled) return;
+
+      engine.joinChannel(token, channelName, 0, {
         channelProfile: ChannelProfileType.ChannelProfileCommunication,
         clientRoleType: ClientRoleType.ClientRoleBroadcaster,
       });
@@ -165,6 +288,7 @@ export function useAgoraCall(channelName: string | null, enabled: boolean) {
     return () => {
       cancelled = true;
       if (engineRef.current) {
+        if (engineRef.current === activeEngine) activeEngine = null;
         engineRef.current.leaveChannel();
         engineRef.current.release();
         engineRef.current = null;

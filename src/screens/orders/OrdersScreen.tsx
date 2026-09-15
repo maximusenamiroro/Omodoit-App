@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, FlatList,
-  Animated, StatusBar, Platform, ActivityIndicator,
+  View, Text, StyleSheet, FlatList,
+  Animated, StatusBar, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import CardRowSkeleton from '../../components/common/CardRowSkeleton';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -38,7 +41,12 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
 
 const ACTIVE_STATUSES = ['pending', 'accepted', 'in_progress'];
 
+// Recent activity, newest first. Anything older than this is history a
+// user reaches for far less often than the query cost of always sending it.
+const ORDER_HISTORY_LIMIT = 100;
+
 export default function OrdersScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user, role } = useAuth();
   const accentColor = role === 'client' ? colors.client : colors.primary;
@@ -50,11 +58,11 @@ export default function OrdersScreen({ navigation }: any) {
   const listOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(listOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(listOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [headerOpacity, listOpacity]);
 
   const loadOrders = useCallback(async () => {
     if (!user?.id || !role) return;
@@ -65,7 +73,8 @@ export default function OrdersScreen({ navigation }: any) {
         .from('hire_requests')
         .select('id, client_id, worker_id, job_description, location, status, created_at')
         .eq(column, user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(ORDER_HISTORY_LIMIT);
 
       // A single Flash Job creates one request per matching worker, so
       // a client would otherwise see a pile of near-duplicate 'expired'
@@ -177,22 +186,20 @@ export default function OrdersScreen({ navigation }: any) {
         </View>
 
         {(item.status === 'accepted' || item.status === 'in_progress') && role === 'client' && (
-          <TouchableOpacity
+          <PressableScale
             style={[styles.trackBtn, { backgroundColor: accentColor }]}
             onPress={() => navigation.navigate('Tracking', { bookingId: item.id, workerId: item.otherPartyId, workerName: item.otherPartyName, service: item.service })}
-            activeOpacity={0.85}
           >
             <Text style={styles.trackBtnText}>📍 Track Worker</Text>
-          </TouchableOpacity>
+          </PressableScale>
         )}
         {item.status === 'completed' && role === 'client' && (
-          <TouchableOpacity
+          <PressableScale
             style={styles.reviewBtn}
             onPress={() => navigation.navigate('LeaveReview', { workerId: item.otherPartyId, workerName: item.otherPartyName })}
-            activeOpacity={0.85}
           >
             <Text style={styles.reviewBtnText}>⭐ Leave Review</Text>
-          </TouchableOpacity>
+          </PressableScale>
         )}
       </View>
     );
@@ -203,20 +210,19 @@ export default function OrdersScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
         <Text style={styles.headerTitle}>Orders & Bookings</Text>
         <View style={{ width: 36 }} />
       </Animated.View>
 
       <Animated.View style={[styles.tabRow, { opacity: headerOpacity }]}>
         {tabs.map(tab => (
-          <TouchableOpacity
+          <PressableScale
             key={tab.key}
             style={[styles.tab, activeTab === tab.key && { backgroundColor: accentColor + '15', borderColor: accentColor + '40' }]}
             onPress={() => setActiveTab(tab.key)}
-            activeOpacity={0.85}
           >
             <Text style={[styles.tabText, activeTab === tab.key && { color: accentColor, fontWeight: '700' }]}>
               {tab.label}
@@ -224,14 +230,12 @@ export default function OrdersScreen({ navigation }: any) {
             <View style={[styles.tabCount, activeTab === tab.key && { backgroundColor: accentColor }]}>
               <Text style={styles.tabCountText}>{tab.count}</Text>
             </View>
-          </TouchableOpacity>
+          </PressableScale>
         ))}
       </Animated.View>
 
       {loading ? (
-        <View style={styles.loadingBox}>
-          <ActivityIndicator color={accentColor} />
-        </View>
+        <CardRowSkeleton count={4} />
       ) : (
         <Animated.View style={{ flex: 1, opacity: listOpacity }}>
           {filteredOrders.length === 0 ? (

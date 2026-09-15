@@ -1,11 +1,13 @@
 import React, { useCallback, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -30,25 +32,21 @@ export default function AnalyticsScreen({ navigation }: any) {
     if (!user?.id) return;
     setLoading(true);
     try {
-      const [bookingsRes, reelsRes, reviewsRes] = await Promise.all([
-        supabase.from('hire_requests').select('status').eq('worker_id', user.id),
-        supabase.from('reels').select('likes').eq('user_id', user.id),
-        supabase.from('reviews').select('rating').eq('worker_id', user.id),
-      ]);
+      // Counted in Postgres. This used to download every booking, reel
+      // and review the worker owned in order to call .length on them.
+      const { data, error } = await supabase.rpc('worker_stats');
+      if (error) throw error;
 
-      const bookings = bookingsRes.data || [];
-      const reels = reelsRes.data || [];
-      const reviews = reviewsRes.data || [];
-
+      const row = (data || [])[0] || {};
       setStats({
-        totalBookings: bookings.length,
-        accepted: bookings.filter((b: any) => b.status === 'accepted' || b.status === 'in_progress' || b.status === 'completed').length,
-        declined: bookings.filter((b: any) => b.status === 'declined').length,
-        completed: bookings.filter((b: any) => b.status === 'completed').length,
-        totalReels: reels.length,
-        totalLikes: reels.reduce((s: number, r: any) => s + (r.likes || 0), 0),
-        avgRating: reviews.length > 0 ? reviews.reduce((s: number, r: any) => s + r.rating, 0) / reviews.length : 0,
-        reviewCount: reviews.length,
+        totalBookings: Number(row.total_bookings) || 0,
+        accepted: Number(row.accepted) || 0,
+        declined: Number(row.declined) || 0,
+        completed: Number(row.completed) || 0,
+        totalReels: Number(row.reel_count) || 0,
+        totalLikes: Number(row.total_likes) || 0,
+        avgRating: Number(row.rating_avg) || 0,
+        reviewCount: Number(row.review_count) || 0,
       });
     } catch (err) {
       console.error('Failed to load analytics:', err);
@@ -68,9 +66,9 @@ export default function AnalyticsScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
         <Text style={st.headerTitle}>📊 Analytics</Text>
         <View style={{ width: 36 }} />
       </View>

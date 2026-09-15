@@ -1,6 +1,6 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { colors, spacing } from '../../theme';
+import { View, StyleSheet } from 'react-native';
+import { colors } from '../../theme';
 
 interface TabIconProps {
   name: 'reels' | 'explore' | 'flash' | 'inbox' | 'profile' | 'station';
@@ -23,15 +23,6 @@ export default function TabIcon({ name, focused, isFlash }: TabIconProps) {
     );
   }
 
-  const icons: Record<string, { symbol: string; size: number }> = {
-    reels: { symbol: '▶', size: 18 },
-    explore: { symbol: '◎', size: 22 },
-    inbox: { symbol: '◯', size: 20 },
-    profile: { symbol: '●', size: 8 },
-    station: { symbol: '▣', size: 20 },
-  };
-
-  const icon = icons[name] || { symbol: '●', size: 18 };
 
   if (name === 'reels') {
     return (
@@ -89,14 +80,18 @@ export default function TabIcon({ name, focused, isFlash }: TabIconProps) {
     );
   }
 
+  // Every name in the union is handled above. This only catches a name
+  // added to the type without a shape, and shows a neutral dot rather
+  // than a stray character.
   return (
     <View style={styles.iconContainer}>
-      <Text style={[styles.fallback, { color }]}>{icon.symbol}</Text>
+      <View style={[styles.unknownDot, { backgroundColor: color }]} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  unknownDot: { width: 8, height: 8, borderRadius: 4 },
   iconContainer: {
     width: 28,
     height: 28,

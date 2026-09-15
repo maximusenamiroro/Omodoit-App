@@ -1,14 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { findCategoryLoose } from '../../lib/categories';
 
 export default function SubCategoriesScreen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { categoryName } = route.params;
   const category = findCategoryLoose(categoryName) || { emoji: '📂', color: colors.primary, subs: [], name: categoryName };
@@ -21,14 +24,14 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
   const listSlide = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(listOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(listOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(listSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [headerOpacity, listOpacity, listSlide]);
 
   // Real worker counts per subcategory, matched against the category's
   // canonical full name (via findCategoryLoose, which also tolerates
@@ -37,18 +40,18 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
     const fetchCounts = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('subcategory')
-          .eq('role', 'worker')
-          .eq('category', category.name)
-          .not('subcategory', 'is', null);
+        // Counted in Postgres. This used to download one row per worker
+        // in the category just to tally them here — tens of thousands of
+        // rows to render about twenty numbers.
+        const { data, error } = await supabase.rpc('subcategory_worker_counts', {
+          p_category: category.name,
+        });
 
         if (error) throw error;
 
         const tally: Record<string, number> = {};
         (data || []).forEach((row: any) => {
-          if (row.subcategory) tally[row.subcategory] = (tally[row.subcategory] || 0) + 1;
+          if (row.subcategory) tally[row.subcategory] = Number(row.worker_count) || 0;
         });
         setCounts(tally);
       } catch (err) {
@@ -70,9 +73,9 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
 
       {/* Header */}
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
         <View style={styles.headerCenter}>
           <Text style={styles.headerEmoji}>{category.emoji}</Text>
           <Text style={styles.headerTitle}>{categoryName}</Text>
@@ -96,11 +99,10 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
         ) : (
           <Animated.View style={{ opacity: listOpacity, transform: [{ translateY: listSlide }], paddingHorizontal: spacing.screenPadding }}>
             {category.subs.map((subName, i) => (
-              <TouchableOpacity
+              <PressableScale
                 key={i}
                 style={styles.subRow}
                 onPress={() => navigation.navigate('WorkerList', { categoryName: category.name, subcategoryName: subName, color: category.color })}
-                activeOpacity={0.7}
               >
                 <View style={[styles.subIconBg, { backgroundColor: category.color + '12' }]}>
                   <Text style={styles.subIcon}>{category.emoji}</Text>
@@ -112,7 +114,7 @@ export default function SubCategoriesScreen({ navigation, route }: any) {
                   </Text>
                 </View>
                 <Text style={[styles.subArrow, { color: category.color }]}>→</Text>
-              </TouchableOpacity>
+              </PressableScale>
             ))}
           </Animated.View>
         )}

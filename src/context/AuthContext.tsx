@@ -43,7 +43,6 @@ interface Profile {
   full_name: string | null;
   avatar_url: string | null;
   role: 'client' | 'worker' | null;
-  phone: string | null;
   location: string | null;
   verification_level: number;
   verification_status: string | null;
@@ -55,10 +54,11 @@ interface Profile {
   subcategory?: string | null;
   experience?: string | null;
   service_area?: string | null;
-  // Bank/payout details — used for withdrawals (worker) or refunds (client)
-  bank_name?: string | null;
-  account_number?: string | null;
-  account_name?: string | null;
+  // Payout details deliberately absent. They live in payout_accounts,
+  // which only their owner can read — profiles is world-readable, so
+  // bank details sitting in it were readable by anyone holding the anon
+  // key. The screen that collected them has been removed; if payouts
+  // come back, they must be read on demand and never from here.
 }
 
 interface AuthContextValue {
@@ -131,10 +131,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase
         .from('profiles')
         .select(
-          'id, full_name, avatar_url, role, phone, location, ' +
+          'id, full_name, avatar_url, role, location, ' +
           'verification_level, verification_status, last_seen, created_at, ' +
-          'business_name, category, subcategory, experience, service_area, ' +
-          'bank_name, account_number, account_name'
+          'business_name, category, subcategory, experience, service_area'
         )
         .eq('id', userId)
         .maybeSingle();
@@ -158,14 +157,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // to go, create a minimal profile so the app is usable; they can
       // fill in the rest from Settings.
       if (!data) {
-        console.warn('Authenticated user has no profile row — creating a fallback profile.');
+        console.warn('Authenticated user has no profile row — rebuilding it from signup details.');
         const { data: authUser } = await supabase.auth.getUser();
-        const fallbackName = authUser?.user?.email?.split('@')[0] || 'New User';
+        const meta = (authUser?.user?.user_metadata ?? {}) as Record<string, any>;
+        const fallbackName =
+          meta.full_name || authUser?.user?.email?.split('@')[0] || 'New User';
+
+        // Rebuilt from what the user actually signed up as, carried in
+        // user_metadata by the registration screens. This used to
+        // insert role: 'client' unconditionally, which turned every
+        // affected business into a client permanently — locked out of
+        // the workstation and of going live, so they never appeared
+        // online to any client.
+        const healedRole: 'client' | 'worker' = meta.role === 'worker' ? 'worker' : 'client';
+        const isWorker = healedRole === 'worker';
 
         const { error: healError } = await supabase.from('profiles').insert({
           id: userId,
           full_name: fallbackName,
-          role: 'client',
+          location: meta.location ?? null,
+          role: healedRole,
+          business_name: isWorker ? meta.business_name ?? null : null,
+          category: isWorker ? meta.category ?? null : null,
+          subcategory: isWorker ? meta.subcategory ?? null : null,
           verification_level: 0,
           verification_status: 'basic',
           last_seen: new Date().toISOString(),
@@ -298,16 +312,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     const loggedOutUserId = userRef.current?.id;
-    try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error('AuthContext logout error:', error);
-    }
-    // Always clear local state even if signOut fails
+
+    // Clear local state FIRST so the UI responds immediately.
+    //
+    // This used to await signOut() before touching state. signOut()
+    // defaults to scope: 'global', which is a network round trip to
+    // revoke the refresh token — so on a slow or dropped connection
+    // the await never settled and tapping "Sign Out" did visibly
+    // nothing at all. Signing out of your own device should never
+    // depend on the server being reachable.
     setUser(null);
     setProfile(null);
     if (loggedOutUserId) {
       clearCachedProfile(loggedOutUserId);
+    }
+
+    try {
+      // Still try to revoke server-side, but never block on it.
+      await Promise.race([
+        supabase.auth.signOut(),
+        new Promise<void>(resolve => setTimeout(resolve, 3000)),
+      ]);
+    } catch (error) {
+      console.error('AuthContext logout error:', error);
+    }
+
+    // Guarantee the stored session is gone even if the call above
+    // timed out or failed — otherwise the next launch silently
+    // restores the session the user just tried to leave.
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // Storage clear is best-effort; state is already cleared above.
     }
   }, []);
 

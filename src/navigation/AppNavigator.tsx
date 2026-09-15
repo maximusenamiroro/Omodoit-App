@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -18,6 +18,9 @@ import WorkerPublicProfileScreen from '../screens/workspace/WorkerPublicProfileS
 import HireWorkerScreen from '../screens/workspace/HireWorkerScreen';
 import NewArrivalsScreen from '../screens/workspace/NewArrivalsScreen';
 import OrdersScreen from '../screens/orders/OrdersScreen';
+import AllBookingsScreen from '../screens/workstation/AllBookingsScreen';
+import AllOrdersScreen from '../screens/workstation/AllOrdersScreen';
+import MyProductsScreen from '../screens/products/MyProductsScreen';
 import OutgoingCallScreen from '../screens/call/OutgoingCallScreen';
 import IncomingCallScreen from '../screens/call/IncomingCallScreen';
 import InCallScreen from '../screens/call/InCallScreen';
@@ -27,8 +30,9 @@ import ProductDetailScreen from '../screens/products/ProductDetailScreen';
 import EditProfileScreen from '../screens/settings/EditProfileScreen';
 import AddProductScreen from '../screens/products/AddProductScreen';
 import CreateReelScreen from '../screens/reels/CreateReelScreen';
+import SearchScreen from '../screens/search/SearchScreen';
+import BlockedUsersScreen from '../screens/settings/BlockedUsersScreen';
 import LeaveReviewScreen from '../screens/reviews/LeaveReviewScreen';
-import BankDetailsScreen from '../screens/bank/BankDetailsScreen';
 import AnalyticsScreen from '../screens/analytics/AnalyticsScreen';
 import EarningsScreen from '../screens/earnings/EarningsScreen';
 
@@ -75,6 +79,23 @@ export default function AppNavigator() {
     }
   });
 
+  // Sign-out has to reset the stack, not just swap the root screen.
+  //
+  // Settings, Chat, EditProfile and the rest below are registered
+  // OUTSIDE the auth conditional, so they exist whether or not anyone
+  // is logged in. Signing out from Settings therefore swapped the root
+  // from WorkerApp to Auth underneath — while Settings stayed pushed on
+  // top of the stack. The user stayed staring at the settings screen
+  // and it looked like the button did nothing at all.
+  //
+  // Resetting clears those pushed screens so Auth is actually what's
+  // on screen.
+  useEffect(() => {
+    if (!user && !loading && navigationRef.isReady()) {
+      navigationRef.reset({ index: 0, routes: [{ name: 'Auth' }] });
+    }
+  }, [user, loading]);
+
   return (
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false }}>
@@ -96,11 +117,13 @@ export default function AppNavigator() {
         <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Tracking" component={TrackingScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: false }} />
         <Stack.Screen name="LeaveReview" component={LeaveReviewScreen} options={{ animation: 'slide_from_bottom' }} />
-        <Stack.Screen name="BankDetails" component={BankDetailsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Analytics" component={AnalyticsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Earnings" component={EarningsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="NewArrivals" component={NewArrivalsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="Orders" component={OrdersScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="AllBookings" component={AllBookingsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="AllOrders" component={AllOrdersScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="MyProducts" component={MyProductsScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
          <Stack.Screen name="OutgoingCall" component={OutgoingCallScreen} options={{ animation: 'fade', gestureEnabled: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="IncomingCall" component={IncomingCallScreen} options={{ animation: 'fade', gestureEnabled: false, presentation: 'fullScreenModal' }} />
         <Stack.Screen name="InCall" component={InCallScreen} options={{ animation: 'fade', gestureEnabled: false, presentation: 'fullScreenModal' }} />
@@ -110,6 +133,8 @@ export default function AppNavigator() {
         <Stack.Screen name="EditProfile" component={EditProfileScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="AddProduct" component={AddProductScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
         <Stack.Screen name="CreateReel" component={CreateReelScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
+        <Stack.Screen name="Search" component={SearchScreen} options={{ animation: 'slide_from_bottom', gestureEnabled: true }} />
+        <Stack.Screen name="BlockedUsers" component={BlockedUsersScreen} options={{ animation: 'slide_from_right', gestureEnabled: true }} />
       </Stack.Navigator>
       {showLoading && <LoadingOverlay />}
     </NavigationContainer>

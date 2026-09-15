@@ -1,11 +1,13 @@
 import React, { useCallback, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   StatusBar, Platform, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 
@@ -15,6 +17,10 @@ interface CompletedJob {
   job: string;
   date: string;
 }
+
+// A worker's completed-job history is a record, not a feed. The screen
+// shows the recent ones; the total is what matters above it.
+const COMPLETED_JOBS_LIMIT = 100;
 
 export default function EarningsScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -31,7 +37,8 @@ export default function EarningsScreen({ navigation }: any) {
         .select('id, client_id, job_description, created_at')
         .eq('worker_id', user.id)
         .eq('status', 'completed')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(COMPLETED_JOBS_LIMIT);
 
       if (error) throw error;
 
@@ -63,9 +70,9 @@ export default function EarningsScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
         <Text style={st.headerTitle}>💰 Earnings</Text>
         <View style={{ width: 36 }} />
       </View>

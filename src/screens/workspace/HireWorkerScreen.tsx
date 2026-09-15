@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   TextInput, Animated, StatusBar, Platform, Alert,
   KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, typography, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
+import Icon from '../../components/common/Icon';
+import PressableScale from '../../components/common/PressableScale';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
 
@@ -16,6 +18,7 @@ const getInitials = (name: string): string => {
 };
 
 export default function HireWorkerScreen({ navigation, route }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { worker, subcategoryName } = route.params;
@@ -33,14 +36,14 @@ export default function HireWorkerScreen({ navigation, route }: any) {
   const formSlide = useRef(new Animated.Value(30)).current;
 
   useEffect(() => {
-    Animated.stagger(150, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
       Animated.parallel([
-        Animated.timing(formOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(formOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
         Animated.spring(formSlide, { toValue: 0, damping: 16, stiffness: 90, useNativeDriver: true }),
       ]),
     ]).start();
-  }, []);
+  }, [formOpacity, formSlide, headerOpacity]);
 
   const isFormValid = () => {
     return jobDescription.trim().length >= 10 && location.trim().length >= 3;
@@ -70,31 +73,20 @@ export default function HireWorkerScreen({ navigation, route }: any) {
       if (budget.trim()) extras.push(`Budget: ₦${budget.trim()}`);
       if (extras.length > 0) fullDescription += '\n\n' + extras.join('\n');
 
-      const { data: newBooking, error } = await supabase.from('hire_requests').insert({
+      const { error } = await supabase.from('hire_requests').insert({
         client_id: user.id,
         worker_id: worker.id,
         job_description: fullDescription,
         location: location.trim(),
         status: 'pending',
-      }).select('id').single();
+      });
 
       if (error) throw error;
 
-      // Best-effort — if the notifications table/columns don't match,
-      // the booking itself has already succeeded, so this failing
-      // silently shouldn't block anything or show an error here.
-      try {
-        await supabase.from('notifications').insert({
-          user_id: worker.id,
-          type: 'booking',
-          message: `wants to book you for ${subcategoryName || 'a job'}`,
-          from_user_id: user.id,
-          booking_id: newBooking?.id || null,
-          is_read: false,
-        });
-      } catch (notifErr) {
-        console.warn('Could not notify worker (non-fatal):', notifErr);
-      }
+      // No notification is inserted here on purpose. The on_booking
+      // trigger fires on every hire_requests insert and writes one
+      // itself, so doing it here as well put two entries in the worker's
+      // feed for a single booking.
 
       Alert.alert(
         'Booking Sent!',
@@ -120,9 +112,9 @@ export default function HireWorkerScreen({ navigation, route }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={styles.backText}>←</Text>
-        </TouchableOpacity>
+        <PressableScale style={styles.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
         <Text style={styles.headerTitle}>Book Worker</Text>
         <View style={{ width: 36 }} />
       </Animated.View>
@@ -244,14 +236,13 @@ export default function HireWorkerScreen({ navigation, route }: any) {
 
       {/* Bottom */}
       <View style={[styles.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity
+        <PressableScale
           style={[styles.submitBtn, (!isFormValid() || submitting) && styles.submitBtnDisabled]}
           onPress={handleBooking}
           disabled={!isFormValid() || submitting}
-          activeOpacity={0.85}
         >
           <Text style={styles.submitText}>{submitting ? 'Sending…' : 'Send Booking Request'}</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </KeyboardAvoidingView>
   );

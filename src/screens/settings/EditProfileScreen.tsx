@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { ensureMediaPermission } from '../../lib/permissions';
+import PressableScale from '../../components/common/PressableScale';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import Icon from '../../components/common/Icon';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { uploadImageToStorage, clearOldUploads } from '../../lib/uploadImage';
@@ -19,7 +22,6 @@ export default function EditProfileScreen({ navigation }: any) {
   const [newAvatarPicked, setNewAvatarPicked] = useState(false);
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [location, setLocation] = useState(profile?.location || '');
-  const [phone, setPhone] = useState(profile?.phone || '');
   const [businessName, setBusinessName] = useState(profile?.business_name || '');
   const [experience, setExperience] = useState(profile?.experience || '');
   const [serviceArea, setServiceArea] = useState(profile?.service_area || '');
@@ -45,7 +47,6 @@ export default function EditProfileScreen({ navigation }: any) {
       const updates: Record<string, any> = {
         full_name: fullName.trim(),
         location: location.trim() || null,
-        phone: phone.trim() || null,
         avatar_url: avatarUrl,
       };
 
@@ -93,13 +94,13 @@ export default function EditProfileScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
         <Text style={st.headerTitle}>Edit Profile</Text>
-        <TouchableOpacity onPress={handleSave} disabled={saving} activeOpacity={0.7}>
+        <PressableScale onPress={handleSave} disabled={saving}>
           <Text style={[st.saveHeaderText, { color: accentColor }]}>{saving ? 'Saving...' : 'Save'}</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled"
@@ -118,7 +119,8 @@ export default function EditProfileScreen({ navigation }: any) {
               </View>
             )}
           </View>
-          <TouchableOpacity style={[st.changePhotoBtn, { backgroundColor: accentColor }]} onPress={() => {
+          <PressableScale style={[st.changePhotoBtn, { backgroundColor: accentColor }]} onPress={async () => {
+            if (!(await ensureMediaPermission('photo'))) return;
             launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 800, maxHeight: 800 }, (res) => {
               const uri = res.assets?.[0]?.uri;
               if (uri) {
@@ -126,15 +128,14 @@ export default function EditProfileScreen({ navigation }: any) {
                 setNewAvatarPicked(true);
               }
             });
-          }} activeOpacity={0.85}>
+          }}>
             <Text style={st.changePhotoText}>📷 Change Photo</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
 
         <View style={st.form}>
           {renderField('Full Name *', fullName, setFullName, 'Your full name', 'name')}
           {renderField('Location', location, setLocation, 'City, State e.g. Lagos, Nigeria', 'loc')}
-          {renderField('Phone Number', phone, setPhone, '+234...', 'phone', { keyboard: 'phone-pad' })}
 
           {role === 'worker' && (
             <>
@@ -149,10 +150,10 @@ export default function EditProfileScreen({ navigation }: any) {
       </ScrollView>
 
       <View style={[st.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={[st.saveBtn, { backgroundColor: accentColor }, saving && { opacity: 0.6 }]}
-          onPress={handleSave} disabled={saving} activeOpacity={0.85}>
+        <PressableScale style={[st.saveBtn, { backgroundColor: accentColor }, saving && { opacity: 0.6 }]}
+          onPress={handleSave} disabled={saving}>
           <Text style={st.saveBtnText}>{saving ? 'Saving...' : '✓ Save Changes'}</Text>
-        </TouchableOpacity>
+        </PressableScale>
       </View>
     </KeyboardAvoidingView>
   );

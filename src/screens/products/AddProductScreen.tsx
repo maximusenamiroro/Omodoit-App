@@ -1,19 +1,39 @@
 import React, { useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { ensureMediaPermission } from '../../lib/permissions';
+import PressableScale from '../../components/common/PressableScale';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
-  TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, Image, FlatList,
-} from 'react-native';
+  View, Text, StyleSheet, ScrollView,
+  TextInput, StatusBar, Platform, Alert, KeyboardAvoidingView, Image, } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../../theme';
+import Icon from '../../components/common/Icon';
 import { supabase } from '../../api/supabase';
 import { useAuth } from '../../context/AuthContext';
-import { uploadImageToStorage } from '../../lib/uploadImage';
+import { uploadImageToStorage, uploadProductVideo, toFileUri } from '../../lib/uploadImage';
+import VideoTrim from 'react-native-video-trim';
 
-const PRODUCT_CATEGORIES = [
-  'Service', 'Physical Product', 'Digital Product', 'Consultation',
-  'Repair', 'Installation', 'Training', 'Other',
-];
+// Two kinds of post, because they lead to two different actions for
+// the client: a service is booked, a product is ordered. This replaced
+// eight overlapping categories (Service / Physical Product / Digital
+// Product / Consultation / Repair / Installation / Training / Other)
+// that all produced the same button and mostly meant the same thing.
+const POST_TYPES = [
+  {
+    key: 'service',
+    icon: '🛠️',
+    label: 'Service',
+    desc: 'Something you do for a client',
+    example: 'e.g. AC servicing, hair braiding, house cleaning',
+  },
+  {
+    key: 'product',
+    icon: '📦',
+    label: 'Product',
+    desc: 'Something you sell',
+    example: 'e.g. Men’s leather shoes, Ankara fabric, phone charger',
+  },
+] as const;
 
 export default function AddProductScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
@@ -21,20 +41,26 @@ export default function AddProductScreen({ navigation }: any) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [price, setPrice] = useState('');
-  const [category, setCategory] = useState('');
+  const [postType, setPostType] = useState<'service' | 'product'>('service');
   const [photos, setPhotos] = useState<string[]>([]);
+  const [videoUri, setVideoUri] = useState<string | null>(null);
   const [focused, setFocused] = useState('');
   const [publishing, setPublishing] = useState(false);
+  const [publishStage, setPublishStage] = useState('');
 
-  const isValid = title.trim().length >= 3 && price.trim().length > 0 && category.length > 0;
+  // Price is deliberately NOT required. A service is often "come and
+  // see", and forcing a number made workers invent one.
+  const isValid = title.trim().length >= 3;
+
+  const activeType = POST_TYPES.find(t => t.key === postType)!;
 
   const handlePublish = async () => {
     if (!isValid) {
-      Alert.alert('Complete the Form', 'Please fill in title, price, and category');
+      Alert.alert('Add a Title', 'Please give this a name of at least 3 characters.');
       return;
     }
     if (!user?.id) {
-      Alert.alert('Please Log In', 'You need to be logged in to publish a product.');
+      Alert.alert('Please Log In', 'You need to be logged in to publish.');
       return;
     }
     if (publishing) return;
@@ -47,30 +73,62 @@ export default function AddProductScreen({ navigation }: any) {
       // would need a schema change (a separate product_images table).
       let imageUrl: string | null = null;
       if (photos.length > 0) {
+        setPublishStage('Uploading photo…');
         imageUrl = await uploadImageToStorage('products', photos[0], user.id);
       }
 
+      // Video is optional and uploaded to the same bucket. Compressed
+      // first for the same reason reels are — an uncompressed clip off
+      // a phone is tens of megabytes, paid for on every view.
+      let videoUrl: string | null = null;
+      if (videoUri) {
+        setPublishStage('Preparing video…');
+        let toUpload = videoUri;
+        try {
+          const result = await VideoTrim.compress(videoUri, {
+            quality: 'high', bitrate: -1, width: -1, height: -1,
+            frameRate: -1, outputExt: 'mp4', removeAudio: false,
+          });
+          if (result?.outputPath) toUpload = toFileUri(result.outputPath);
+        } catch (compressErr) {
+          console.warn('Product video compression failed, uploading original:', compressErr);
+        }
+        setPublishStage('Uploading video…');
+        videoUrl = await uploadProductVideo(toUpload, user.id);
+      }
+
+      setPublishStage('Publishing…');
       const numericPrice = Number(price.replace(/,/g, ''));
+      const hasPrice = price.trim().length > 0 && !isNaN(numericPrice);
 
       const { error } = await supabase.from('products').insert({
         worker_id: user.id,
         title: title.trim(),
         description: description.trim() || null,
-        price: isNaN(numericPrice) ? null : numericPrice,
-        category,
+        price: hasPrice ? numericPrice : null,
+        type: postType,
+        // Kept in step with type so older queries that read `category`
+        // keep working rather than silently returning nothing.
+        category: postType,
         image_url: imageUrl,
+        video_url: videoUrl,
       });
 
       if (error) throw error;
 
       Alert.alert(
-        '🎉 Product Published!',
-        title + ' is now live. Clients can see it on your profile.',
+        postType === 'service' ? '🎉 Service Published!' : '🎉 Product Published!',
+        title + ' is now live. Clients can ' + (postType === 'service' ? 'book' : 'order') + ' it from your profile and New Arrivals.',
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (err: any) {
       console.error('Product publish error:', err);
-      Alert.alert('Could Not Publish', 'Something went wrong. Please check your connection and try again.');
+      // A too-large video is the one failure the worker can actually fix,
+      // so pass that message through instead of the generic one.
+      const message = typeof err?.message === 'string' && err.message.includes('too large')
+        ? err.message
+        : 'Something went wrong. Please check your connection and try again.';
+      Alert.alert('Could Not Publish', message);
     } finally {
       setPublishing(false);
     }
@@ -82,10 +140,10 @@ export default function AddProductScreen({ navigation }: any) {
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
       <View style={st.header}>
-        <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()} activeOpacity={0.7}>
-          <Text style={st.backText}>←</Text>
-        </TouchableOpacity>
-        <Text style={st.headerTitle}>Add Product</Text>
+        <PressableScale style={st.backBtn} onPress={() => navigation.goBack()}>
+          <Icon name="back" size={20} color={colors.white} />
+        </PressableScale>
+        <Text style={st.headerTitle}>Add {activeType.label}</Text>
         <View style={{ width: 36 }} />
       </View>
 
@@ -98,33 +156,79 @@ export default function AddProductScreen({ navigation }: any) {
             {photos.map((uri, i) => (
               <View key={i} style={st.photoThumb}>
                 <Image source={{ uri }} style={st.photoImg} />
-                <TouchableOpacity style={st.photoRemove} onPress={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>
+                <PressableScale style={st.photoRemove} onPress={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}>
                   <Text style={st.photoRemoveText}>✕</Text>
-                </TouchableOpacity>
+                </PressableScale>
               </View>
             ))}
             {photos.length < 5 && (
-              <TouchableOpacity style={st.photoAdd} onPress={() => {
+              <PressableScale style={st.photoAdd} onPress={async () => {
+                if (!(await ensureMediaPermission('photo'))) return;
                 launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 1200, maxHeight: 1200 }, (res) => {
                   if (res.assets && res.assets[0]?.uri) {
                     const uri = res.assets[0].uri;
                     setPhotos(prev => [...prev, uri].slice(0, 5));
                   }
                 });
-              }} activeOpacity={0.85}>
+              }}>
                 <Text style={st.photoAddIcon}>📷</Text>
                 <Text style={st.photoAddText}>{photos.length}/5</Text>
-              </TouchableOpacity>
+              </PressableScale>
             )}
           </ScrollView>
+
+          {videoUri ? (
+            <View style={st.videoPicked}>
+              <Text style={st.videoPickedText}>🎬 Video attached</Text>
+              <PressableScale onPress={() => setVideoUri(null)}>
+                <Text style={st.videoRemoveText}>Remove</Text>
+              </PressableScale>
+            </View>
+          ) : (
+            <PressableScale style={st.videoAdd} onPress={async () => {
+              if (!(await ensureMediaPermission('video'))) return;
+              launchImageLibrary({ mediaType: 'video', selectionLimit: 1 }, (res) => {
+                if (res.assets && res.assets[0]?.uri) setVideoUri(res.assets[0].uri);
+              });
+            }}>
+              <Text style={st.videoAddIcon}>🎬</Text>
+              <Text style={st.videoAddText}>Add a video (optional)</Text>
+            </PressableScale>
+          )}
         </View>
 
         <View style={st.form}>
+          {/* Service or product — decides whether clients see Book or
+              Order on this post in New Arrivals. */}
+          <View style={st.field}>
+            <Text style={st.label}>What are you posting?</Text>
+            <View style={st.typeRow}>
+              {POST_TYPES.map(t => (
+                <PressableScale
+                  key={t.key}
+                  style={[st.typeCard, postType === t.key && st.typeCardActive]}
+                  onPress={() => setPostType(t.key)}
+                >
+                  <Text style={st.typeIcon}>{t.icon}</Text>
+                  <Text style={[st.typeLabel, postType === t.key && st.typeLabelActive]}>
+                    {t.label}
+                  </Text>
+                  <Text style={st.typeDesc}>{t.desc}</Text>
+                </PressableScale>
+              ))}
+            </View>
+            <Text style={st.typeHint}>
+              {postType === 'service'
+                ? 'Clients will see a Book button on this.'
+                : 'Clients will see an Order button on this.'}
+            </Text>
+          </View>
+
           {/* Title */}
           <View style={st.field}>
-            <Text style={st.label}>Product Title *</Text>
+            <Text style={st.label}>{activeType.label} Name *</Text>
             <TextInput style={[st.input, focused === 'title' && st.inputFocused]}
-              value={title} onChangeText={setTitle} placeholder="e.g. AC Servicing, Hair Braiding..."
+              value={title} onChangeText={setTitle} placeholder={activeType.example}
               placeholderTextColor={colors.textMuted} maxLength={100}
               onFocus={() => setFocused('title')} onBlur={() => setFocused('')} />
           </View>
@@ -143,27 +247,16 @@ export default function AddProductScreen({ navigation }: any) {
 
           {/* Price */}
           <View style={st.field}>
-            <Text style={st.label}>Price *</Text>
+            <Text style={st.label}>
+              Price <Text style={st.optional}>(optional)</Text>
+            </Text>
             <View style={[st.priceRow, focused === 'price' && st.inputFocused]}>
               <Text style={st.naira}>₦</Text>
               <TextInput style={st.priceInput}
-                value={price} onChangeText={setPrice} placeholder="e.g. 15,000"
+                value={price} onChangeText={setPrice}
+                placeholder={postType === 'service' ? 'Leave blank to discuss' : 'e.g. 15,000'}
                 placeholderTextColor={colors.textMuted} keyboardType="numeric"
                 onFocus={() => setFocused('price')} onBlur={() => setFocused('')} />
-            </View>
-          </View>
-
-          {/* Category */}
-          <View style={st.field}>
-            <Text style={st.label}>Category *</Text>
-            <View style={st.catGrid}>
-              {PRODUCT_CATEGORIES.map(cat => (
-                <TouchableOpacity key={cat}
-                  style={[st.catChip, category === cat && st.catChipActive]}
-                  onPress={() => setCategory(cat)} activeOpacity={0.85}>
-                  <Text style={[st.catChipText, category === cat && st.catChipTextActive]}>{cat}</Text>
-                </TouchableOpacity>
-              ))}
             </View>
           </View>
 
@@ -176,10 +269,12 @@ export default function AddProductScreen({ navigation }: any) {
       </ScrollView>
 
       <View style={[st.bottomBar, { paddingBottom: Platform.OS === 'ios' ? insets.bottom + 8 : 16 }]}>
-        <TouchableOpacity style={[st.publishBtn, !isValid && st.publishBtnDisabled, publishing && { opacity: 0.6 }]}
-          onPress={handlePublish} disabled={!isValid || publishing} activeOpacity={0.85}>
-          <Text style={st.publishBtnText}>{publishing ? 'Publishing...' : '🚀 Publish Product'}</Text>
-        </TouchableOpacity>
+        <PressableScale style={[st.publishBtn, !isValid && st.publishBtnDisabled, publishing && { opacity: 0.6 }]}
+          onPress={handlePublish} disabled={!isValid || publishing}>
+          <Text style={st.publishBtnText}>
+            {publishing ? (publishStage || 'Publishing…') : `🚀 Publish ${activeType.label}`}
+          </Text>
+        </PressableScale>
       </View>
     </KeyboardAvoidingView>
   );
@@ -201,6 +296,13 @@ const st = StyleSheet.create({
   photoAdd: { width: 100, height: 100, borderRadius: 12, borderWidth: 2, borderColor: colors.primary + '30', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bgCard },
   photoAddIcon: { fontSize: 24, marginBottom: 4 },
   photoAddText: { fontSize: 10, color: colors.primary, fontWeight: '600' },
+  videoAdd: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, marginHorizontal: spacing.screenPadding, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border, backgroundColor: colors.white + '05' },
+  videoAddIcon: { fontSize: 16 },
+  videoAddText: { fontSize: 13, color: colors.textSecondary, fontWeight: '600' },
+  videoPicked: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, marginHorizontal: spacing.screenPadding, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primary + '12' },
+  videoPickedText: { fontSize: 13, color: colors.textPrimary, fontWeight: '600' },
+  videoRemoveText: { fontSize: 12, color: colors.primary, fontWeight: '700' },
+  optional: { fontSize: 11, color: colors.textMuted, fontWeight: '500' },
   imageUpload_unused: { margin: spacing.screenPadding, height: 160, backgroundColor: colors.bgCard, borderRadius: 16, borderWidth: 2, borderColor: colors.primary + '30', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
   imageUploadIcon: { fontSize: 36, marginBottom: 8, opacity: 0.5 },
   imageUploadTitle: { fontSize: 14, fontWeight: '700', color: colors.textPrimary, marginBottom: 4 },
@@ -217,6 +319,18 @@ const st = StyleSheet.create({
   priceRow: { flexDirection: 'row', alignItems: 'center', height: 48, backgroundColor: colors.bgInput, borderRadius: 12, borderWidth: 1.5, borderColor: colors.border, paddingHorizontal: 16 },
   naira: { fontSize: 18, fontWeight: '700', color: colors.primary, marginRight: 8 },
   priceInput: { flex: 1, fontSize: 14, color: colors.textPrimary },
+
+  typeRow: { flexDirection: 'row', gap: 10 },
+  typeCard: {
+    flex: 1, padding: 14, borderRadius: 14,
+    backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border,
+  },
+  typeCardActive: { borderColor: colors.primary, backgroundColor: colors.primary + '12' },
+  typeIcon: { fontSize: 22, marginBottom: 6 },
+  typeLabel: { fontSize: 14, fontWeight: '700', color: colors.textPrimary },
+  typeLabelActive: { color: colors.primary },
+  typeDesc: { fontSize: 11, color: colors.textMuted, marginTop: 2, lineHeight: 15 },
+  typeHint: { fontSize: 11, color: colors.textSecondary, marginTop: 8 },
 
   catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   catChip: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border },

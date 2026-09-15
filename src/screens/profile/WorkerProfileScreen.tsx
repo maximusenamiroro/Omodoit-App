@@ -1,15 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { ensureMediaPermission } from '../../lib/permissions';
+import PressableScale from '../../components/common/PressableScale';
+import Icon from '../../components/common/Icon';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ScrollView,
+  View, Text, StyleSheet, ScrollView,
   Animated, StatusBar, Alert, Platform, Image, Dimensions, ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing } from '../../theme';
+import { EASING, colors, spacing, useEntrance } from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../api/supabase';
 import { uploadImageToStorage, clearOldUploads } from '../../lib/uploadImage';
+import { deleteFromR2, isR2Url } from '../../lib/r2';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const REEL_W = (SCREEN_W - spacing.screenPadding * 2 - 8) / 3;
@@ -21,11 +25,19 @@ const getInitials = (name?: string | null) => {
   return parts[0][0];
 };
 
-interface ReelItem { id: string; likes: number; }
-interface ProductItem { id: string; title: string; price: number | null; category: string; }
+// video_url/thumbnail_url are needed to delete the underlying files
+// from storage — deleting only the database row would leave the video
+// sitting in the bucket forever, still billed for and unreachable.
+interface ReelItem { id: string; likes: number; videoUrl: string | null; thumbnailUrl: string | null; }
+interface ProductItem { id: string; title: string; price: number | null; category: string; type: 'service' | 'product'; }
+
+// The profile is a summary. Past two posts it links to the full list
+// rather than growing without limit inside a tab.
+const PRODUCT_PREVIEW_COUNT = 2;
 interface ReviewItem { id: string; name: string; rating: number; text: string; date: string; }
 
 export default function WorkerProfileScreen({ navigation }: any) {
+  const entrance = useEntrance();
   const insets = useSafeAreaInsets();
   const { user, profile } = useAuth();
   const [uploading, setUploading] = useState(false);
@@ -41,19 +53,84 @@ export default function WorkerProfileScreen({ navigation }: any) {
   const contentOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.stagger(200, [
-      Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(contentOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
+    Animated.stagger(entrance.stagger, [
+      Animated.timing(headerOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
+      Animated.timing(contentOpacity, { toValue: 1, duration: entrance.fade, easing: EASING.OUT, useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, [contentOpacity, headerOpacity]);
+
+  // Reels could be posted but never removed on mobile — the website
+  // has had a delete since day one, so a worker who posted something
+  // by mistake had to go find a computer.
+  //
+  // Storage files are removed alongside the row. The bucket path is
+  // taken by splitting on '/reels/' rather than just the last URL
+  // segment, because mobile uploads live under a per-user folder
+  // (userId/file.mp4) while the website writes flat filenames.
+  const deleteReel = (reel: ReelItem) => {
+    Alert.alert(
+      'Delete Reel',
+      'This will permanently remove the reel and its video. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase.from('reels').delete().eq('id', reel.id);
+              if (error) throw error;
+
+              // Best-effort: the row is already gone, so a storage
+              // hiccup here must not look like a failed delete.
+              //
+              // The two files can now live in different places. Video
+              // moved to R2 for its egress cost; posters are tiny and
+              // stayed on Supabase. Reels published before the move are
+              // still entirely on Supabase, so this has to route each
+              // URL by what it actually is rather than assume.
+              //
+              // The previous version split every URL on '/reels/' to get
+              // a Supabase path. An R2 URL has no such segment, so that
+              // silently produced undefined, deleted nothing, and left
+              // the video billed forever.
+              const media = [reel.videoUrl, reel.thumbnailUrl].filter(Boolean) as string[];
+
+              const r2Urls = media.filter(isR2Url);
+              const supabasePaths = media
+                .filter(u => !isR2Url(u))
+                .map(url => url.split('/reels/')[1])
+                .filter(Boolean)
+                .map(p => decodeURIComponent(p.split('?')[0]));
+
+              if (supabasePaths.length > 0) {
+                try {
+                  await supabase.storage.from('reels').remove(supabasePaths);
+                } catch (storageErr) {
+                  console.warn('Reel row deleted but files remain:', storageErr);
+                }
+              }
+              for (const url of r2Urls) {
+                await deleteFromR2(url);
+              }
+
+              setReels(prev => prev.filter(r => r.id !== reel.id));
+            } catch (err: any) {
+              Alert.alert('Could Not Delete', err?.message || 'Please try again.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const loadData = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
     try {
       const [reelsRes, productsRes, reviewsRes] = await Promise.all([
-        supabase.from('reels').select('id, likes').eq('user_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('products').select('id, title, price, category').eq('worker_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('reels').select('id, likes, video_url, thumbnail_url').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('products').select('id, title, price, category, type').eq('worker_id', user.id).order('created_at', { ascending: false }),
         supabase.from('reviews').select('id, rating, comment, created_at, client_id').eq('worker_id', user.id).order('created_at', { ascending: false }).limit(20),
       ]);
 
@@ -73,8 +150,16 @@ export default function WorkerProfileScreen({ navigation }: any) {
         setFollowerCount(0);
       }
 
-      setReels((reelsRes.data || []).map((r: any) => ({ id: r.id, likes: r.likes || 0 })));
-      setProducts((productsRes.data || []).map((p: any) => ({ id: p.id, title: p.title, price: p.price, category: p.category })));
+      setReels((reelsRes.data || []).map((r: any) => ({
+        id: r.id,
+        likes: r.likes || 0,
+        videoUrl: r.video_url || null,
+        thumbnailUrl: r.thumbnail_url || null,
+      })));
+      setProducts((productsRes.data || []).map((p: any) => ({
+        id: p.id, title: p.title, price: p.price, category: p.category,
+        type: p.type === 'service' ? 'service' : 'product',
+      })));
 
       const reviewRows = reviewsRes.data || [];
       const clientIds = [...new Set(reviewRows.map((r: any) => r.client_id).filter(Boolean))];
@@ -99,7 +184,10 @@ export default function WorkerProfileScreen({ navigation }: any) {
 
   useFocusEffect(useCallback(() => { loadData(); }, [loadData]));
 
-  const handleAvatarPick = () => {
+  const handleAvatarPick = async () => {
+    // Android 13+ returns an empty picker without this.
+    if (!(await ensureMediaPermission('photo'))) return;
+
     launchImageLibrary({ mediaType: 'photo', quality: 0.8, maxWidth: 800, maxHeight: 800 }, async (res) => {
       const uri = res.assets?.[0]?.uri;
       if (!uri || !user?.id) return;
@@ -133,12 +221,9 @@ export default function WorkerProfileScreen({ navigation }: any) {
         <View style={{ width: 32 }} />
         <Text style={st.headerBarTitle}>My Profile</Text>
         <View style={st.headerBarRight}>
-          <TouchableOpacity style={st.headerBarBtn} onPress={() => Alert.alert('Bank Details', 'This feature is coming soon.')} activeOpacity={0.7}>
-            <Text style={st.headerBarIcon}>🏦</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={st.headerBarBtn} onPress={() => navigation.navigate('Settings')} activeOpacity={0.7}>
-            <Text style={st.headerBarIcon}>⚙️</Text>
-          </TouchableOpacity>
+          <PressableScale style={st.headerBarBtn} accessibilityRole="button" accessibilityLabel="Settings" onPress={() => navigation.navigate('Settings')}>
+            <Icon name="settings" size={19} color={colors.textPrimary} />
+          </PressableScale>
         </View>
       </Animated.View>
 
@@ -159,9 +244,9 @@ export default function WorkerProfileScreen({ navigation }: any) {
                 </View>
               )}
             </View>
-            <TouchableOpacity style={[st.avatarPlus, { backgroundColor: colors.primary }]} onPress={handleAvatarPick} disabled={uploading} activeOpacity={0.85}>
+            <PressableScale style={[st.avatarPlus, { backgroundColor: colors.primary }]} onPress={handleAvatarPick} disabled={uploading}>
               <Text style={st.avatarPlusIcon}>+</Text>
-            </TouchableOpacity>
+            </PressableScale>
           </View>
 
           <Text style={st.profileName}>{profile?.full_name || 'Your Name'}</Text>
@@ -187,9 +272,10 @@ export default function WorkerProfileScreen({ navigation }: any) {
             ))}
           </View>
 
-          <TouchableOpacity style={[st.editBtn, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('EditProfile')} activeOpacity={0.85}>
-            <Text style={st.editBtnText}>✏️ Edit Profile</Text>
-          </TouchableOpacity>
+          <PressableScale style={[st.editBtn, { backgroundColor: colors.primary }]} onPress={() => navigation.navigate('EditProfile')}>
+            <Icon name="edit" size={17} color="#fff" />
+            <Text style={st.editBtnText}>Edit Profile</Text>
+          </PressableScale>
 
           <View style={st.commBanner}>
             <Text style={st.commIcon}>💰</Text>
@@ -199,20 +285,24 @@ export default function WorkerProfileScreen({ navigation }: any) {
 
         <View style={st.tabBar}>
           {[
-            { key: 'reels' as const, icon: '🎬', label: 'Reels' },
-            { key: 'products' as const, icon: '📦', label: 'Products' },
-            { key: 'reviews' as const, icon: '⭐', label: 'Reviews' },
+            { key: 'reels' as const, icon: 'reels' as const, label: 'Reels' },
+            { key: 'products' as const, icon: 'orders' as const, label: 'Products' },
+            { key: 'reviews' as const, icon: 'star' as const, label: 'Reviews' },
           ].map(tab => (
-            <TouchableOpacity
+            <PressableScale
               key={tab.key}
               style={[st.tab, activeTab === tab.key && st.tabActive]}
               onPress={() => setActiveTab(tab.key)}
-              activeOpacity={0.7}
             >
-              <Text style={st.tabIcon}>{tab.icon}</Text>
+              <Icon
+                name={tab.icon}
+                size={18}
+                color={activeTab === tab.key ? colors.primary : colors.textMuted}
+                filled={activeTab === tab.key}
+              />
               <Text style={[st.tabText, activeTab === tab.key && st.tabTextActive]}>{tab.label}</Text>
               {activeTab === tab.key && <View style={[st.tabLine, { backgroundColor: colors.primary }]} />}
-            </TouchableOpacity>
+            </PressableScale>
           ))}
         </View>
 
@@ -224,22 +314,42 @@ export default function WorkerProfileScreen({ navigation }: any) {
               {activeTab === 'reels' && (
                 <View style={st.reelsGrid}>
                   {reels.map(reel => (
-                    <TouchableOpacity key={reel.id} style={st.reelCard} activeOpacity={0.85}>
+                    <PressableScale key={reel.id} style={st.reelCard}>
                       <View style={st.reelThumb}>
-                        <Text style={st.reelPlayIcon}>▶</Text>
+                        {/* Poster frame when the reel has one; older
+                            reels predate thumbnails and still show the
+                            play glyph. */}
+                        {reel.thumbnailUrl ? (
+                          <Image
+                            source={{ uri: reel.thumbnailUrl }}
+                            style={st.reelThumbImage}
+                            resizeMode="cover"
+                          />
+                        ) : (
+                          <Text style={st.reelPlayIcon}>▶</Text>
+                        )}
                       </View>
+
+                      <PressableScale
+                        style={st.reelDeleteBtn}
+                        onPress={() => deleteReel(reel)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Text style={st.reelDeleteIcon}>✕</Text>
+                      </PressableScale>
+
                       <View style={st.reelOverlay}>
                         <View style={st.reelStat}>
                           <Text style={st.reelStatIcon}>❤</Text>
                           <Text style={st.reelStatText}>{reel.likes}</Text>
                         </View>
                       </View>
-                    </TouchableOpacity>
+                    </PressableScale>
                   ))}
-                  <TouchableOpacity style={st.addReelCard} onPress={() => navigation.navigate('CreateReel')} activeOpacity={0.85}>
+                  <PressableScale style={st.addReelCard} onPress={() => navigation.navigate('CreateReel')}>
                     <Text style={st.addReelIcon}>+</Text>
                     <Text style={st.addReelText}>New Reel</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 </View>
               )}
 
@@ -248,24 +358,35 @@ export default function WorkerProfileScreen({ navigation }: any) {
                   {products.length === 0 && (
                     <Text style={st.emptyText}>No products yet</Text>
                   )}
-                  {products.map(product => (
-                    <TouchableOpacity key={product.id} style={st.productCard} activeOpacity={0.85}>
+                  {products.slice(0, PRODUCT_PREVIEW_COUNT).map(product => (
+                    <PressableScale
+                      key={product.id}
+                      style={st.productCard}
+                      onPress={() => navigation.navigate('MyProducts')}
+                    >
                       <View style={st.productThumb}>
-                        <Text style={st.productEmoji}>📦</Text>
+                        <Text style={st.productEmoji}>{product.type === 'service' ? '🛠️' : '📦'}</Text>
                       </View>
                       <View style={st.productInfo}>
                         <Text style={st.productTitle}>{product.title}</Text>
-                        <Text style={st.productCat}>{product.category}</Text>
+                        <Text style={st.productCat}>{product.type === 'service' ? 'Service' : 'Product'}</Text>
                         <Text style={[st.productPrice, { color: colors.primary }]}>
                           {product.price != null ? `₦${product.price.toLocaleString()}` : 'Contact for price'}
                         </Text>
                       </View>
                       <Text style={st.productArrow}>→</Text>
-                    </TouchableOpacity>
+                    </PressableScale>
                   ))}
-                  <TouchableOpacity style={st.addProductBtn} onPress={() => navigation.navigate('AddProduct')} activeOpacity={0.85}>
+                  {products.length > PRODUCT_PREVIEW_COUNT && (
+                    <PressableScale style={st.showMoreBtn} onPress={() => navigation.navigate('MyProducts')}>
+                      <Text style={st.showMoreText}>
+                        Show all {products.length} posts →
+                      </Text>
+                    </PressableScale>
+                  )}
+                  <PressableScale style={st.addProductBtn} onPress={() => navigation.navigate('AddProduct')}>
                     <Text style={[st.addProductText, { color: colors.primary }]}>+ Add Product</Text>
-                  </TouchableOpacity>
+                  </PressableScale>
                 </View>
               )}
 
@@ -335,7 +456,7 @@ const st = StyleSheet.create({
   statValue: { fontSize: 20, fontWeight: '700', color: colors.textPrimary, letterSpacing: -0.5 },
   statLabel: { fontSize: 10, color: colors.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: 1 },
 
-  editBtn: { paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14, marginBottom: 14 },
+  editBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 14, marginBottom: 14 },
   editBtnText: { fontSize: 12, fontWeight: '600', color: colors.white },
 
   commBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary + '10', borderRadius: 14, borderWidth: 1, borderColor: colors.primary + '25', paddingHorizontal: 14, paddingVertical: 10, gap: 10 },
@@ -356,6 +477,14 @@ const st = StyleSheet.create({
   reelCard: { width: REEL_W, aspectRatio: 9 / 16, backgroundColor: colors.bgCard, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
   reelThumb: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
   reelPlayIcon: { fontSize: 20, color: colors.white, opacity: 0.5 },
+  reelThumbImage: { width: '100%', height: '100%' },
+  reelDeleteBtn: {
+    position: 'absolute', top: 6, right: 6,
+    width: 26, height: 26, borderRadius: 13,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  reelDeleteIcon: { color: colors.white, fontSize: 13, fontWeight: '700', lineHeight: 15 },
   reelOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around', paddingVertical: 6, backgroundColor: 'rgba(0,0,0,0.6)' },
   reelStat: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   reelStatIcon: { fontSize: 10, color: colors.white },
@@ -364,6 +493,8 @@ const st = StyleSheet.create({
   addReelIcon: { fontSize: 24, color: colors.primary, marginBottom: 4 },
   addReelText: { fontSize: 10, color: colors.primary, fontWeight: '600' },
 
+  showMoreBtn: { paddingVertical: 12, borderRadius: 12, alignItems: 'center', backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, marginBottom: 10 },
+  showMoreText: { fontSize: 12, fontWeight: '700', color: colors.primary },
   productsSection: { padding: spacing.screenPadding },
   productCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.bgCard, borderRadius: 14, borderWidth: 1, borderColor: colors.border, padding: 14, marginBottom: 10 },
   productThumb: { width: 48, height: 48, borderRadius: 12, backgroundColor: colors.primary + '10', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
