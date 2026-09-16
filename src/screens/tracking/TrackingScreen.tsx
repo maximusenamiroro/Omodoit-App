@@ -4,11 +4,20 @@ import {
   StatusBar, Platform, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import MapView, { Marker, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapLibreGL from '@maplibre/maplibre-react-native';
 import Geolocation from '@react-native-community/geolocation';
 import { colors, spacing } from '../../theme';
 import { useWatchLocation } from '../../lib/tracking';
 import { supabase } from '../../api/supabase';
+
+// OpenFreeMap hosts these vector tiles for free, forever, with no API
+// key, no signup, and no card — funded as a nonprofit specifically so
+// small apps don't need a Google Maps billing account. "liberty" is
+// their general-purpose street style; swap for a self-hosted style.json
+// later if you want a custom dark theme.
+const MAP_STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+
+MapLibreGL.setAccessToken(null);
 
 // Straight-line distance in km — used for an honest "~X km away"
 // display. Deliberately NOT presented as a road-distance ETA (e.g.
@@ -27,7 +36,7 @@ function distanceKm(a: { latitude: number; longitude: number }, b: { latitude: n
 export default function TrackingScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const { bookingId, workerId, workerName = 'Worker', service = '' } = route?.params || {};
-  const mapRef = useRef<MapView | null>(null);
+  const cameraRef = useRef<MapLibreGL.Camera | null>(null);
 
   const { position: workerPos, connected } = useWatchLocation(bookingId || null);
   const [clientPos, setClientPos] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -69,12 +78,21 @@ export default function TrackingScreen({ navigation, route }: any) {
     fetchRating();
   }, [workerId]);
 
+  // MapLibre's Camera takes bounds as [NE, SW] corners in [lng, lat]
+  // order (note: lng first, opposite of the {latitude, longitude}
+  // objects used everywhere else in this file — that ordering is
+  // MapLibre/Mapbox convention, not a typo).
   useEffect(() => {
-    if (workerPos && clientPos && mapRef.current) {
-      mapRef.current.fitToCoordinates(
-        [workerPos, clientPos],
-        { edgePadding: { top: 100, right: 60, bottom: 300, left: 60 }, animated: true }
-      );
+    if (workerPos && clientPos && cameraRef.current) {
+      const ne: [number, number] = [
+        Math.max(workerPos.longitude, clientPos.longitude),
+        Math.max(workerPos.latitude, clientPos.latitude),
+      ];
+      const sw: [number, number] = [
+        Math.min(workerPos.longitude, clientPos.longitude),
+        Math.min(workerPos.latitude, clientPos.latitude),
+      ];
+      cameraRef.current.fitBounds(ne, sw, [100, 60, 300, 60], 1000);
     }
   }, [workerPos, clientPos]);
 
@@ -101,46 +119,63 @@ export default function TrackingScreen({ navigation, route }: any) {
   };
 
   const km = workerPos && clientPos ? distanceKm(workerPos, clientPos) : null;
-  const initialRegion = clientPos
-    ? { latitude: clientPos.latitude, longitude: clientPos.longitude, latitudeDelta: 0.03, longitudeDelta: 0.03 }
-    : { latitude: 6.5244, longitude: 3.3792, latitudeDelta: 0.05, longitudeDelta: 0.05 };
+  const initialCenter: [number, number] = clientPos
+    ? [clientPos.longitude, clientPos.latitude]
+    : [3.3792, 6.5244]; // Lagos fallback — [lng, lat] order for MapLibre
+
+  const routeGeoJSON = workerPos && clientPos ? {
+    type: 'Feature' as const,
+    geometry: {
+      type: 'LineString' as const,
+      coordinates: [
+        [workerPos.longitude, workerPos.latitude],
+        [clientPos.longitude, clientPos.latitude],
+      ],
+    },
+    properties: {},
+  } : null;
 
   return (
     <View style={st.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      <MapView
-        ref={mapRef}
-        style={st.map}
-        provider={Platform.OS === 'android' ? PROVIDER_GOOGLE : undefined}
-        initialRegion={initialRegion}
-        customMapStyle={darkMapStyle}
-      >
+      <MapLibreGL.MapView style={st.map} styleURL={MAP_STYLE_URL} logoEnabled={false} attributionEnabled={true}>
+        <MapLibreGL.Camera
+          ref={cameraRef}
+          defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: 13 }}
+        />
+
+        {routeGeoJSON && (
+          <MapLibreGL.ShapeSource id="routeLine" shape={routeGeoJSON}>
+            <MapLibreGL.LineLayer
+              id="routeLineLayer"
+              style={{ lineColor: colors.primary, lineWidth: 3, lineDasharray: [2, 1.5] }}
+            />
+          </MapLibreGL.ShapeSource>
+        )}
+
         {workerPos && (
-          <Marker coordinate={workerPos} title={workerName} description="On the way">
+          <MapLibreGL.PointAnnotation
+            id="workerMarker"
+            coordinate={[workerPos.longitude, workerPos.latitude]}
+          >
             <View style={st.workerMarker}>
               <Text style={st.workerMarkerIcon}>🛠️</Text>
             </View>
-          </Marker>
+          </MapLibreGL.PointAnnotation>
         )}
 
         {clientPos && (
-          <Marker coordinate={clientPos} title="Your Location">
+          <MapLibreGL.PointAnnotation
+            id="clientMarker"
+            coordinate={[clientPos.longitude, clientPos.latitude]}
+          >
             <View style={st.clientMarker}>
               <Text style={st.clientMarkerIcon}>📍</Text>
             </View>
-          </Marker>
+          </MapLibreGL.PointAnnotation>
         )}
-
-        {workerPos && clientPos && (
-          <Polyline
-            coordinates={[workerPos, clientPos]}
-            strokeColor={colors.primary}
-            strokeWidth={3}
-            lineDashPattern={[10, 5]}
-          />
-        )}
-      </MapView>
+      </MapLibreGL.MapView>
 
       <TouchableOpacity style={[st.backBtn, { top: insets.top + 10 }]} onPress={() => navigation.goBack()} activeOpacity={0.7}>
         <Text style={st.backText}>←</Text>
@@ -189,16 +224,6 @@ export default function TrackingScreen({ navigation, route }: any) {
   );
 }
 
-const darkMapStyle = [
-  { elementType: 'geometry', stylers: [{ color: '#1d1d1d' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#1d1d1d' }] },
-  { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2c2c2c' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#1d1d1d' }] },
-  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0e0e0e' }] },
-  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#1d1d1d' }] },
-];
-
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0a0a0a' },
   map: { flex: 1 },
@@ -230,19 +255,7 @@ const st = StyleSheet.create({
   ratingCount: { fontSize: 10, color: colors.textMuted },
 
   actionsRow: { flexDirection: 'row', gap: 10 },
-  actionBtn: { 
-    flex: 1, 
-    minHeight: 48, 
-    minWidth: 48,
-    paddingVertical: 12, 
-    paddingHorizontal: 16,
-    borderRadius: 12, 
-    backgroundColor: colors.bgCard, 
-    borderWidth: 1, 
-    borderColor: colors.border, 
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  actionBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.bgCard, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
   actionBtnDanger: { borderColor: '#EF444430' },
   actionIcon: { fontSize: 18, marginBottom: 4 },
   actionLabel: { fontSize: 11, fontWeight: '600', color: colors.textPrimary },

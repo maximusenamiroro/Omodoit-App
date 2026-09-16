@@ -1047,7 +1047,7 @@
   resolved "https://registry.npmjs.org/@eslint/js/-/js-8.57.1.tgz"
   integrity sha512-d9zaMRSTIKDLhctzH12MtXvJKSSUhaHcjV+2Z+GK+EEY7XKpP5yR4x+N3TAcHTcu963nIr+TMcCb4DBCYX1z6Q==
 
-"@expo/config-plugins@*":
+"@expo/config-plugins@*", "@expo/config-plugins@>=7":
   version "57.0.9"
   resolved "https://registry.npmjs.org/@expo/config-plugins/-/config-plugins-57.0.9.tgz"
   integrity sha512-hHgfL1avkCdEvDSw7IwlKwRYYNgcxzbNNMIk6W6lTkJpY0MajinAfeJUS0J+wPCsjUfGbVqOJM+XhPaO5ulUxg==
@@ -1404,6 +1404,17 @@
   dependencies:
     "@jridgewell/resolve-uri" "^3.1.0"
     "@jridgewell/sourcemap-codec" "^1.4.14"
+
+"@maplibre/maplibre-react-native@^10.2.1":
+  version "10.4.2"
+  resolved "https://registry.npmjs.org/@maplibre/maplibre-react-native/-/maplibre-react-native-10.4.2.tgz"
+  integrity sha512-5qAfaEe66eMXyILklm2DMHwyaXwXxsZWVop4BqfU7AyTg13LHAcaMmLJNJ3jPkMtiJvjH2m8ywGnobdIg2I0lg==
+  dependencies:
+    "@turf/distance" "^7.1.0"
+    "@turf/helpers" "^7.1.0"
+    "@turf/length" "^7.1.0"
+    "@turf/nearest-point-on-line" "^7.1.0"
+    debounce "^2.2.0"
 
 "@nicolo-ribaudo/eslint-scope-5-internals@5.1.1-v1":
   version "5.1.1-v1"
@@ -1933,6 +1944,65 @@
     "@supabase/realtime-js" "2.110.8"
     "@supabase/storage-js" "2.110.8"
 
+"@turf/distance@^7.1.0", "@turf/distance@7.4.0":
+  version "7.4.0"
+  resolved "https://registry.npmjs.org/@turf/distance/-/distance-7.4.0.tgz"
+  integrity sha512-ODkopQDG1m/U6Mx7OMmShncaCvneomwX3lZY1CDA7x40bhDdTTRYP/n/6LicZVyIO4/oK+aXkov4NOtWYthA2g==
+  dependencies:
+    "@turf/helpers" "7.4.0"
+    "@turf/invariant" "7.4.0"
+    "@types/geojson" "^7946.0.10"
+    tslib "^2.8.1"
+
+"@turf/helpers@^7.1.0", "@turf/helpers@7.4.0":
+  version "7.4.0"
+  resolved "https://registry.npmjs.org/@turf/helpers/-/helpers-7.4.0.tgz"
+  integrity sha512-7PAwLZqOdRzTI5g9bHvUwlloAXPDH/mlajtryk0tw4ZwGMtmXsAyF4QundsAMfy4u48Fyd3AUqMXY0SMxqJGWg==
+  dependencies:
+    "@types/geojson" "^7946.0.10"
+    tslib "^2.8.1"
+
+"@turf/invariant@7.4.0":
+  version "7.4.0"
+  resolved "https://registry.npmjs.org/@turf/invariant/-/invariant-7.4.0.tgz"
+  integrity sha512-OAsc3qdNx+tRqzWmMNFMnVlWWACIqnYqIejZKvb2oKkKPYJJrURPXZ6OdrGD58ljJMolLoqwIZGSx3VndaEjxg==
+  dependencies:
+    "@turf/helpers" "7.4.0"
+    "@types/geojson" "^7946.0.10"
+    tslib "^2.8.1"
+
+"@turf/length@^7.1.0":
+  version "7.4.0"
+  resolved "https://registry.npmjs.org/@turf/length/-/length-7.4.0.tgz"
+  integrity sha512-vQsJLuL7uy8m6HAMuJJKoiOHYY1de1Hd6mY/fM90qfu2RyIrkoF8J4bRUb72XZNCVnvob/eHpUMdhZeoUhSyfQ==
+  dependencies:
+    "@turf/distance" "7.4.0"
+    "@turf/helpers" "7.4.0"
+    "@turf/meta" "7.4.0"
+    "@types/geojson" "^7946.0.10"
+    tslib "^2.8.1"
+
+"@turf/meta@7.4.0":
+  version "7.4.0"
+  resolved "https://registry.npmjs.org/@turf/meta/-/meta-7.4.0.tgz"
+  integrity sha512-3cLUvlEyDuSnMSzrjhaLAEiYR8xhbfWyTVQlrlEw40xL81d4KF4PqUWbjTXKpXZStdYbet2GCurl79KMypNw6g==
+  dependencies:
+    "@turf/helpers" "7.4.0"
+    "@types/geojson" "^7946.0.10"
+    tslib "^2.8.1"
+
+"@turf/nearest-point-on-line@^7.1.0":
+  version "7.4.0"
+  resolved "https://registry.npmjs.org/@turf/nearest-point-on-line/-/nearest-point-on-line-7.4.0.tgz"
+  integrity sha512-eKTKf/qODIsPankYMZrNfI3LjLaVtQvYV/1hcj9kH/Zr3GfLUszevjhTRDZtMgTFrv8+awW3+MyhmN+PJGuLdQ==
+  dependencies:
+    "@turf/distance" "7.4.0"
+    "@turf/helpers" "7.4.0"
+    "@turf/invariant" "7.4.0"
+    "@turf/meta" "7.4.0"
+    "@types/geojson" "^7946.0.10"
+    tslib "^2.8.1"
+
 "@types/babel__core@^7.1.14":
   version "7.20.5"
   resolved "https://registry.npmjs.org/@types/babel__core/-/babel__core-7.20.5.tgz"
@@ -1966,7 +2036,7 @@
   dependencies:
     "@babel/types" "^7.28.2"
 
-"@types/geojson@^7946.0.13":
+"@types/geojson@^7946.0.0", "@types/geojson@^7946.0.10":
   version "7946.0.16"
   resolved "https://registry.npmjs.org/@types/geojson/-/geojson-7946.0.16.tgz"
   integrity sha512-6C8nqWur3j98U6+lXDfTUWIfgvZU+EumvpHKcYjujKH7woYyLj2sUmff0tRhrqM7BohUw7Pz3ZB1jj2gW9Fvmg==
@@ -2019,7 +2089,7 @@
   dependencies:
     "@types/react" "*"
 
-"@types/react@*", "@types/react@^19.1.0", "@types/react@^19.1.1", "@types/react@^19.2.0":
+"@types/react@*", "@types/react@^19.1.0", "@types/react@^19.1.1", "@types/react@^19.2.0", "@types/react@>=16.6.1":
   version "19.2.17"
   resolved "https://registry.npmjs.org/@types/react/-/react-19.2.17.tgz"
   integrity sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw==
@@ -2984,6 +3054,11 @@ dayjs@^1.8.15:
   version "1.11.21"
   resolved "https://registry.npmjs.org/dayjs/-/dayjs-1.11.21.tgz"
   integrity sha512-98IT+HOahAisibz/yjKbzuOBwYcjJ7BCLPzARyHiyEBmRz4fatF+KPJszEHXsGYjUG234aH/cOjW1wwTbKUZlA==
+
+debounce@^2.2.0:
+  version "2.2.0"
+  resolved "https://registry.npmjs.org/debounce/-/debounce-2.2.0.tgz"
+  integrity sha512-Xks6RUDLZFdz8LIdR6q0MTH44k7FikOmnh5xkSjMig6ch45afc8sjTjRQf3P6ax8dMgcQrYO/AR2RGWURrruqw==
 
 debug@^2.6.9:
   version "2.6.9"
@@ -5927,13 +6002,6 @@ react-native-is-edge-to-edge@^1.3.1:
   resolved "https://registry.npmjs.org/react-native-is-edge-to-edge/-/react-native-is-edge-to-edge-1.3.1.tgz"
   integrity sha512-NIXU/iT5+ORyCc7p0z2nnlkouYKX425vuU1OEm6bMMtWWR9yvb+Xg5AZmImTKoF9abxCPqrKC3rOZsKzUYgYZA==
 
-react-native-maps@^1.29.0:
-  version "1.29.2"
-  resolved "https://registry.npmjs.org/react-native-maps/-/react-native-maps-1.29.2.tgz"
-  integrity sha512-td4MfwpzLMb//ty7MLpuF3jzWm3pnh/PQ/9W0NWV1xUemZ2dZjsboPaX5fgmJzQhTHjymmZgkbcxkyakmwg/zQ==
-  dependencies:
-    "@types/geojson" "^7946.0.13"
-
 react-native-safe-area-context@^5.8.0, "react-native-safe-area-context@>= 4.0.0":
   version "5.8.0"
   resolved "https://registry.npmjs.org/react-native-safe-area-context/-/react-native-safe-area-context-5.8.0.tgz"
@@ -5957,7 +6025,7 @@ react-native-video@^6.19.2:
   resolved "https://registry.npmjs.org/react-native-video/-/react-native-video-6.19.2.tgz"
   integrity sha512-gh5dBMGSHywKr8+p4azRXrFQgT+QTmS1tI4sz6kVRjSENORfsrGGLQzmyo/7S9m+ZOTLWQJ3h8ONaXxR4F2Fcw==
 
-react-native@*, "react-native@>= 0.76.0", react-native@0.86.0:
+react-native@*, react-native@>=0.59.9, react-native@0.86.0:
   version "0.86.0"
   resolved "https://registry.npmjs.org/react-native/-/react-native-0.86.0.tgz"
   integrity sha512-17ALh/dd6AO4pgOVmOO5Axll5PbErEo3XFyLokyzW6usyi+OShIEPwUW26wLPlhVifgSOIfECCH0WN+0IqtJ1w==
@@ -6008,7 +6076,7 @@ react-test-renderer@19.2.3:
     react-is "^19.2.3"
     scheduler "^0.27.0"
 
-react@*, "react@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", react@^19.2.3, "react@>= 18.2.0", "react@>= 18.3.1", react@>=16.8, react@>=17.0.0, react@19.2.3:
+react@*, "react@^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0", react@^19.2.3, "react@>= 18.2.0", react@>=16.6.1, react@>=16.8, react@>=17.0.0, react@19.2.3:
   version "19.2.3"
   resolved "https://registry.npmjs.org/react/-/react-19.2.3.tgz"
   integrity sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA==
@@ -6769,7 +6837,7 @@ ts-interface-checker@^1.0.2:
   resolved "https://registry.npmjs.org/ts-interface-checker/-/ts-interface-checker-1.0.2.tgz"
   integrity sha512-4IKKvhZRXhvtYF/mtu+OCfBqJKV6LczUq4kQYcpT+iSB7++R9+giWnp2ecwWMIcnG16btVOkXFnoxLSYMN1Q1g==
 
-tslib@2.8.1:
+tslib@^2.8.1, tslib@2.8.1:
   version "2.8.1"
   resolved "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz"
   integrity sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==

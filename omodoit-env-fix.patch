@@ -1,0 +1,39 @@
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..bfd0180
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,11 @@
++# Copy this file to .env (project root, same level as package.json)
++# and fill in real values. .env is gitignored — never commit real secrets.
++
++# Supabase project settings.
++# Find these in your Supabase project: Settings → API
++SUPABASE_URL=https://xiwdqvoadkcodcgtqxfy.supabase.co
++SUPABASE_ANON_KEY=your_supabase_anon_key_here
++
++# Agora App ID, for voice/video calling.
++# Find this in your Agora Console project settings.
++AGORA_APP_ID=your_agora_app_id_here
+diff --git a/android/app/build.gradle b/android/app/build.gradle
+index 1cbcfdc..1560293 100644
+--- a/android/app/build.gradle
++++ b/android/app/build.gradle
+@@ -1,6 +1,7 @@
+ apply plugin: "com.android.application"
+ apply plugin: "org.jetbrains.kotlin.android"
+ apply plugin: "com.facebook.react"
++apply from: project(':react-native-config').projectDir.getPath() + "/dotenv.gradle"
+ 
+ /**
+  * This is the configuration block to customize your React Native Android app.
+@@ -92,9 +93,6 @@ android {
+         targetSdkVersion rootProject.ext.targetSdkVersion
+         versionCode 1
+         versionName "1.0"
+-        manifestPlaceholders = [
+-            MAPS_API_KEY: localProperties.getProperty('MAPS_API_KEY', 'MISSING_MAPS_API_KEY')
+-        ]
+     }
+     signingConfigs {
+         debug {
