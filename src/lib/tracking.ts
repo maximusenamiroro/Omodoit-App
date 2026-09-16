@@ -53,38 +53,75 @@ async function ensureLocationPermission(): Promise<boolean> {
 export function useBroadcastLocation(bookingId: string | null, enabled: boolean) {
   const watchIdRef = useRef<number | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!bookingId || !enabled) return;
+    // Cleanup if disabled or no booking
+    if (!bookingId || !enabled) {
+      if (watchIdRef.current !== null) {
+        Geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      return;
+    }
 
     let cancelled = false;
-    const channel = supabase.channel('tracking:' + bookingId);
+    let channel: any = null;
 
     const start = async () => {
-      const granted = await ensureLocationPermission();
-      if (cancelled) return;
-      if (!granted) {
-        setPermissionDenied(true);
-        return;
+      try {
+        const granted = await ensureLocationPermission();
+        if (cancelled) return;
+        if (!granted) {
+          setPermissionDenied(true);
+          setLocationError('Location permission denied. Please enable in settings.');
+          return;
+        }
+        setPermissionDenied(false);
+        setLocationError(null);
+
+        channel = supabase.channel('tracking:' + bookingId);
+        await channel.subscribe();
+
+        watchIdRef.current = Geolocation.watchPosition(
+          (position) => {
+            if (cancelled || !channel) return;
+
+            // Validate position data before sending
+            if (!position.coords?.latitude || !position.coords?.longitude) {
+              console.warn('Invalid location data received');
+              return;
+            }
+
+            channel.send({
+              type: 'broadcast',
+              event: 'location',
+              payload: {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                timestamp: Date.now(),
+              },
+            });
+          },
+          (error) => {
+            console.warn('Location watch error:', error.message);
+            setLocationError(error.message || 'Unable to retrieve location');
+            if (error.code === 2) { // POSITION_UNAVAILABLE
+              setPermissionDenied(true);
+            }
+          },
+          {
+            enableHighAccuracy: true,
+            distanceFilter: 10,
+            interval: 4000,
+            fastestInterval: 2000,
+          }
+        );
+      } catch (err) {
+        setLocationError('Failed to initialize tracking');
+        console.error('Tracking init error:', err);
       }
-      setPermissionDenied(false);
-
-      channel.subscribe();
-
-      watchIdRef.current = Geolocation.watchPosition(
-        (position) => {
-          channel.send({
-            type: 'broadcast',
-            event: 'location',
-            payload: {
-              latitude: position.coords.latitude,
-              longitude: position.coords.longitude,
-            },
-          });
-        },
-        (error) => console.warn('Location watch error:', error.message),
-        { enableHighAccuracy: true, distanceFilter: 10, interval: 4000 }
-      );
     };
 
     start();
@@ -95,11 +132,14 @@ export function useBroadcastLocation(bookingId: string | null, enabled: boolean)
         Geolocation.clearWatch(watchIdRef.current);
         watchIdRef.current = null;
       }
-      supabase.removeChannel(channel);
+      if (channel) {
+        channel.unsubscribe();
+        supabase.removeChannel(channel);
+      }
     };
   }, [bookingId, enabled]);
 
-  return { permissionDenied };
+  return { permissionDenied, locationError };
 }
 
 // ── Client side: watch a worker's live location for a booking ─────────

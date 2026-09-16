@@ -1,7 +1,13 @@
 # OSX
 #
 .DS_Store
-.env
+Thumbs.db
+ehthumbs.db
+Icon?
+.directory
+.Trashes
+*.nib
+settings.bundle
 
 # Xcode
 #
@@ -22,10 +28,16 @@ DerivedData
 *.ipa
 *.xcuserstate
 **/.xcode.env.local
+ios/Pods/
+ios/build/
+*.xcworkspace
+project.xcworkspace
 
 # Android/IntelliJ
 #
-build/
+android/.gradle
+android/build
+android/app/build
 .idea
 .gradle
 local.properties
@@ -36,41 +48,66 @@ local.properties
 !debug.keystore
 .kotlin/
 
-# node.js
+# Dependencies / node.js
 #
 node_modules/
-npm-debug.log
-yarn-error.log
+.yarn/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
-# fastlane
+# CocoaPods / Ruby bundler
 #
-# It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the
-# screenshots whenever they are needed.
-# For more information about the recommended setup visit:
-# https://docs.fastlane.tools/best-practices/source-control/
+vendor/bundle/
+.bundle/
 
-**/fastlane/report.xml
-**/fastlane/Preview.html
-**/fastlane/screenshots
-**/fastlane/test_output
+# Environment variables
+.env
+.env.local
+.env.*
+!.env.example
 
-# Bundle artifact
-*.jsbundle
+# Build outputs
+/dist
+/build
+/target
+/out
 
-# Ruby / CocoaPods
-**/Pods/
-/vendor/bundle/
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
 
-# Temporary files created by Metro to check the health of the file watcher
-.metro-health-check*
+# Logs
+*.log
 
-# testing
-/coverage
+# Coverage
+coverage/
+htmlcov/
+.coverage
 
-# Yarn
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.gitattributes
+
+# Database
+*.db
+*.sqlite
+*.sqlite3

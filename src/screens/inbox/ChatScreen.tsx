@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, FlatList,
   TextInput, Image, StatusBar, KeyboardAvoidingView,
-  Platform, ActivityIndicator,
+  Platform, ActivityIndicator, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
@@ -67,7 +67,12 @@ export default function ChatScreen({ navigation, route }: any) {
     setupRealtime();
 
     return () => {
-      if (channelRef.current) supabase.removeChannel(channelRef.current);
+      // Properly cleanup realtime subscription to prevent memory leaks
+      if (channelRef.current) {
+        channelRef.current.unsubscribe();
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, []);
 
@@ -98,14 +103,35 @@ export default function ChatScreen({ navigation, route }: any) {
   };
 
   const fetchMessages = async () => {
-    if (!user?.id) return;
+    if (!user?.id || !otherUserId) return;
+    
     try {
+      setLoading(true);
+
+      // SECURITY CHECK: Verify relationship exists before fetching messages
+      // Prevents IDOR where user guesses another user's ID
+      const { data: relationCheck, error: relationError } = await supabase
+        .from('hire_requests')
+        .select('id')
+        .or(`and(client_id.eq.${user.id},worker_id.eq.${otherUserId}),and(client_id.eq.${otherUserId},worker_id.eq.${user.id})`)
+        .limit(1)
+        .maybeSingle();
+
+      if (relationError) throw relationError;
+
+      // If no booking relationship exists, block access
+      if (!relationCheck) {
+        Alert.alert('Access Denied', 'You can only message users you have hired or who have hired you.');
+        navigation.goBack();
+        return;
+      }
+
+      // Safe to fetch messages now
       const { data, error } = await supabase
         .from('messages')
         .select('*')
         .or(
-          'and(sender_id.eq.' + user.id + ',receiver_id.eq.' + otherUserId + '),' +
-          'and(sender_id.eq.' + otherUserId + ',receiver_id.eq.' + user.id + ')'
+          `and(sender_id.eq.${user.id},receiver_id.eq.${otherUserId}),and(sender_id.eq.${otherUserId},receiver_id.eq.${user.id})`
         )
         .order('created_at', { ascending: true });
 
@@ -113,6 +139,7 @@ export default function ChatScreen({ navigation, route }: any) {
       setMessages((data as Message[]) || []);
     } catch (err) {
       console.error('Fetch messages error:', err);
+      Alert.alert('Error', 'Failed to load messages.');
     } finally {
       setLoading(false);
     }
@@ -170,7 +197,10 @@ export default function ChatScreen({ navigation, route }: any) {
       );
     } catch (err) {
       console.error('Send message error:', err);
+      // Restore message on failure so user can retry
       setMessages(prev => prev.filter(m => m.id !== optimisticMsg.id));
+      setNewMessage(msgText);
+      Alert.alert('Failed to send', 'Please try again.');
     } finally {
       setSending(false);
     }
@@ -297,12 +327,42 @@ export default function ChatScreen({ navigation, route }: any) {
             keyExtractor={item => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.msgList}
+            // CRITICAL FIX: Performance optimizations to prevent ANR
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={5}
+            windowSize={5}
+            initialNumToRender={8}
+            updateCellsBatchingPeriod={100}
             onContentSizeChange={() => {
               flatListRef.current?.scrollToEnd({ animated: true });
             }}
             onLayout={() => {
               flatListRef.current?.scrollToEnd({ animated: false });
             }}
+            ListEmptyComponent={
+              <View style={styles.emptyChatContainer}>
+                {otherUserAvatar ? (
+                  <Image
+                    source={{ uri: otherUserAvatar }}
+                    style={styles.emptyChatAvatar}
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.emptyChatAvatarFb,
+                      { backgroundColor: accentColor },
+                    ]}>
+                    <Text style={styles.emptyChatAvatarText}>
+                      {getInitials(otherUserName)}
+                    </Text>
+                  </View>
+                )}
+                <Text style={styles.emptyChatName}>{otherUserName}</Text>
+                <Text style={styles.emptyChatDesc}>
+                  Start a conversation with {otherUserName}
+                </Text>
+              </View>
+            }
           />
         )}
 
@@ -399,9 +459,9 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   headerAction: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: colors.white + '08',
     alignItems: 'center',
     justifyContent: 'center',
@@ -531,9 +591,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
   },

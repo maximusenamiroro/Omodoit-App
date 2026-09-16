@@ -13,4 +13,10 @@
 // which must NEVER be embedded in the app itself. This is a deliberate
 // scope boundary: wiring that up is a real backend task, not something
 // to fake or skip past silently.
-export const AGORA_APP_ID = 'REPLACE_WITH_YOUR_AGORA_APP_ID';
+import Config from 'react-native-config';
+
+export const AGORA_APP_ID = Config.AGORA_APP_ID;
+
+if (!AGORA_APP_ID || AGORA_APP_ID === 'REPLACE_WITH_YOUR_AGORA_APP_ID') {
+  console.warn('⚠️ WARNING: AGORA_APP_ID is not configured. Voice/Video calls will fail.');
+}

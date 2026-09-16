@@ -1,11 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="true">
+    <!-- FORCE HTTPS FOR ALL DOMAINS - Required for Play Store -->
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-    <domain-config cleartextTrafficPermitted="true">
+    
+    <!-- Explicitly enforce HTTPS for Supabase and Agora -->
+    <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">xiwdqvoadkcodcgtqxfy.supabase.co</domain>
+        <domain includeSubdomains="true">agora.io</domain>
     </domain-config>
 </network-security-config>
