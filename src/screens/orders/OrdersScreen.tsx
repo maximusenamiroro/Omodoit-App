@@ -134,7 +134,13 @@ export default function OrdersScreen({ navigation }: any) {
       }, () => loadOrders())
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      // Properly cleanup to prevent memory leaks
+      if (channel) {
+        channel.unsubscribe();
+        supabase.removeChannel(channel);
+      }
+    };
   }, [user?.id, role, loadOrders]);
 
   const filteredOrders = orders.filter(order => {
@@ -251,6 +257,25 @@ export default function OrdersScreen({ navigation }: any) {
               keyExtractor={item => item.id}
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ padding: spacing.screenPadding, paddingBottom: Platform.OS === 'ios' ? 100 : 80 }}
+              // CRITICAL FIX: Performance optimizations to prevent ANR
+              removeClippedSubviews={true}
+              maxToRenderPerBatch={5}
+              windowSize={5}
+              initialNumToRender={8}
+              updateCellsBatchingPeriod={100}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <View style={[styles.emptyAvatarPlaceholder, { backgroundColor: userType === 'client' ? colors.client : colors.primary }]}>
+                    <Text style={styles.emptyAvatarText}>{userType === 'client' ? 'C' : 'W'}</Text>
+                  </View>
+                  <Text style={styles.emptyTitle}>No orders yet</Text>
+                  <Text style={styles.emptySubtitle}>
+                    {userType === 'worker' 
+                      ? "Jobs you accept will appear here." 
+                      : "Jobs you post will appear here."}
+                  </Text>
+                </View>
+              }
             />
           )}
         </Animated.View>

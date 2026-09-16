@@ -1,75 +1,90 @@
-# OSX
-#
-.DS_Store
-
-# Xcode
-#
-build/
-*.pbxuser
-!default.pbxuser
-*.mode1v3
-!default.mode1v3
-*.mode2v3
-!default.mode2v3
-*.perspectivev3
-!default.perspectivev3
-xcuserdata
-*.xccheckout
-*.moved-aside
-DerivedData
-*.hmap
-*.ipa
-*.xcuserstate
-**/.xcode.env.local
-
-# Android/IntelliJ
-#
-build/
-.idea
-.gradle
-local.properties
-*.iml
-*.hprof
-.cxx/
-*.keystore
-!debug.keystore
-.kotlin/
-
-# node.js
-#
+```
+# Dependencies
 node_modules/
-npm-debug.log
-yarn-error.log
+.yarn/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# fastlane
-#
-# It is recommended to not store the screenshots in the git repo. Instead, use fastlane to re-generate the
-# screenshots whenever they are needed.
-# For more information about the recommended setup visit:
-# https://docs.fastlane.tools/best-practices/source-control/
+# Build outputs
+/dist
+/build
+/target
+/out
 
-**/fastlane/report.xml
-**/fastlane/Preview.html
-**/fastlane/screenshots
-**/fastlane/test_output
+# Environment variables
+.env
+.env.local
+.env.*
+!.env.example
 
-# Bundle artifact
-*.jsbundle
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
 
-# Ruby / CocoaPods
-**/Pods/
-/vendor/bundle/
+# Logs
+*.log
 
-# Temporary files created by Metro to check the health of the file watcher
-.metro-health-check*
+# Coverage
+coverage/
+htmlcov/
+.coverage
 
-# testing
-/coverage
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.gitattributes
 
-# Yarn
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/sdks
-!.yarn/versions
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# Android
+android/.gradle
+android/build
+android/app/build
+*.iml
+local.properties
+
+# iOS
+ios/Pods/
+ios/build/
+*.xcworkspace
+project.xcworkspace
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# OS generated files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+.directory
+.Trashes
+*.nib
+settings.bundle
+```

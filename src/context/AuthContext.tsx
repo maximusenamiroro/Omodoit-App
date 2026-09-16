@@ -2,8 +2,12 @@ import React, {
   createContext, useCallback, useContext, useEffect, useRef, useState,
 } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState, AppStateStatus } from 'react-native';
 import { supabase } from '../api/supabase';
 import type { User } from '@supabase/supabase-js';
+
+// Auto-logout after 30 minutes of inactivity (Security requirement)
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
 // Cache key is scoped per user ID, so there's no risk of showing one
 // account's cached profile to a different account that logs in on the
@@ -105,6 +109,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     userRef.current = user;
   }, [user]);
 
+  // Auto-logout timer for session security
+  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset inactivity timer on user interaction
+  const resetInactivityTimer = useCallback(() => {
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current);
+    }
+    
+    if (user) {
+      inactivityTimerRef.current = setTimeout(() => {
+        console.log('Auto-logout: Session expired due to 30min inactivity');
+        logout();
+      }, SESSION_TIMEOUT_MS);
+    }
+  }, [user, logout]);
+
+  // Track app state changes to reset timer when app comes to foreground
+  useEffect(() => {
+    if (!user) {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      return;
+    }
+
+    resetInactivityTimer();
+
+    const handleAppStateChange = (nextAppState: AppStateStatus) => {
+      if (nextAppState === 'active') {
+        resetInactivityTimer();
+      }
+    };
+
+    const appStateSub = AppState.addEventListener('change', handleAppStateChange);
+    
+    return () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      appStateSub.remove();
+    };
+  }, [user, resetInactivityTimer]);
+
   // Tracks if registration is currently in progress
   // When true, onAuthStateChange ignores SIGNED_IN events
   // because setDirectAuth will handle setting the user and profile
@@ -189,12 +233,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Update last_seen in background — not critical
-      Promise.resolve(
-        supabase
-          .from('profiles')
-          .update({ last_seen: new Date().toISOString() })
-          .eq('id', userId)
-      ).catch(() => {});
+      supabase
+        .from('profiles')
+        .update({ last_seen: new Date().toISOString() })
+        .eq('id', userId)
+        .catch((err) => {
+          console.warn('Non-critical: Failed to update last_seen:', err.message);
+        });
     } catch (error) {
       console.error('fetchProfile error:', error);
       if (mountedRef.current) {
@@ -233,7 +278,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (cached && mountedRef.current) {
               setProfile(cached);
               setLoading(false);
-              fetchProfile(currentUser.id); // refresh in background, not awaited
+              // Fetch profile in background without blocking
+              fetchProfile(currentUser.id).catch(err => {
+                console.warn('Background profile refresh failed:', err);
+              });
             } else {
               await fetchProfile(currentUser.id);
             }
@@ -270,11 +318,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else if (event === 'SIGNED_IN' && currentUser) {
             // User logged in (not during registration)
             setUser(currentUser);
-            await fetchProfile(currentUser.id);
+            // Don't await to prevent blocking
+            fetchProfile(currentUser.id).catch(err => {
+              console.error('Auth state change profile fetch failed:', err);
+            });
           } else if (event === 'USER_UPDATED' && currentUser) {
             // User updated their email or password
             setUser(currentUser);
-            await fetchProfile(currentUser.id);
+            fetchProfile(currentUser.id).catch(err => {
+              console.error('User updated profile fetch failed:', err);
+            });
           } else if (event === 'TOKEN_REFRESHED' && currentUser) {
             // JWT token refreshed — user and profile still valid
             setUser(currentUser);
@@ -292,7 +345,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         authSubscription.unsubscribe();
       }
     };
-  }, [fetchProfile]);
+  }, []); // FIXED: Empty dependency array prevents infinite loops
 
   // ── Logout ─────────────────────────────────────────────────────────
 
