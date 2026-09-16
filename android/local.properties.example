@@ -1,0 +1,19 @@
+# Copy this file to android/local.properties and fill in real values.
+# local.properties is gitignored — never commit real secrets.
+
+# ── SDK path (Android Studio usually writes this automatically) ──────
+# sdk.dir=/Users/you/Library/Android/sdk
+
+# ── Google Maps SDK for Android ───────────────────────────────────────
+# Get this from Google Cloud Console (see instructions in chat).
+MAPS_API_KEY=your_maps_api_key_here
+
+# ── Release signing (required before uploading to Google Play) ──────
+# Generate with: keytool -genkeypair -v -storetype PKCS12 \
+#   -keystore omodoit-release.keystore -alias omodoit-key \
+#   -keyalg RSA -keysize 2048 -validity 10000
+# Put the .keystore file in android/app/ (it's gitignored via *.keystore).
+RELEASE_STORE_FILE=omodoit-release.keystore
+RELEASE_STORE_PASSWORD=your_keystore_password
+RELEASE_KEY_ALIAS=omodoit-key
+RELEASE_KEY_PASSWORD=your_key_password
