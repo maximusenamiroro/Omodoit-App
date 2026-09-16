@@ -1,0 +1,109 @@
+{
+  "buildFiles": [
+    "/Users/user/Desktop/Omodoit/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/user/Desktop/Omodoit/node_modules/@react-native-community/geolocation/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/user/Desktop/Omodoit/node_modules/react-native-agora/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/user/Desktop/Omodoit/node_modules/react-native-bootsplash/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/user/Desktop/Omodoit/node_modules/react-native-config/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/user/Desktop/Omodoit/node_modules/react-native-gesture-handler/android/CMakeLists.txt",
+    "/Users/user/Desktop/Omodoit/node_modules/react-native-image-picker/android/build/generated/source/codegen/jni/CMakeLists.txt",
+    "/Users/user/Desktop/Omodoit/node_modules/react-native-maps/android/src/main/jni/CMakeLists.txt",
+    "/Users/user/Desktop/Omodoit/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt",
+    "/Users/user/Desktop/Omodoit/node_modules/react-native-screens/android/src/main/jni/CMakeLists.txt",
+    "/Users/user/Desktop/Omodoit/node_modules/react-native/ReactAndroid/cmake-utils/default-app-setup/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/Users/user/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+      "-C",
+      "/Users/user/Desktop/Omodoit/android/app/.cxx/RelWithDebInfo/p2n365k1/x86",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/Users/user/Library/Android/sdk/cmake/3.22.1/bin/ninja",
+    "-C",
+    "/Users/user/Desktop/Omodoit/android/app/.cxx/RelWithDebInfo/p2n365k1/x86",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "react_codegen_AgoraRtcNgSpec::@b3e2fa00649b55f06a11": {
+      "artifactName": "react_codegen_AgoraRtcNgSpec",
+      "abi": "x86",
+      "runtimeFiles": []
+    },
+    "react_codegen_safeareacontext::@7984cd80db47aa7b952a": {
+      "artifactName": "react_codegen_safeareacontext",
+      "abi": "x86",
+      "output": "/Users/user/Desktop/Omodoit/android/app/build/intermediates/cxx/RelWithDebInfo/p2n365k1/obj/x86/libreact_codegen_safeareacontext.so",
+      "runtimeFiles": [
+        "/Users/user/.gradle/caches/9.3.1/transforms/3c01aea05d2737e987399f1309ae090e/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.x86/libfbjni.so",
+        "/Users/user/.gradle/caches/9.3.1/transforms/2454197a7a7bdd22c9814cde61f3ed7f/transformed/react-android-0.86.0-release/prefab/modules/jsi/libs/android.x86/libjsi.so",
+        "/Users/user/.gradle/caches/9.3.1/transforms/2454197a7a7bdd22c9814cde61f3ed7f/transformed/react-android-0.86.0-release/prefab/modules/reactnative/libs/android.x86/libreactnative.so"
+      ]
+    },
+    "react_codegen_RNCConfigSpec::@89f1b79ed4954e2f2cff": {
+      "artifactName": "react_codegen_RNCConfigSpec",
+      "abi": "x86",
+      "runtimeFiles": []
+    },
+    "react_codegen_rngesturehandler_codegen::@39f233abcd2c728bc6ec": {
+      "artifactName": "react_codegen_rngesturehandler_codegen",
+      "abi": "x86",
+      "output": "/Users/user/Desktop/Omodoit/android/app/build/intermediates/cxx/RelWithDebInfo/p2n365k1/obj/x86/libreact_codegen_rngesturehandler_codegen.so",
+      "runtimeFiles": [
+        "/Users/user/.gradle/caches/9.3.1/transforms/3c01aea05d2737e987399f1309ae090e/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.x86/libfbjni.so",
+        "/Users/user/.gradle/caches/9.3.1/transforms/2454197a7a7bdd22c9814cde61f3ed7f/transformed/react-android-0.86.0-release/prefab/modules/jsi/libs/android.x86/libjsi.so",
+        "/Users/user/.gradle/caches/9.3.1/transforms/2454197a7a7bdd22c9814cde61f3ed7f/transformed/react-android-0.86.0-release/prefab/modules/reactnative/libs/android.x86/libreactnative.so"
+      ]
+    },
+    "react_codegen_RNImagePickerSpec::@f66ee9a2efecfb28bee4": {
+      "artifactName": "react_codegen_RNImagePickerSpec",
+      "abi": "x86",
+      "runtimeFiles": []
+    },
+    "react_codegen_rnscreens::@25bcbd507e98d3a854ad": {
+      "artifactName": "react_codegen_rnscreens",
+      "abi": "x86",
+      "output": "/Users/user/Desktop/Omodoit/android/app/build/intermediates/cxx/RelWithDebInfo/p2n365k1/obj/x86/libreact_codegen_rnscreens.so",
+      "runtimeFiles": [
+        "/Users/user/.gradle/caches/9.3.1/transforms/2454197a7a7bdd22c9814cde61f3ed7f/transformed/react-android-0.86.0-release/prefab/modules/reactnative/libs/android.x86/libreactnative.so",
+        "/Users/user/.gradle/caches/9.3.1/transforms/2454197a7a7bdd22c9814cde61f3ed7f/transformed/react-android-0.86.0-release/prefab/modules/jsi/libs/android.x86/libjsi.so",
+        "/Users/user/.gradle/caches/9.3.1/transforms/3c01aea05d2737e987399f1309ae090e/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.x86/libfbjni.so"
+      ]
+    },
+    "appmodules::@6890427a1f51a3e7e1df": {
+      "artifactName": "appmodules",
+      "abi": "x86",
+      "output": "/Users/user/Desktop/Omodoit/android/app/build/intermediates/cxx/RelWithDebInfo/p2n365k1/obj/x86/libappmodules.so",
+      "runtimeFiles": [
+        "/Users/user/Desktop/Omodoit/android/app/build/intermediates/cxx/RelWithDebInfo/p2n365k1/obj/x86/libreact_codegen_rngesturehandler_codegen.so",
+        "/Users/user/Desktop/Omodoit/android/app/build/intermediates/cxx/RelWithDebInfo/p2n365k1/obj/x86/libreact_codegen_safeareacontext.so",
+        "/Users/user/Desktop/Omodoit/android/app/build/intermediates/cxx/RelWithDebInfo/p2n365k1/obj/x86/libreact_codegen_rnscreens.so",
+        "/Users/user/.gradle/caches/9.3.1/transforms/3c01aea05d2737e987399f1309ae090e/transformed/fbjni-0.7.0/prefab/modules/fbjni/libs/android.x86/libfbjni.so",
+        "/Users/user/.gradle/caches/9.3.1/transforms/2454197a7a7bdd22c9814cde61f3ed7f/transformed/react-android-0.86.0-release/prefab/modules/jsi/libs/android.x86/libjsi.so",
+        "/Users/user/.gradle/caches/9.3.1/transforms/2454197a7a7bdd22c9814cde61f3ed7f/transformed/react-android-0.86.0-release/prefab/modules/reactnative/libs/android.x86/libreactnative.so"
+      ]
+    },
+    "react_codegen_AsyncStorageSpec::@15af80695a6281ecf900": {
+      "artifactName": "react_codegen_AsyncStorageSpec",
+      "abi": "x86",
+      "runtimeFiles": []
+    },
+    "react_codegen_RNBootSplashSpec::@05d5bd8b08339ce1ebaa": {
+      "artifactName": "react_codegen_RNBootSplashSpec",
+      "abi": "x86",
+      "runtimeFiles": []
+    },
+    "react_codegen_RNMapsSpecs::@5748abef1962d24942ec": {
+      "artifactName": "react_codegen_RNMapsSpecs",
+      "abi": "x86",
+      "runtimeFiles": []
+    },
+    "react_codegen_RNCGeolocationSpec::@1b959fcb56e23f7716ba": {
+      "artifactName": "react_codegen_RNCGeolocationSpec",
+      "abi": "x86",
+      "runtimeFiles": []
+    }
+  }
+}

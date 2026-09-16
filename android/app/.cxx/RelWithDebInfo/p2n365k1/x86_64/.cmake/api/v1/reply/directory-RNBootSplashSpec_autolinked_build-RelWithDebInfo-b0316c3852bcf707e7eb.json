@@ -1,0 +1,14 @@
+{
+	"backtraceGraph" : 
+	{
+		"commands" : [],
+		"files" : [],
+		"nodes" : []
+	},
+	"installers" : [],
+	"paths" : 
+	{
+		"build" : "RNBootSplashSpec_autolinked_build",
+		"source" : "/Users/user/Desktop/Omodoit/node_modules/react-native-bootsplash/android/build/generated/source/codegen/jni"
+	}
+}

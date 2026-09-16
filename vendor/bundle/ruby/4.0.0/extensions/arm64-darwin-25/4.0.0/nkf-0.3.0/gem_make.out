@@ -1,0 +1,18 @@
+current directory: /Users/user/Desktop/Omodoit/vendor/bundle/ruby/4.0.0/gems/nkf-0.3.0/ext/nkf
+/opt/homebrew/opt/ruby/bin/ruby extconf.rb
+creating Makefile
+
+current directory: /Users/user/Desktop/Omodoit/vendor/bundle/ruby/4.0.0/gems/nkf-0.3.0/ext/nkf
+make -j3 DESTDIR\= sitearchdir\=./.gem.20260718-3033-ffvaus sitelibdir\=./.gem.20260718-3033-ffvaus clean
+
+current directory: /Users/user/Desktop/Omodoit/vendor/bundle/ruby/4.0.0/gems/nkf-0.3.0/ext/nkf
+make -j3 DESTDIR\= sitearchdir\=./.gem.20260718-3033-ffvaus sitelibdir\=./.gem.20260718-3033-ffvaus
+compiling nkf.c
+linking shared-object nkf.bundle
+
+current directory: /Users/user/Desktop/Omodoit/vendor/bundle/ruby/4.0.0/gems/nkf-0.3.0/ext/nkf
+make -j3 DESTDIR\= sitearchdir\=./.gem.20260718-3033-ffvaus sitelibdir\=./.gem.20260718-3033-ffvaus install
+/usr/bin/install -c -m 0755 nkf.bundle ./.gem.20260718-3033-ffvaus
+
+current directory: /Users/user/Desktop/Omodoit/vendor/bundle/ruby/4.0.0/gems/nkf-0.3.0/ext/nkf
+make DESTDIR\= sitearchdir\=./.gem.20260718-3033-ffvaus sitelibdir\=./.gem.20260718-3033-ffvaus clean

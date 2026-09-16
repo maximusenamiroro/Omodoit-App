@@ -1,0 +1,4 @@
+/Users/user/Desktop/Omodoit/android/app/.cxx/RelWithDebInfo/p2n365k1/armeabi-v7a/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/foo.dir
+/Users/user/Desktop/Omodoit/android/app/.cxx/RelWithDebInfo/p2n365k1/armeabi-v7a/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/boo.dir
+/Users/user/Desktop/Omodoit/android/app/.cxx/RelWithDebInfo/p2n365k1/armeabi-v7a/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/edit_cache.dir
+/Users/user/Desktop/Omodoit/android/app/.cxx/RelWithDebInfo/p2n365k1/armeabi-v7a/CMakeFiles/_CMakeLTOTest-CXX/bin/CMakeFiles/rebuild_cache.dir
