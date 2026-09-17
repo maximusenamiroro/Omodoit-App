@@ -6,10 +6,23 @@
             <certificates src="system" />
         </trust-anchors>
     </base-config>
-    
+
     <!-- Explicitly enforce HTTPS for Supabase and Agora -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">xiwdqvoadkcodcgtqxfy.supabase.co</domain>
         <domain includeSubdomains="true">agora.io</domain>
     </domain-config>
+
+    <!-- Local dev only: lets a DEBUG build fetch the JS bundle from
+         Metro over plain HTTP. debug-overrides is stripped out of
+         release builds automatically by the Android Gradle Plugin,
+         so this never ships to production or Play Store. -->
+    <debug-overrides>
+        <base-config cleartextTrafficPermitted="true">
+            <trust-anchors>
+                <certificates src="system" />
+                <certificates src="user" />
+            </trust-anchors>
+        </base-config>
+    </debug-overrides>
 </network-security-config>
