@@ -1,253 +1,107 @@
 import React, { useEffect, useRef, useState } from 'react';
-import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
-  Animated, StatusBar, Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Animated, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
+import { supabase } from '../../api/supabase';
+import { upsertWithRetry } from '../../lib/db';
+import { useAuth } from '../../context/AuthContext';
+
+type ProfilePayload = Record<string, any>;
 
 export default function OTPScreen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { accountType, phoneNumber } = route.params;
-  const isClient = accountType === 'client';
-  const accent = isClient ? colors.client : colors.primary;
-
+  const { accountType, email, profile } = route.params as { accountType: 'client' | 'worker'; email: string; profile: ProfilePayload };
+  const { setDirectAuth } = useAuth();
+  const accent = accountType === 'client' ? colors.client : colors.primary;
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [loading, setLoading] = useState(false);
-  const [countdown, setCountdown] = useState(45);
-  const [canResend, setCanResend] = useState(false);
-
   const inputRefs = useRef<(TextInput | null)[]>([]);
-
-  // Animations
   const headerOpacity = useRef(new Animated.Value(0)).current;
-  const headerSlide = useRef(new Animated.Value(20)).current;
   const boxesOpacity = useRef(new Animated.Value(0)).current;
-  const boxesScale = useRef(new Animated.Value(0.9)).current;
-  const infoOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const animations = [
-      Animated.parallel([
-        Animated.timing(headerOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
-        Animated.timing(headerSlide, { toValue: 0, duration: 400, useNativeDriver: true }),
-      ]),
-      Animated.parallel([
-        Animated.timing(boxesOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.spring(boxesScale, { toValue: 1, damping: 15, stiffness: 100, useNativeDriver: true }),
-      ]),
-      Animated.timing(infoOpacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-    ];
-    Animated.stagger(200, animations).start();
-
-    // Auto-focus first input
-    setTimeout(() => inputRefs.current[0]?.focus(), 500);
-  }, []);
-
-  // Countdown timer for resend
-  useEffect(() => {
-    if (countdown <= 0) {
-      setCanResend(true);
-      return;
-    }
-    const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    Animated.parallel([
+      Animated.timing(headerOpacity, { toValue: 1, duration: 350, useNativeDriver: true }),
+      Animated.timing(boxesOpacity, { toValue: 1, duration: 350, delay: 150, useNativeDriver: true }),
+    ]).start();
+    const timer = setTimeout(() => inputRefs.current[0]?.focus(), 500);
     return () => clearTimeout(timer);
-  }, [countdown]);
+  }, [boxesOpacity, headerOpacity]);
 
-  // Handle OTP digit input
-  const handleChange = (text: string, index: number) => {
-    // Only allow single digits
-    const digit = text.replace(/[^0-9]/g, '').slice(-1);
-
-    const newOtp = [...otp];
-    newOtp[index] = digit;
-    setOtp(newOtp);
-
-    // Auto-advance to next input
-    if (digit && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-
-    // Auto-submit when all 6 digits are entered
-    if (digit && index === 5) {
-      const fullOtp = [...newOtp.slice(0, 5), digit].join('');
-      if (fullOtp.length === 6) {
-        handleVerify(fullOtp);
-      }
-    }
-  };
-
-  // Handle backspace
-  const handleKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-      const newOtp = [...otp];
-      newOtp[index - 1] = '';
-      setOtp(newOtp);
-    }
-  };
-
-  // Verify OTP
   const handleVerify = async (code: string) => {
+    if (code.length !== 6 || loading) return;
     setLoading(true);
+    try {
+      // The Supabase "Confirm signup" email template must use {{ .Token }}
+      // so users receive this six-digit code instead of only a web link.
+      const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: 'signup' });
+      if (error || !data.user) throw error || new Error('We could not verify that code.');
 
-    // TODO: Replace with actual Termii verify API call
-    // For now simulate verification
-    setTimeout(() => {
+      const { error: profileError } = await upsertWithRetry('profiles', profile);
+      if (profileError) throw profileError;
+      setDirectAuth(data.user, profile as any);
+    } catch (error: any) {
+      Alert.alert('Could Not Verify Email', error?.message || 'Check the code and try again.');
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } finally {
       setLoading(false);
-
-      // Navigate to appropriate registration step
-      if (isClient) {
-        navigation.navigate('ClientRegStep1', { phoneNumber });
-      } else {
-        navigation.navigate('WorkerRegStep1', { phoneNumber });
-      }
-    }, 1500);
+    }
   };
 
-  // Resend OTP
-  const handleResend = () => {
-    if (!canResend) return;
-    setCountdown(45);
-    setCanResend(false);
-    setOtp(['', '', '', '', '', '']);
-    inputRefs.current[0]?.focus();
-    // TODO: Call Termii API to resend
-    Alert.alert('Code Sent', 'A new verification code has been sent to your phone');
+  const handleChange = (text: string, index: number) => {
+    const digit = text.replace(/[^0-9]/g, '').slice(-1);
+    const next = [...otp];
+    next[index] = digit;
+    setOtp(next);
+    if (digit && index < 5) inputRefs.current[index + 1]?.focus();
+    if (digit && index === 5) handleVerify(next.join(''));
   };
 
-  // Mask phone number for display: +234 805 **** 733
-  const maskedPhone = () => {
-    if (phoneNumber.length < 10) return phoneNumber;
-    const last3 = phoneNumber.slice(-3);
-    const first7 = phoneNumber.slice(0, 7);
-    return `${first7} **** ${last3}`;
+  const resendCode = async () => {
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resend({ type: 'signup', email });
+      if (error) throw error;
+      Alert.alert('Code Sent', 'A new verification code has been sent to your email.');
+      setOtp(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } catch (error: any) {
+      Alert.alert('Could Not Resend Code', error?.message || 'Please try again shortly.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const isComplete = otp.every(d => d !== '');
+  const isComplete = otp.every(Boolean);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-
-      {/* Back button */}
-      <TouchableOpacity
-        style={styles.backButton}
-        onPress={() => navigation.goBack()}
-        activeOpacity={0.7}
-      >
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Text style={styles.backText}>←</Text>
       </TouchableOpacity>
-
-      {/* Progress */}
-      <View style={styles.progressContainer}>
-        <Text style={[styles.stepText, { color: accent }]}>
-          Verifying phone
-        </Text>
-        <View style={styles.progressTrack}>
-          <View style={[
-            styles.progressFill,
-            { width: isClient ? '33%' : '25%', backgroundColor: accent },
-          ]} />
-        </View>
-      </View>
-
-      {/* Header */}
-      <Animated.View style={[styles.headerSection, {
-        opacity: headerOpacity,
-        transform: [{ translateY: headerSlide }],
-      }]}>
-        <Text style={styles.title}>Enter the code</Text>
-        <Text style={styles.subtitle}>
-          We sent a 6-digit code to
-        </Text>
-        <Text style={[styles.phoneDisplay, { color: accent }]}>
-          {maskedPhone()}
-        </Text>
+      <Animated.View style={[styles.content, { opacity: headerOpacity }]}>
+        <Text style={[styles.eyebrow, { color: accent }]}>EMAIL VERIFICATION</Text>
+        <Text style={styles.title}>Enter your code</Text>
+        <Text style={styles.subtitle}>We sent a 6-digit verification code to</Text>
+        <Text style={[styles.email, { color: accent }]}>{email}</Text>
       </Animated.View>
-
-      {/* OTP Input Boxes */}
-      <Animated.View style={[styles.otpContainer, {
-        opacity: boxesOpacity,
-        transform: [{ scale: boxesScale }],
-      }]}>
+      <Animated.View style={[styles.otpContainer, { opacity: boxesOpacity }]}>
         {otp.map((digit, index) => (
-          <TextInput
-            key={index}
-            ref={(ref) => { inputRefs.current[index] = ref; }}
-            style={[
-              styles.otpBox,
-              digit ? [styles.otpBoxFilled, { borderColor: accent + '60' }] : {},
-              index === otp.findIndex(d => d === '') && styles.otpBoxActive,
-            ]}
-            value={digit}
-            onChangeText={(text) => handleChange(text, index)}
-            onKeyPress={(e) => handleKeyPress(e, index)}
-            keyboardType="number-pad"
-            maxLength={1}
-            selectTextOnFocus
-          />
+          <TextInput key={index} ref={(ref) => { inputRefs.current[index] = ref; }} style={[styles.otpBox, digit && { borderColor: accent, backgroundColor: colors.bgCard }]} value={digit} onChangeText={(text) => handleChange(text, index)} keyboardType="number-pad" maxLength={1} selectTextOnFocus />
         ))}
       </Animated.View>
-
-      {/* Countdown and resend */}
-      <Animated.View style={[styles.resendSection, { opacity: infoOpacity }]}>
-        {canResend ? (
-          <TouchableOpacity onPress={handleResend} activeOpacity={0.7}>
-            <Text style={[styles.resendActive, { color: accent }]}>
-              Resend code
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <Text style={styles.resendText}>
-            Resend code in {countdown}s
-          </Text>
-        )}
-      </Animated.View>
-
-      {/* Help text */}
-      <Animated.View style={[styles.helpSection, { opacity: infoOpacity }]}>
-        <View style={styles.helpCard}>
-          <Text style={styles.helpTitle}>Didn't receive the code?</Text>
-          <View style={styles.helpRow}>
-            <Text style={styles.helpBullet}>•</Text>
-            <Text style={styles.helpText}>Check your SMS inbox</Text>
-          </View>
-          <View style={styles.helpRow}>
-            <Text style={styles.helpBullet}>•</Text>
-            <Text style={styles.helpText}>Make sure your phone has network</Text>
-          </View>
-          <View style={styles.helpRow}>
-            <Text style={styles.helpBullet}>•</Text>
-            <Text style={styles.helpText}>Wait {countdown > 0 ? `${countdown}s` : ''} then tap Resend</Text>
-          </View>
-        </View>
-      </Animated.View>
-
-      {/* Bottom */}
-      <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
-        <TouchableOpacity
-          style={[
-            styles.verifyButton,
-            { backgroundColor: isComplete ? accent : colors.bgCard },
-            !isComplete && styles.verifyButtonDisabled,
-          ]}
-          onPress={() => handleVerify(otp.join(''))}
-          disabled={!isComplete || loading}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.verifyText}>
-            {loading ? 'Verifying...' : 'Verify Phone Number'}
-          </Text>
+      <View style={styles.helpCard}>
+        <Text style={styles.helpTitle}>Didn’t receive it?</Text>
+        <Text style={styles.helpText}>Check your inbox and spam folder, then request a new code if needed.</Text>
+        <TouchableOpacity onPress={resendCode} disabled={loading}>
+          <Text style={[styles.resendText, { color: accent }]}>Resend email code</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.changeRow}
-        >
-          <Text style={styles.changeText}>
-            Wrong number? <Text style={{ color: accent, fontWeight: typography.bold }}>Change it</Text>
-          </Text>
+      </View>
+      <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 16 }]}>
+        <TouchableOpacity style={[styles.verifyButton, { backgroundColor: isComplete ? accent : colors.bgCard }]} onPress={() => handleVerify(otp.join(''))} disabled={!isComplete || loading}>
+          {loading ? <ActivityIndicator color={colors.white} /> : <Text style={styles.verifyText}>Verify Email & Create Account</Text>}
         </TouchableOpacity>
       </View>
     </View>
@@ -255,175 +109,21 @@ export default function OTPScreen({ navigation, route }: any) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.bg,
-  },
-
-  // Back
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.white + '08',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: spacing.screenPadding,
-    marginTop: 8,
-    marginBottom: 4,
-  },
-  backText: {
-    fontSize: 20,
-    color: colors.white,
-    fontWeight: typography.bold,
-  },
-
-  // Progress
-  progressContainer: {
-    paddingHorizontal: spacing.screenPadding,
-    marginBottom: 20,
-    marginTop: 8,
-  },
-  stepText: {
-    fontSize: typography.xs,
-    fontWeight: typography.medium,
-    marginBottom: 8,
-  },
-  progressTrack: {
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: 2,
-  },
-  progressFill: {
-    height: 4,
-    borderRadius: 2,
-  },
-
-  // Header
-  headerSection: {
-    paddingHorizontal: spacing.screenPadding,
-    marginBottom: 32,
-  },
-  title: {
-    fontSize: typography.xxl,
-    fontWeight: typography.bold,
-    color: colors.textPrimary,
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: typography.base,
-    color: colors.textSecondary,
-  },
-  phoneDisplay: {
-    fontSize: typography.md,
-    fontWeight: typography.bold,
-    marginTop: 4,
-  },
-
-  // OTP boxes
-  otpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 10,
-    paddingHorizontal: spacing.screenPadding,
-    marginBottom: 24,
-  },
-  otpBox: {
-    width: 50,
-    height: 56,
-    borderRadius: spacing.radiusMd,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.bgInput,
-    textAlign: 'center',
-    fontSize: typography.xxl,
-    fontWeight: typography.bold,
-    color: colors.textPrimary,
-  },
-  otpBoxFilled: {
-    backgroundColor: colors.bgCard,
-  },
-  otpBoxActive: {
-    borderColor: colors.textMuted,
-  },
-
-  // Resend
-  resendSection: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  resendText: {
-    fontSize: typography.sm,
-    color: colors.textMuted,
-  },
-  resendActive: {
-    fontSize: typography.sm,
-    fontWeight: typography.bold,
-  },
-
-  // Help
-  helpSection: {
-    paddingHorizontal: spacing.screenPadding,
-  },
-  helpCard: {
-    backgroundColor: colors.bgCard,
-    borderRadius: spacing.radiusLg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 16,
-  },
-  helpTitle: {
-    fontSize: typography.sm,
-    fontWeight: typography.semibold,
-    color: colors.textPrimary,
-    marginBottom: 10,
-  },
-  helpRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  helpBullet: {
-    fontSize: typography.sm,
-    color: colors.textMuted,
-    marginRight: 8,
-    width: 12,
-  },
-  helpText: {
-    fontSize: typography.xs,
-    color: colors.textMuted,
-  },
-
-  // Bottom
-  bottomSection: {
-    marginTop: 'auto',
-    paddingHorizontal: spacing.screenPadding,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.bg,
-  },
-  verifyButton: {
-    height: spacing.buttonHeight,
-    borderRadius: spacing.radiusLg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  verifyButtonDisabled: {
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  verifyText: {
-    fontSize: typography.md,
-    fontWeight: typography.bold,
-    color: colors.white,
-  },
-  changeRow: {
-    alignItems: 'center',
-  },
-  changeText: {
-    fontSize: typography.sm,
-    color: colors.textMuted,
-  },
+  container: { flex: 1, backgroundColor: colors.bg },
+  backButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.white + '08', alignItems: 'center', justifyContent: 'center', marginLeft: spacing.screenPadding, marginTop: 8 },
+  backText: { fontSize: 20, color: colors.white, fontWeight: typography.bold },
+  content: { paddingHorizontal: spacing.screenPadding, marginTop: 42 },
+  eyebrow: { fontSize: typography.xs, fontWeight: typography.bold, letterSpacing: 1.2, marginBottom: 12 },
+  title: { fontSize: typography.xxl, fontWeight: typography.bold, color: colors.textPrimary, marginBottom: 8 },
+  subtitle: { fontSize: typography.base, color: colors.textSecondary },
+  email: { fontSize: typography.md, fontWeight: typography.bold, marginTop: 5 },
+  otpContainer: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 42 },
+  otpBox: { width: 50, height: 56, borderRadius: spacing.radiusMd, borderWidth: 1.5, borderColor: colors.border, backgroundColor: colors.bgInput, textAlign: 'center', fontSize: typography.xxl, fontWeight: typography.bold, color: colors.textPrimary },
+  helpCard: { marginHorizontal: spacing.screenPadding, marginTop: 32, backgroundColor: colors.bgCard, borderRadius: spacing.radiusLg, borderWidth: 1, borderColor: colors.border, padding: 16 },
+  helpTitle: { color: colors.textPrimary, fontSize: typography.sm, fontWeight: typography.semibold, marginBottom: 6 },
+  helpText: { color: colors.textMuted, fontSize: typography.xs, lineHeight: 18 },
+  resendText: { fontSize: typography.sm, fontWeight: typography.bold, marginTop: 14 },
+  bottomSection: { marginTop: 'auto', paddingHorizontal: spacing.screenPadding, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border },
+  verifyButton: { height: spacing.buttonHeight, borderRadius: spacing.radiusLg, alignItems: 'center', justifyContent: 'center' },
+  verifyText: { color: colors.white, fontSize: typography.md, fontWeight: typography.bold },
 });

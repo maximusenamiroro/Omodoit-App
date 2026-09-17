@@ -233,13 +233,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Update last_seen in background — not critical
-      supabase
-        .from('profiles')
-        .update({ last_seen: new Date().toISOString() })
-        .eq('id', userId)
-        .catch((err) => {
+      (async () => {
+        try {
+          const { error: lastSeenError } = await supabase
+            .from('profiles')
+            .update({ last_seen: new Date().toISOString() })
+            .eq('id', userId);
+          if (lastSeenError) {
+            console.warn('Non-critical: Failed to update last_seen:', lastSeenError.message);
+          }
+        } catch (err: any) {
           console.warn('Non-critical: Failed to update last_seen:', err.message);
-        });
+        }
+      })();
     } catch (error) {
       console.error('fetchProfile error:', error);
       if (mountedRef.current) {

@@ -7,13 +7,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
 import { supabase } from '../../api/supabase';
-import { useAuth } from '../../context/AuthContext';
-import { upsertWithRetry } from '../../lib/db';
 
 export default function ClientRegStep3Screen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { phoneNumber, fullName, email, location } = route.params;
-  const { setDirectAuth, beginRegistration, endRegistration } = useAuth();
+  const { fullName, email, location } = route.params;
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -78,13 +75,7 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
 
     setLoading(true);
 
-    // Block AuthContext's SIGNED_IN listener BEFORE signUp fires it.
-    // Otherwise it fetches the (not yet created) profile, finds nothing,
-    // and the navigator flashes back to the first signup screen.
-    beginRegistration();
-
     try {
-      // Step 1: Create the account with Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: email,
         password: password,
@@ -93,12 +84,10 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
       if (authError) throw authError;
 
       if (authData.user) {
-        // Step 2: Create the profile in the profiles table
         const profileData = {
           id: authData.user.id,
           full_name: fullName,
-          phone: phoneNumber,
-          phone_verified: true,
+          phone: null,
           location: location,
           role: 'client' as const,
           verification_level: 1,
@@ -108,46 +97,14 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
           created_at: new Date().toISOString(),
         };
 
-        const { error: profileError } = await upsertWithRetry('profiles', profileData);
-
-        if (profileError) {
-          // Do NOT proceed to setDirectAuth — that would show the user
-          // as fully logged in locally while no profile row actually
-          // exists. They'd appear fine this session, then get locked
-          // out next launch with no way to fix it themselves (their
-          // email is already registered, so they can't just sign up
-          // again). Surface it now instead, while it's still fixable.
-          throw new Error(
-            "Your account was created but we couldn't finish setting up " +
-            'your profile. Please try logging in — this usually resolves ' +
-            'itself, and if not, try again in a moment.'
-          );
-        }
-
-        // Step 3: Directly set user and profile in AuthContext
-        // This bypasses the race condition completely.
-        // Instead of waiting for onAuthStateChange to fire
-        // and fetchProfile to find the profile, we tell
-        // AuthContext exactly what the user and profile are.
-        // AppNavigator immediately renders ClientNavigator.
-        setDirectAuth(authData.user, {
-          id: authData.user.id,
-          full_name: fullName,
-          avatar_url: null,
-          role: 'client',
-          phone: phoneNumber,
-          location: location,
-          verification_level: 1,
-          verification_status: 'basic',
-          last_seen: new Date().toISOString(),
-          created_at: new Date().toISOString(),
+        navigation.replace('OTP', {
+          accountType: 'client',
+          email,
+          profile: profileData,
         });
       }
     } catch (error: any) {
       console.error('Registration error:', error);
-
-      // Registration failed — re-enable normal auth handling
-      endRegistration();
 
       let message = 'Something went wrong. Please try again.';
 
@@ -183,7 +140,7 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
 
       {/* Progress */}
       <View style={styles.progressContainer}>
-        <Text style={[styles.stepText, { color: colors.client }]}>Step 3 of 3</Text>
+        <Text style={[styles.stepText, { color: colors.client }]}>Step 2 of 2</Text>
         <View style={styles.progressTrack}>
           <View style={[styles.progressFill, { width: '100%', backgroundColor: colors.client }]} />
         </View>
@@ -208,18 +165,13 @@ export default function ClientRegStep3Screen({ navigation, route }: any) {
         {/* Summary */}
         <Animated.View style={[styles.summaryCard, { opacity: headerOpacity }]}>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Phone</Text>
-            <Text style={styles.summaryValue}>✓ {phoneNumber}</Text>
+            <Text style={styles.summaryLabel}>Email</Text>
+            <Text style={styles.summaryValue}>{email}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Name</Text>
             <Text style={styles.summaryValue}>{fullName}</Text>
-          </View>
-          <View style={styles.summaryDivider} />
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Email</Text>
-            <Text style={styles.summaryValue}>{email}</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryRow}>

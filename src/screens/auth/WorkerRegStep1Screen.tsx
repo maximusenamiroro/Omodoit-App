@@ -7,9 +7,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
 
-export default function WorkerRegStep1Screen({ navigation, route }: any) {
+export default function WorkerRegStep1Screen({ navigation }: any) {
   const insets = useSafeAreaInsets();
-  const { phoneNumber } = route.params;
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -56,7 +55,6 @@ export default function WorkerRegStep1Screen({ navigation, route }: any) {
     }
 
     navigation.navigate('WorkerRegStep2', {
-      phoneNumber,
       fullName: fullName.trim(),
       email: email.trim().toLowerCase(),
       businessName: businessName.trim() || null,
@@ -80,9 +78,9 @@ export default function WorkerRegStep1Screen({ navigation, route }: any) {
 
       {/* Progress */}
       <View style={styles.progressContainer}>
-        <Text style={styles.stepText}>Step 2 of 4</Text>
+        <Text style={styles.stepText}>Step 1 of 4</Text>
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: '50%' }]} />
+          <View style={[styles.progressFill, { width: '25%' }]} />
         </View>
       </View>
 
@@ -100,12 +98,6 @@ export default function WorkerRegStep1Screen({ navigation, route }: any) {
           <Text style={styles.subtitle}>
             Tell us about yourself so clients can find and trust you
           </Text>
-        </Animated.View>
-
-        {/* Phone verified badge */}
-        <Animated.View style={[styles.verifiedBadge, { opacity: verifiedOpacity }]}>
-          <Text style={styles.verifiedIcon}>✓</Text>
-          <Text style={styles.verifiedText}>Phone verified: {phoneNumber}</Text>
         </Animated.View>
 
         {/* Worker type badge */}

@@ -2,7 +2,6 @@ import React from 'react';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import AccountTypeScreen from '../screens/auth/AccountTypeScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
-import PhoneVerifyScreen from '../screens/auth/PhoneVerifyScreen';
 import OTPScreen from '../screens/auth/OTPScreen';
 import ClientRegStep1Screen from '../screens/auth/ClientRegStep1Screen';
 import ClientRegStep2Screen from '../screens/auth/ClientRegStep2Screen';
@@ -15,15 +14,14 @@ import WorkerRegStep4Screen from '../screens/auth/WorkerRegStep4Screen';
 export type AuthStackParamList = {
   AccountType: undefined;
   Login: undefined;
-  PhoneVerify: { accountType: 'client' | 'worker' };
-  OTP: { accountType: 'client' | 'worker'; phoneNumber: string };
-  ClientRegStep1: { phoneNumber: string };
-  ClientRegStep2: { phoneNumber: string; fullName: string; email: string };
-  ClientRegStep3: { phoneNumber: string; fullName: string; email: string; location: string };
-  WorkerRegStep1: { phoneNumber: string };
-  WorkerRegStep2: { phoneNumber: string; fullName: string; email: string; businessName?: string };
-  WorkerRegStep3: { phoneNumber: string; fullName: string; email: string; businessName?: string; category: string; subcategory: string; experience: string };
-  WorkerRegStep4: { phoneNumber: string; fullName: string; email: string; businessName?: string; category: string; subcategory: string; experience: string; serviceArea: string };
+  OTP: { accountType: 'client' | 'worker'; email: string; profile: Record<string, unknown> };
+  ClientRegStep1: undefined;
+  ClientRegStep2: { fullName: string; email: string };
+  ClientRegStep3: { fullName: string; email: string; location: string };
+  WorkerRegStep1: undefined;
+  WorkerRegStep2: { fullName: string; email: string; businessName?: string };
+  WorkerRegStep3: { fullName: string; email: string; businessName?: string; category: string; subcategory: string; experience: string };
+  WorkerRegStep4: { fullName: string; email: string; businessName?: string; category: string; subcategory: string; experience: string; serviceArea: string };
 };
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
@@ -39,7 +37,6 @@ export default function AuthNavigator() {
       }}>
       <Stack.Screen name="AccountType" component={AccountTypeScreen} />
       <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="PhoneVerify" component={PhoneVerifyScreen} />
       <Stack.Screen name="OTP" component={OTPScreen} />
       <Stack.Screen name="ClientRegStep1" component={ClientRegStep1Screen} />
       <Stack.Screen name="ClientRegStep2" component={ClientRegStep2Screen} />

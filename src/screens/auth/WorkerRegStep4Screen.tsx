@@ -7,13 +7,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography, spacing } from '../../theme';
 import { supabase } from '../../api/supabase';
-import { useAuth } from '../../context/AuthContext';
-import { upsertWithRetry } from '../../lib/db';
 
 export default function WorkerRegStep4Screen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
   const params = route.params;
-  const { setDirectAuth, beginRegistration, endRegistration } = useAuth();
 
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -70,11 +67,6 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
     if (!isFormValid()) return;
     setLoading(true);
 
-    // Block AuthContext's SIGNED_IN listener BEFORE signUp fires it —
-    // same protection the client registration flow uses, so worker
-    // signup doesn't briefly flash back to the auth screen either.
-    beginRegistration();
-
     try {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: params.email,
@@ -87,8 +79,7 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
         const profileData = {
           id: authData.user.id,
           full_name: params.fullName,
-          phone: params.phoneNumber,
-          phone_verified: true,
+          phone: null,
           location: params.location,
           role: 'worker' as const,
           business_name: params.businessName,
@@ -103,36 +94,14 @@ export default function WorkerRegStep4Screen({ navigation, route }: any) {
           created_at: new Date().toISOString(),
         };
 
-        const { error: profileError } = await upsertWithRetry('profiles', profileData);
-
-        if (profileError) {
-          // Same reasoning as the client flow: don't proceed to
-          // setDirectAuth with a profile that was never actually saved.
-          throw new Error(
-            "Your account was created but we couldn't finish setting up " +
-            'your business profile. Please try logging in — this usually ' +
-            'resolves itself, and if not, try again in a moment.'
-          );
-        }
-
-        setDirectAuth(authData.user, {
-          id: authData.user.id,
-          full_name: params.fullName,
-          avatar_url: null,
-          role: 'worker',
-          phone: params.phoneNumber,
-          location: params.location,
-          verification_level: 1,
-          verification_status: 'basic',
-          last_seen: new Date().toISOString(),
-          created_at: new Date().toISOString(),
+        navigation.replace('OTP', {
+          accountType: 'worker',
+          email: params.email,
+          profile: profileData,
         });
       }
     } catch (error: any) {
       console.error('Registration error:', error);
-
-      // Registration failed — re-enable normal auth handling
-      endRegistration();
 
       let message = 'Something went wrong. Please try again.';
       if (error.message?.includes('already registered')) {

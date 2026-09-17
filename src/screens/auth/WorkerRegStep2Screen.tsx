@@ -11,7 +11,7 @@ const EXPERIENCE = ['Less than 1 year', '1-3 years', '3-5 years', '5-10 years', 
 
 export default function WorkerRegStep2Screen({ navigation, route }: any) {
   const insets = useSafeAreaInsets();
-  const { phoneNumber, fullName, email, businessName } = route.params;
+  const { fullName, email, businessName } = route.params;
 
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [selectedSub, setSelectedSub] = useState<string | null>(null);
@@ -49,7 +49,6 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
     }
 
     navigation.navigate('WorkerRegStep3', {
-      phoneNumber,
       fullName,
       email,
       businessName,
@@ -72,9 +71,9 @@ export default function WorkerRegStep2Screen({ navigation, route }: any) {
       </TouchableOpacity>
 
       <View style={styles.progressContainer}>
-        <Text style={styles.stepText}>Step 3 of 4</Text>
+        <Text style={styles.stepText}>Step 2 of 4</Text>
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: '75%' }]} />
+          <View style={[styles.progressFill, { width: '50%' }]} />
         </View>
       </View>
 
